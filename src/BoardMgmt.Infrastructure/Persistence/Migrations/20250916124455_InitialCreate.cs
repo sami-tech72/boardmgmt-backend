@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace BoardMgmt.Infrastructure.Migrations
+namespace BoardMgmt.Infrastructure.Persistence.Migrations
 {
     /// <inheritdoc />
     public partial class InitialCreate : Migration
@@ -55,9 +55,12 @@ namespace BoardMgmt.Infrastructure.Migrations
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    Title = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    Title = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
+                    Description = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    Type = table.Column<int>(type: "int", nullable: true),
                     ScheduledAt = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
-                    Location = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    EndAt = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: true),
+                    Location = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
                     Status = table.Column<int>(type: "int", nullable: false)
                 },
                 constraints: table =>
@@ -177,7 +180,7 @@ namespace BoardMgmt.Infrastructure.Migrations
                 {
                     Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     MeetingId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    Title = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    Title = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
                     Description = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     Order = table.Column<int>(type: "int", nullable: false)
                 },
@@ -198,8 +201,8 @@ namespace BoardMgmt.Infrastructure.Migrations
                 {
                     Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     MeetingId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    FileName = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    Url = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    FileName = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
+                    Url = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: false),
                     Version = table.Column<int>(type: "int", nullable: false),
                     UploadedAt = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false)
                 },
@@ -215,13 +218,40 @@ namespace BoardMgmt.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "MeetingAttendees",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    MeetingId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    Name = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
+                    Role = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
+                    IsRequired = table.Column<bool>(type: "bit", nullable: false),
+                    IsConfirmed = table.Column<bool>(type: "bit", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_MeetingAttendees", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_MeetingAttendees_Meetings_MeetingId",
+                        column: x => x.MeetingId,
+                        principalTable: "Meetings",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "Votes",
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    MeetingId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     AgendaItemId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    Motion = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     UserId = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     Choice = table.Column<int>(type: "int", nullable: false),
+                    Yes = table.Column<int>(type: "int", nullable: false),
+                    No = table.Column<int>(type: "int", nullable: false),
+                    Abstain = table.Column<int>(type: "int", nullable: false),
                     VotedAt = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false)
                 },
                 constraints: table =>
@@ -286,6 +316,11 @@ namespace BoardMgmt.Infrastructure.Migrations
                 column: "MeetingId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_MeetingAttendees_MeetingId",
+                table: "MeetingAttendees",
+                column: "MeetingId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Votes_AgendaItemId",
                 table: "Votes",
                 column: "AgendaItemId");
@@ -311,6 +346,9 @@ namespace BoardMgmt.Infrastructure.Migrations
 
             migrationBuilder.DropTable(
                 name: "Documents");
+
+            migrationBuilder.DropTable(
+                name: "MeetingAttendees");
 
             migrationBuilder.DropTable(
                 name: "Votes");

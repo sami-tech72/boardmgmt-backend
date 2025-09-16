@@ -5,6 +5,7 @@
 		<Nullable>enable</Nullable>
 	</PropertyGroup>
 	<ItemGroup>
+		<PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="11.9.0" />
 		<ProjectReference Include="..\BoardMgmt.Domain\BoardMgmt.Domain.csproj" />
 		<PackageReference Include="FluentValidation" Version="11.9.0" />
 		<PackageReference Include="MediatR" Version="13.0.0" />

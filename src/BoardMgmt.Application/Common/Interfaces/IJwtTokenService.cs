@@ -1,8 +1,6 @@
 ﻿using System.Security.Claims;
 
-
 namespace BoardMgmt.Application.Common.Interfaces;
-
 
 public interface IJwtTokenService
 {

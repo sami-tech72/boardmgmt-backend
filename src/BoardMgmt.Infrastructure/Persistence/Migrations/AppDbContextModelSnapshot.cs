@@ -4,19 +4,16 @@ using BoardMgmt.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
-using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
 
-namespace BoardMgmt.Infrastructure.Migrations
+namespace BoardMgmt.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20250916070450_InitialCreate")]
-    partial class InitialCreate
+    partial class AppDbContextModelSnapshot : ModelSnapshot
     {
-        /// <inheritdoc />
-        protected override void BuildTargetModel(ModelBuilder modelBuilder)
+        protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -42,7 +39,8 @@ namespace BoardMgmt.Infrastructure.Migrations
 
                     b.Property<string>("Title")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
 
                     b.HasKey("Id");
 
@@ -60,7 +58,8 @@ namespace BoardMgmt.Infrastructure.Migrations
 
                     b.Property<string>("FileName")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
 
                     b.Property<Guid>("MeetingId")
                         .HasColumnType("uniqueidentifier");
@@ -70,7 +69,8 @@ namespace BoardMgmt.Infrastructure.Migrations
 
                     b.Property<string>("Url")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
 
                     b.Property<int>("Version")
                         .HasColumnType("int");
@@ -88,9 +88,16 @@ namespace BoardMgmt.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("Description")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset?>("EndAt")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<string>("Location")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
 
                     b.Property<DateTimeOffset>("ScheduledAt")
                         .HasColumnType("datetimeoffset");
@@ -100,11 +107,46 @@ namespace BoardMgmt.Infrastructure.Migrations
 
                     b.Property<string>("Title")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<int?>("Type")
+                        .HasColumnType("int");
 
                     b.HasKey("Id");
 
                     b.ToTable("Meetings");
+                });
+
+            modelBuilder.Entity("BoardMgmt.Domain.Entities.MeetingAttendee", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("IsConfirmed")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsRequired")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid>("MeetingId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("Role")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MeetingId");
+
+                    b.ToTable("MeetingAttendees");
                 });
 
             modelBuilder.Entity("BoardMgmt.Domain.Entities.Vote", b =>
@@ -113,10 +155,23 @@ namespace BoardMgmt.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<int>("Abstain")
+                        .HasColumnType("int");
+
                     b.Property<Guid>("AgendaItemId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<int>("Choice")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("MeetingId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Motion")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("No")
                         .HasColumnType("int");
 
                     b.Property<string>("UserId")
@@ -125,6 +180,9 @@ namespace BoardMgmt.Infrastructure.Migrations
 
                     b.Property<DateTimeOffset>("VotedAt")
                         .HasColumnType("datetimeoffset");
+
+                    b.Property<int>("Yes")
+                        .HasColumnType("int");
 
                     b.HasKey("Id");
 
@@ -349,6 +407,15 @@ namespace BoardMgmt.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("BoardMgmt.Domain.Entities.MeetingAttendee", b =>
+                {
+                    b.HasOne("BoardMgmt.Domain.Entities.Meeting", null)
+                        .WithMany("Attendees")
+                        .HasForeignKey("MeetingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("BoardMgmt.Domain.Entities.Vote", b =>
                 {
                     b.HasOne("BoardMgmt.Domain.Entities.AgendaItem", null)
@@ -417,6 +484,8 @@ namespace BoardMgmt.Infrastructure.Migrations
             modelBuilder.Entity("BoardMgmt.Domain.Entities.Meeting", b =>
                 {
                     b.Navigation("AgendaItems");
+
+                    b.Navigation("Attendees");
 
                     b.Navigation("Documents");
                 });
