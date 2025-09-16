@@ -1,6 +1,5 @@
 ﻿namespace BoardMgmt.Domain.Entities;
 
-
 public class Document
 {
     public Guid Id { get; set; } = Guid.NewGuid();
