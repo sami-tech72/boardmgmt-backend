@@ -1,5 +1,6 @@
 ﻿using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Infrastructure.Persistence;
+using BoardMgmt.WebApi.Common.Http;   // <= add
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 
@@ -24,13 +25,16 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> Login([FromBody] LoginDto dto)
     {
         var user = await _userManager.FindByEmailAsync(dto.Email);
-        if (user is null) return Unauthorized();
+        if (user is null)
+            return this.UnauthorizedApi("invalid_credentials", "Invalid email or password.");
 
         var ok = await _userManager.CheckPasswordAsync(user, dto.Password);
-        if (!ok) return Unauthorized();
+        if (!ok)
+            return this.UnauthorizedApi("invalid_credentials", "Invalid email or password.");
 
         var roles = await _userManager.GetRolesAsync(user);
         var token = _jwt.CreateToken(user.Id, user.Email!, roles);
-        return Ok(new { token });
+
+        return this.OkApi(new { token }, "Login successful");
     }
 }

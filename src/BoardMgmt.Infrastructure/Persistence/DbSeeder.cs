@@ -19,18 +19,29 @@ public static class DbSeeder
         var roleMgr = sp.GetRequiredService<RoleManager<IdentityRole>>();
         var userMgr = sp.GetRequiredService<UserManager<AppUser>>();
 
-        // roles
         foreach (var r in new[] { "Admin", "BoardMember", "Secretary" })
             if (!await roleMgr.RoleExistsAsync(r))
                 await roleMgr.CreateAsync(new IdentityRole(r));
 
-        // admin
         var admin = await userMgr.FindByEmailAsync("admin@board.local");
         if (admin is null)
         {
             admin = new AppUser { UserName = "admin@board.local", Email = "admin@board.local", EmailConfirmed = true };
             await userMgr.CreateAsync(admin, "P@ssw0rd!");
             await userMgr.AddToRoleAsync(admin, "Admin");
+        }
+
+        // --- Folders ---
+        if (!await db.Folders.AnyAsync())
+        {
+            db.Folders.AddRange(
+                new Folder { Name = "Board Meetings", Slug = "board-meetings" },
+                new Folder { Name = "Financial Reports", Slug = "financial" },
+                new Folder { Name = "Legal Documents", Slug = "legal" },
+                new Folder { Name = "Policies", Slug = "policies" }
+            );
+            await db.SaveChangesAsync();
+            logger.LogInformation("Seeded default folders.");
         }
 
         if (await db.Meetings.AnyAsync()) return;
@@ -59,8 +70,24 @@ public static class DbSeeder
             },
             Documents =
             {
-                new Document { FileName = "Q4-Financials.pdf", Url = "https://example.com/q4.pdf" },
-                new Document { FileName = "Strategy-Deck.pptx", Url = "https://example.com/strategy.pptx" }
+                new Document
+                {
+                    OriginalName = "Q4-Financials.pdf",
+                    FileName = "Q4-Financials.pdf",
+                    Url = "https://example.com/q4.pdf",
+                    ContentType = "application/pdf",
+                    SizeBytes = 2_500_000,
+                    FolderSlug = "financial"
+                },
+                new Document
+                {
+                    OriginalName = "Strategy-Deck.pptx",
+                    FileName = "Strategy-Deck.pptx",
+                    Url = "https://example.com/strategy.pptx",
+                    ContentType = "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                    SizeBytes = 5_700_000,
+                    FolderSlug = "board-meetings"
+                }
             }
         };
 
@@ -73,11 +100,6 @@ public static class DbSeeder
             EndAt = L(6, 12),
             Location = "https://zoom.us/j/1234567890",
             Status = MeetingStatus.Scheduled,
-            Attendees =
-            {
-                new MeetingAttendee { Name = "Sarah Johnson", Role = "CFO", IsRequired = true, IsConfirmed = true },
-                new MeetingAttendee { Name = "Mike Brown", Role = "CTO" }
-            },
             AgendaItems =
             {
                 new AgendaItem { Title = "Operating Budget", Order = 1 },
@@ -98,6 +120,14 @@ public static class DbSeeder
 
         db.Meetings.AddRange(board, finance, past);
         await db.SaveChangesAsync();
-        logger.LogInformation("Seeded {Count} meetings.", 3);
+
+        // optional counter refresh
+        var counts = await db.Documents.GroupBy(d => d.FolderSlug)
+            .Select(g => new { Slug = g.Key, Count = g.Count() }).ToListAsync();
+        foreach (var f in db.Folders)
+            f.DocumentCount = counts.FirstOrDefault(c => c.Slug == f.Slug)?.Count ?? 0;
+        await db.SaveChangesAsync();
+
+        logger.LogInformation("Seeded meetings and updated folder counters.");
     }
 }
