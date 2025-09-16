@@ -1,0 +1,88 @@
+## =========================
+## .NET / Visual Studio
+## =========================
+# Build results
+[Bb]in/
+[Oo]bj/
+[Dd]ebug*/
+[Rr]elease*/
+x64/
+x86/
+[Aa][Rr][Mm]*/
+[Aa][Rr][Mm]64*/
+
+# VS cache / settings
+.vs/
+*.user
+*.suo
+*.sln.docstates
+
+# Test results
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+
+# NuGet
+*.nupkg
+**/packages/*
+!**/packages/build/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# MSBuild
+*.nuget.g.props
+*.nuget.g.targets
+project.assets.json
+project.nuget.cache
+
+# Logs
+*.log
+
+# Others
+*.dbmdl
+*.bak
+*.pdb
+*.exe
+*.dll
+
+## =========================
+## Angular / Node
+## =========================
+# Angular build output
+dist/
+build/
+tmp/
+out-tsc/
+
+# Angular cache
+.angular/
+.angular/cache/
+
+# VS Code Angular plugin
+.angular/cache/
+.angular/local/
+
+# Node modules
+node_modules/
+
+# Package manager locks (keep if needed for reproducibility)
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment files
+src/environments/environment*.ts
+
+## =========================
+## VS Code / IDEs
+## =========================
+.vscode/
+.idea/
+*.code-workspace
+
+## =========================
+## OS / Misc
+## =========================
+.DS_Store
+Thumbs.db
