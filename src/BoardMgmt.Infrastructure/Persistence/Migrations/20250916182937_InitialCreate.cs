@@ -201,8 +201,8 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                 {
                     Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     MeetingId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    FileName = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
-                    Url = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: false),
+                    FileName = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    Url = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     Version = table.Column<int>(type: "int", nullable: false),
                     UploadedAt = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false)
                 },
@@ -225,8 +225,8 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                     MeetingId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     Name = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
                     Role = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
-                    IsRequired = table.Column<bool>(type: "bit", nullable: false),
-                    IsConfirmed = table.Column<bool>(type: "bit", nullable: false)
+                    IsRequired = table.Column<bool>(type: "bit", nullable: false, defaultValue: true),
+                    IsConfirmed = table.Column<bool>(type: "bit", nullable: false, defaultValue: false)
                 },
                 constraints: table =>
                 {
@@ -268,8 +268,7 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
             migrationBuilder.CreateIndex(
                 name: "IX_AgendaItems_MeetingId_Order",
                 table: "AgendaItems",
-                columns: new[] { "MeetingId", "Order" },
-                unique: true);
+                columns: new[] { "MeetingId", "Order" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_AspNetRoleClaims_RoleId",
@@ -319,6 +318,11 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                 name: "IX_MeetingAttendees_MeetingId",
                 table: "MeetingAttendees",
                 column: "MeetingId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Meetings_ScheduledAt_Status",
+                table: "Meetings",
+                columns: new[] { "ScheduledAt", "Status" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_Votes_AgendaItemId",

@@ -12,8 +12,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace BoardMgmt.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20250916124455_InitialCreate")]
-    partial class InitialCreate
+    [Migration("20250916190909_LinkMeetingAttendeeToUser")]
+    partial class LinkMeetingAttendeeToUser
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -47,8 +47,7 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("MeetingId", "Order")
-                        .IsUnique();
+                    b.HasIndex("MeetingId", "Order");
 
                     b.ToTable("AgendaItems");
                 });
@@ -61,8 +60,7 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("FileName")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<Guid>("MeetingId")
                         .HasColumnType("uniqueidentifier");
@@ -72,8 +70,7 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("Url")
                         .IsRequired()
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<int>("Version")
                         .HasColumnType("int");
@@ -118,6 +115,8 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ScheduledAt", "Status");
+
                     b.ToTable("Meetings");
                 });
 
@@ -127,11 +126,19 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("Email")
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
                     b.Property<bool>("IsConfirmed")
-                        .HasColumnType("bit");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
 
                     b.Property<bool>("IsRequired")
-                        .HasColumnType("bit");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
 
                     b.Property<Guid>("MeetingId")
                         .HasColumnType("uniqueidentifier");
@@ -145,9 +152,16 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<string>("UserId")
+                        .HasColumnType("nvarchar(450)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("MeetingId");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("MeetingId", "UserId");
 
                     b.ToTable("MeetingAttendees");
                 });
@@ -412,11 +426,18 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("BoardMgmt.Domain.Entities.MeetingAttendee", b =>
                 {
-                    b.HasOne("BoardMgmt.Domain.Entities.Meeting", null)
+                    b.HasOne("BoardMgmt.Domain.Entities.Meeting", "Meeting")
                         .WithMany("Attendees")
                         .HasForeignKey("MeetingId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("BoardMgmt.Infrastructure.Persistence.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.Navigation("Meeting");
                 });
 
             modelBuilder.Entity("BoardMgmt.Domain.Entities.Vote", b =>

@@ -1,5 +1,7 @@
 ﻿using BoardMgmt.Application.Meetings.Commands;
 using BoardMgmt.Application.Meetings.Queries;
+using BoardMgmt.Domain.Entities;
+using BoardMgmt.WebApi.Common.Http;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -16,12 +18,12 @@ public class MeetingsController : ControllerBase
     [HttpGet]
     [Authorize]
     public async Task<IActionResult> GetAll()
-        => Ok(await _mediator.Send(new GetMeetingsQuery()));
+        => this.OkApi(await _mediator.Send(new GetMeetingsQuery()));
 
     public record CreateMeetingDto(
         string Title,
         string? Description,
-        string? Type,
+        MeetingType? Type,
         DateTimeOffset ScheduledAt,
         DateTimeOffset? EndAt,
         string Location,
@@ -35,6 +37,6 @@ public class MeetingsController : ControllerBase
         var id = await _mediator.Send(new CreateMeetingCommand(
             dto.Title, dto.Description, dto.Type, dto.ScheduledAt, dto.EndAt, dto.Location, dto.Attendees
         ));
-        return CreatedAtAction(nameof(GetAll), new { id }, new { id });
+        return this.CreatedApi(nameof(GetAll), new { id }, new { id }, "Meeting created");
     }
 }

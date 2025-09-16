@@ -13,7 +13,7 @@ public static class DependencyInjection
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration config)
     {
         var cs = config.GetConnectionString("DefaultConnection")
-                 ?? "Server=SAMI-PC\\SQLEXPRESS;Database=BoardMgmtDb;User=sa;Password=Admin@123;Trusted_Connection=True;TrustServerCertificate=True;";
+                 ?? "Server=localhost\\SQLEXPRESS;Database=BoardMgmtDb;User=sa;Password=Admin@123;Trusted_Connection=True;TrustServerCertificate=True;";
 
         // DbContexts (concrete + mapping for Application's DbContext)
         services.AddDbContext<AppDbContext>(opt =>

@@ -2,8 +2,6 @@
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace BoardMgmt.Application.Meetings.Commands;
 
@@ -14,7 +12,8 @@ public class CreateMeetingValidator : AbstractValidator<CreateMeetingCommand>
         RuleFor(x => x.Title).NotEmpty().MaximumLength(200);
         RuleFor(x => x.Location).NotEmpty().MaximumLength(200);
         RuleFor(x => x.ScheduledAt).GreaterThan(DateTimeOffset.UtcNow.AddMinutes(-1));
-        RuleFor(x => x.EndAt).Must((cmd, end) => end == null || end > cmd.ScheduledAt)
+        RuleFor(x => x.EndAt)
+            .Must((cmd, end) => end == null || end > cmd.ScheduledAt)
             .WithMessage("End time must be after start time");
     }
 }
@@ -36,19 +35,20 @@ public class CreateMeetingHandler : IRequestHandler<CreateMeetingCommand, Guid>
 
         var entity = new Meeting
         {
-            Title = request.Title,
-            Description = request.Description,
-            Type = MapType(request.Type),
+            Title = request.Title.Trim(),
+            Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description!.Trim(),
+            Type = request.Type,
             ScheduledAt = request.ScheduledAt,
             EndAt = request.EndAt,
-            Location = request.Location,
+            Location = string.IsNullOrWhiteSpace(request.Location) ? "TBD" : request.Location.Trim(),
             Status = MeetingStatus.Scheduled
         };
 
         if (request.Attendees is { Count: > 0 })
         {
-            foreach (var full in request.Attendees)
+            foreach (var raw in request.Attendees.Where(s => !string.IsNullOrWhiteSpace(s)))
             {
+                var full = raw.Trim();
                 string name = full;
                 string? role = null;
                 var open = full.IndexOf('(');
