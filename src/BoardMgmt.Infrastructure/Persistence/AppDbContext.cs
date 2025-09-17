@@ -1,7 +1,12 @@
 ﻿using BoardMgmt.Application.Common.Interfaces;            // <-- implement this interface
 using BoardMgmt.Domain.Entities;
+using BoardMgmt.Domain.Identity;
+
+//using BoardMgmt.Domain.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+
+
 
 namespace BoardMgmt.Infrastructure.Persistence;
 
@@ -20,6 +25,8 @@ public class AppDbContext : IdentityDbContext<AppUser>, IAppDbContext
     public DbSet<VoteOption> VoteOptions => Set<VoteOption>();
     public DbSet<VoteBallot> VoteBallots => Set<VoteBallot>();
     public DbSet<VoteEligibleUser> VoteEligibleUsers => Set<VoteEligibleUser>();
+
+    public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
         => base.SaveChangesAsync(cancellationToken);
@@ -194,6 +201,11 @@ public class AppDbContext : IdentityDbContext<AppUser>, IAppDbContext
              .OnDelete(DeleteBehavior.Cascade);
         });
 
-
+        b.Entity<RolePermission>(e =>
+        {
+            e.HasIndex(x => new { x.RoleId, x.Module }).IsUnique();
+            e.Property(x => x.Module).HasConversion<int>();
+            e.Property(x => x.Allowed).HasConversion<int>();
+        });
     }
 }
