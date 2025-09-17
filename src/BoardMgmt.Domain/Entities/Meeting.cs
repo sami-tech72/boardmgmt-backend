@@ -17,5 +17,9 @@ public class Meeting
     // nav
     public List<AgendaItem> AgendaItems { get; set; } = new();
     public List<Document> Documents { get; set; } = new();
-    public List<MeetingAttendee> Attendees { get; set; } = new();
+    public ICollection<MeetingAttendee> Attendees { get; set; } = new List<MeetingAttendee>();
+
+    public List<VotePoll> Votes { get; set; } = new();
+
+
 }

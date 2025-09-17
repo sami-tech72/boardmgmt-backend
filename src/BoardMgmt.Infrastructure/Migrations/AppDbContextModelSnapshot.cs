@@ -4,19 +4,16 @@ using BoardMgmt.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
-using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
 
-namespace BoardMgmt.Infrastructure.Persistence.Migrations
+namespace BoardMgmt.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20250916182937_InitialCreate")]
-    partial class InitialCreate
+    partial class AppDbContextModelSnapshot : ModelSnapshot
     {
-        /// <inheritdoc />
-        protected override void BuildTargetModel(ModelBuilder modelBuilder)
+        protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -58,12 +55,41 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<string>("FileName")
+                    b.Property<int>("Access")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(9);
+
+                    b.Property<string>("ContentType")
                         .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("Description")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<Guid>("MeetingId")
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(260)
+                        .HasColumnType("nvarchar(260)");
+
+                    b.Property<string>("FolderSlug")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)")
+                        .HasDefaultValue("root");
+
+                    b.Property<Guid?>("MeetingId")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("OriginalName")
+                        .IsRequired()
+                        .HasMaxLength(260)
+                        .HasColumnType("nvarchar(260)");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
 
                     b.Property<DateTimeOffset>("UploadedAt")
                         .HasColumnType("datetimeoffset");
@@ -77,9 +103,43 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("FolderSlug");
+
                     b.HasIndex("MeetingId");
 
+                    b.HasIndex("UploadedAt");
+
                     b.ToTable("Documents");
+                });
+
+            modelBuilder.Entity("BoardMgmt.Domain.Entities.Folder", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int>("DocumentCount")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Slug")
+                        .IsUnique();
+
+                    b.ToTable("Folders");
                 });
 
             modelBuilder.Entity("BoardMgmt.Domain.Entities.Meeting", b =>
@@ -126,6 +186,10 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("Email")
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
                     b.Property<bool>("IsConfirmed")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bit")
@@ -148,9 +212,16 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<string>("UserId")
+                        .HasColumnType("nvarchar(450)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("MeetingId");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("MeetingId", "UserId");
 
                     b.ToTable("MeetingAttendees");
                 });
@@ -195,6 +266,141 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                     b.HasIndex("AgendaItemId");
 
                     b.ToTable("Votes");
+                });
+
+            modelBuilder.Entity("BoardMgmt.Domain.Entities.VoteBallot", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int?>("Choice")
+                        .HasColumnType("int");
+
+                    b.Property<Guid?>("OptionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<Guid>("VoteId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("VotedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OptionId");
+
+                    b.HasIndex("VoteId", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("VoteBallots");
+                });
+
+            modelBuilder.Entity("BoardMgmt.Domain.Entities.VoteEligibleUser", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<Guid>("VoteId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("VoteId", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("VoteEligibleUsers");
+                });
+
+            modelBuilder.Entity("BoardMgmt.Domain.Entities.VoteOption", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<Guid>("VoteId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("VoteId", "Order")
+                        .IsUnique();
+
+                    b.ToTable("VoteOptions");
+                });
+
+            modelBuilder.Entity("BoardMgmt.Domain.Entities.VotePoll", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("AgendaItemId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("AllowAbstain")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("Anonymous")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedByUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<DateTimeOffset>("Deadline")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<int>("Eligibility")
+                        .HasColumnType("int");
+
+                    b.Property<Guid?>("MeetingId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("nvarchar(160)");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AgendaItemId");
+
+                    b.HasIndex("MeetingId");
+
+                    b.HasIndex("CreatedByUserId", "CreatedAt");
+
+                    b.ToTable("VotePolls");
                 });
 
             modelBuilder.Entity("BoardMgmt.Infrastructure.Persistence.AppUser", b =>
@@ -409,8 +615,7 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                     b.HasOne("BoardMgmt.Domain.Entities.Meeting", null)
                         .WithMany("Documents")
                         .HasForeignKey("MeetingId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Cascade);
                 });
 
             modelBuilder.Entity("BoardMgmt.Domain.Entities.MeetingAttendee", b =>
@@ -420,6 +625,11 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                         .HasForeignKey("MeetingId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("BoardMgmt.Infrastructure.Persistence.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.NoAction);
 
                     b.Navigation("Meeting");
                 });
@@ -431,6 +641,63 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                         .HasForeignKey("AgendaItemId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("BoardMgmt.Domain.Entities.VoteBallot", b =>
+                {
+                    b.HasOne("BoardMgmt.Domain.Entities.VoteOption", "Option")
+                        .WithMany()
+                        .HasForeignKey("OptionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("BoardMgmt.Domain.Entities.VotePoll", "Vote")
+                        .WithMany("Ballots")
+                        .HasForeignKey("VoteId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Option");
+
+                    b.Navigation("Vote");
+                });
+
+            modelBuilder.Entity("BoardMgmt.Domain.Entities.VoteEligibleUser", b =>
+                {
+                    b.HasOne("BoardMgmt.Domain.Entities.VotePoll", "Vote")
+                        .WithMany("EligibleUsers")
+                        .HasForeignKey("VoteId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Vote");
+                });
+
+            modelBuilder.Entity("BoardMgmt.Domain.Entities.VoteOption", b =>
+                {
+                    b.HasOne("BoardMgmt.Domain.Entities.VotePoll", "Vote")
+                        .WithMany("Options")
+                        .HasForeignKey("VoteId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Vote");
+                });
+
+            modelBuilder.Entity("BoardMgmt.Domain.Entities.VotePoll", b =>
+                {
+                    b.HasOne("BoardMgmt.Domain.Entities.AgendaItem", "AgendaItem")
+                        .WithMany()
+                        .HasForeignKey("AgendaItemId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("BoardMgmt.Domain.Entities.Meeting", "Meeting")
+                        .WithMany("Votes")
+                        .HasForeignKey("MeetingId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.Navigation("AgendaItem");
+
+                    b.Navigation("Meeting");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
@@ -496,6 +763,17 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                     b.Navigation("Attendees");
 
                     b.Navigation("Documents");
+
+                    b.Navigation("Votes");
+                });
+
+            modelBuilder.Entity("BoardMgmt.Domain.Entities.VotePoll", b =>
+                {
+                    b.Navigation("Ballots");
+
+                    b.Navigation("EligibleUsers");
+
+                    b.Navigation("Options");
                 });
 #pragma warning restore 612, 618
         }

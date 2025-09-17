@@ -1,9 +1,11 @@
-﻿using BoardMgmt.Domain.Entities;
-using BoardMgmt.Infrastructure.Persistence;
-using BoardMgmt.WebApi.Common;
+﻿using BoardMgmt.Application.Common.Interfaces;
+using BoardMgmt.Application.Documents.Commands.UploadDocuments;
+using BoardMgmt.Application.Documents.DTOs;
+using BoardMgmt.Application.Documents.Queries.ListDocuments;
+using BoardMgmt.Domain.Entities;
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace BoardMgmt.WebApi.Controllers;
 
@@ -11,136 +13,71 @@ namespace BoardMgmt.WebApi.Controllers;
 [Route("api/[controller]")]
 public class DocumentsController : ControllerBase
 {
-    private readonly AppDbContext _db;
-    private readonly IWebHostEnvironment _env;
+    private readonly IMediator _mediator;
+    private readonly IFileStorage _storage;
 
-    public DocumentsController(AppDbContext db, IWebHostEnvironment env)
-    {
-        _db = db; _env = env;
-    }
+    public DocumentsController(IMediator mediator, IFileStorage storage)
+    { _mediator = mediator; _storage = storage; }
 
+    // GET api/documents?folderSlug=&type=&search=&datePreset=
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<DocumentDto>>> List([FromQuery] ListDocumentsQuery q)
-    {
-        var query = _db.Documents.AsQueryable();
+    [Authorize] // or AllowAnonymous if observers are public
+    public async Task<ActionResult<IReadOnlyList<DocumentDto>>> List(
+        [FromQuery] string? folderSlug, [FromQuery] string? type,
+        [FromQuery] string? search, [FromQuery] string? datePreset)
+        => Ok(await _mediator.Send(new ListDocumentsQuery(folderSlug, type, search, datePreset)));
 
-        if (!string.IsNullOrWhiteSpace(q.Folder))
-            query = query.Where(d => d.FolderSlug == q.Folder);
 
-        if (!string.IsNullOrWhiteSpace(q.Type))
-        {
-            var t = q.Type!.ToLowerInvariant();
-            query = query.Where(d =>
-                (t == "pdf" && d.ContentType.Contains("pdf")) ||
-                (t == "word" && (d.ContentType.Contains("word") || d.OriginalName.EndsWith(".doc") || d.OriginalName.EndsWith(".docx"))) ||
-                (t == "excel" && (d.ContentType.Contains("excel") || d.OriginalName.EndsWith(".xls") || d.OriginalName.EndsWith(".xlsx"))) ||
-                (t == "powerpoint" && (d.ContentType.Contains("presentation") || d.OriginalName.EndsWith(".ppt") || d.OriginalName.EndsWith(".pptx")))
-            );
-        }
-
-        if (!string.IsNullOrWhiteSpace(q.Search))
-            query = query.Where(d => d.OriginalName.Contains(q.Search!));
-
-        var items = await query
-            .OrderByDescending(d => d.UploadedAt)
-            .Select(d => new DocumentDto(
-                d.Id,
-                d.OriginalName,
-                MapType(d),
-                d.SizeBytes,
-                d.UploadedAt,
-                d.FolderSlug,
-                d.MeetingId,
-                d.Url))
-            .ToListAsync();
-
-        return Ok(items);
-    }
-
-    [HttpPost]
-    [DisableRequestSizeLimit]
-    [RequestFormLimits(MultipartBodyLengthLimit = 52428800)] // 50MB per file
-    [Authorize] // adjust
-    public async Task<ActionResult<IEnumerable<DocumentDto>>> Upload(
+    // POST api/documents/upload  (multipart/form-data)
+    [HttpPost("upload")]
+    [Authorize(Roles = "Admin,BoardMember,CommitteeMember,Secretary")]
+    [RequestSizeLimit(52428800 * 5)]
+    public async Task<ActionResult<IReadOnlyList<DocumentDto>>> Upload(
         [FromForm] Guid? meetingId,
-        [FromForm] string folderSlug,
+        [FromForm] string? folderSlug,
         [FromForm] string? description,
-        [FromForm] IFormFileCollection files)
+
+        // Option A: a single integer bitmask
+        [FromForm] int? access,
+
+        // Option B: four booleans (matches your UI checkboxes)
+        [FromForm] bool? boardMembers,
+        [FromForm] bool? committeeMembers,
+        [FromForm] bool? observers,
+        [FromForm] bool? administrators)
     {
-        if (files is null || files.Count == 0) return BadRequest("No files.");
-        if (string.IsNullOrWhiteSpace(folderSlug)) folderSlug = "root";
-        if (folderSlug != "root" && !await _db.Folders.AnyAsync(f => f.Slug == folderSlug))
-            return BadRequest("Folder not found.");
+        var files = Request.Form.Files;
+        if (files.Count == 0) return BadRequest("No files sent.");
 
-        if (meetingId.HasValue && !await _db.Meetings.AnyAsync(m => m.Id == meetingId.Value))
-            return BadRequest("Meeting not found.");
+        var items = new List<UploadDocumentsCommand.UploadItem>();
+        foreach (var f in files)
+            items.Add(new UploadDocumentsCommand.UploadItem(f.OpenReadStream(), f.FileName, f.ContentType, f.Length));
 
-        var saved = new List<DocumentDto>();
-
-        var wwwroot = _env.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
-        var basePath = Path.Combine(wwwroot, "uploads", folderSlug);
-        Directory.CreateDirectory(basePath);
-
-        foreach (var file in files)
+        DocumentAccess flags;
+        if (access.HasValue)
         {
-            var id = Guid.NewGuid();
-            var safeName = Path.GetFileName(file.FileName);
-            var ext = Path.GetExtension(safeName);
-            var storedName = $"{id}{ext}";
-            var physicalPath = Path.Combine(basePath, storedName);
-
-            await using (var fs = System.IO.File.Create(physicalPath))
-                await file.CopyToAsync(fs);
-
-            var relativeUrl = $"/uploads/{folderSlug}/{storedName}";
-
-            var doc = new Document
-            {
-                Id = id,
-                MeetingId = meetingId,
-                FolderSlug = folderSlug,
-                FileName = storedName,
-                OriginalName = safeName,
-                Url = relativeUrl,
-                ContentType = file.ContentType ?? "application/octet-stream",
-                SizeBytes = file.Length,
-                Description = description
-            };
-
-            _db.Documents.Add(doc);
-            saved.Add(new DocumentDto(doc.Id, doc.OriginalName, MapType(doc), doc.SizeBytes, doc.UploadedAt, doc.FolderSlug, doc.MeetingId, doc.Url));
+            flags = (DocumentAccess)access.Value;
+        }
+        else
+        {
+            flags = DocumentAccess.None;
+            if (boardMembers == true) flags |= DocumentAccess.BoardMembers;
+            if (committeeMembers == true) flags |= DocumentAccess.CommitteeMembers;
+            if (observers == true) flags |= DocumentAccess.Observers;
+            if (administrators == true) flags |= DocumentAccess.Administrators;
+            if (flags == DocumentAccess.None)
+                flags = DocumentAccess.Administrators | DocumentAccess.BoardMembers;
         }
 
-        // update folder counters (optional)
-        var folder = await _db.Folders.FirstOrDefaultAsync(f => f.Slug == folderSlug);
-        if (folder is not null)
-            folder.DocumentCount = await _db.Documents.CountAsync(d => d.FolderSlug == folderSlug) + saved.Count;
+        var result = await _mediator.Send(new UploadDocumentsCommand(
+            meetingId,
+            string.IsNullOrWhiteSpace(folderSlug) ? "root" : folderSlug!,
+            description,
+            flags,
+            items));
 
-        await _db.SaveChangesAsync();
-        return Ok(saved);
+        return Ok(result);
     }
 
-    [HttpGet("{id:guid}/download")]
-    public async Task<IActionResult> Download(Guid id)
-    {
-        var doc = await _db.Documents.FirstOrDefaultAsync(d => d.Id == id);
-        if (doc is null) return NotFound();
-
-        var physical = Path.Combine(_env.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot"),
-            "uploads", doc.FolderSlug, doc.FileName);
-        if (!System.IO.File.Exists(physical)) return NotFound();
-
-        var stream = System.IO.File.OpenRead(physical);
-        return File(stream, doc.ContentType, doc.OriginalName);
-    }
-
-    private static string MapType(Document d)
-    {
-        var n = d.OriginalName.ToLowerInvariant();
-        if (n.EndsWith(".pdf")) return "pdf";
-        if (n.EndsWith(".doc") || n.EndsWith(".docx")) return "word";
-        if (n.EndsWith(".xls") || n.EndsWith(".xlsx")) return "excel";
-        if (n.EndsWith(".ppt") || n.EndsWith(".pptx")) return "powerpoint";
-        return "file";
-    }
+    // (download & delete can stay as you had)
 }

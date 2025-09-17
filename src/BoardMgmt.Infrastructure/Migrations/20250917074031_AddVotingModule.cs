@@ -3,10 +3,10 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace BoardMgmt.Infrastructure.Persistence.Migrations
+namespace BoardMgmt.Infrastructure.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialCreate : Migration
+    public partial class AddVotingModule : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -48,6 +48,21 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_AspNetUsers", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Folders",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    Name = table.Column<string>(type: "nvarchar(60)", maxLength: 60, nullable: false),
+                    Slug = table.Column<string>(type: "nvarchar(80)", maxLength: 80, nullable: false),
+                    CreatedAt = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
+                    DocumentCount = table.Column<int>(type: "int", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Folders", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
@@ -200,11 +215,17 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    MeetingId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    FileName = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    MeetingId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
+                    FolderSlug = table.Column<string>(type: "nvarchar(80)", maxLength: 80, nullable: false, defaultValue: "root"),
+                    FileName = table.Column<string>(type: "nvarchar(260)", maxLength: 260, nullable: false),
+                    OriginalName = table.Column<string>(type: "nvarchar(260)", maxLength: 260, nullable: false),
                     Url = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    ContentType = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
+                    SizeBytes = table.Column<long>(type: "bigint", nullable: false),
                     Version = table.Column<int>(type: "int", nullable: false),
-                    UploadedAt = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false)
+                    Description = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    UploadedAt = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
+                    Access = table.Column<int>(type: "int", nullable: false, defaultValue: 9)
                 },
                 constraints: table =>
                 {
@@ -223,8 +244,10 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                 {
                     Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     MeetingId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    UserId = table.Column<string>(type: "nvarchar(450)", nullable: true),
                     Name = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
                     Role = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
+                    Email = table.Column<string>(type: "nvarchar(320)", maxLength: 320, nullable: true),
                     IsRequired = table.Column<bool>(type: "bit", nullable: false, defaultValue: true),
                     IsConfirmed = table.Column<bool>(type: "bit", nullable: false, defaultValue: false)
                 },
@@ -232,11 +255,48 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                 {
                     table.PrimaryKey("PK_MeetingAttendees", x => x.Id);
                     table.ForeignKey(
+                        name: "FK_MeetingAttendees_AspNetUsers_UserId",
+                        column: x => x.UserId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id");
+                    table.ForeignKey(
                         name: "FK_MeetingAttendees_Meetings_MeetingId",
                         column: x => x.MeetingId,
                         principalTable: "Meetings",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "VotePolls",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    MeetingId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
+                    AgendaItemId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
+                    Title = table.Column<string>(type: "nvarchar(160)", maxLength: 160, nullable: false),
+                    Description = table.Column<string>(type: "nvarchar(2000)", maxLength: 2000, nullable: true),
+                    Type = table.Column<int>(type: "int", nullable: false),
+                    AllowAbstain = table.Column<bool>(type: "bit", nullable: false),
+                    Anonymous = table.Column<bool>(type: "bit", nullable: false),
+                    CreatedAt = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
+                    Deadline = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
+                    Eligibility = table.Column<int>(type: "int", nullable: false),
+                    CreatedByUserId = table.Column<string>(type: "nvarchar(450)", maxLength: 450, nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_VotePolls", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_VotePolls_AgendaItems_AgendaItemId",
+                        column: x => x.AgendaItemId,
+                        principalTable: "AgendaItems",
+                        principalColumn: "Id");
+                    table.ForeignKey(
+                        name: "FK_VotePolls_Meetings_MeetingId",
+                        column: x => x.MeetingId,
+                        principalTable: "Meetings",
+                        principalColumn: "Id");
                 });
 
             migrationBuilder.CreateTable(
@@ -261,6 +321,73 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                         name: "FK_Votes_AgendaItems_AgendaItemId",
                         column: x => x.AgendaItemId,
                         principalTable: "AgendaItems",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "VoteEligibleUsers",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    VoteId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    UserId = table.Column<string>(type: "nvarchar(450)", maxLength: 450, nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_VoteEligibleUsers", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_VoteEligibleUsers_VotePolls_VoteId",
+                        column: x => x.VoteId,
+                        principalTable: "VotePolls",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "VoteOptions",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    VoteId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    Text = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
+                    Order = table.Column<int>(type: "int", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_VoteOptions", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_VoteOptions_VotePolls_VoteId",
+                        column: x => x.VoteId,
+                        principalTable: "VotePolls",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "VoteBallots",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    VoteId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    UserId = table.Column<string>(type: "nvarchar(450)", maxLength: 450, nullable: false),
+                    Choice = table.Column<int>(type: "int", nullable: true),
+                    OptionId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
+                    VotedAt = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_VoteBallots", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_VoteBallots_VoteOptions_OptionId",
+                        column: x => x.OptionId,
+                        principalTable: "VoteOptions",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "FK_VoteBallots_VotePolls_VoteId",
+                        column: x => x.VoteId,
+                        principalTable: "VotePolls",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
@@ -310,9 +437,25 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                 filter: "[NormalizedUserName] IS NOT NULL");
 
             migrationBuilder.CreateIndex(
+                name: "IX_Documents_FolderSlug",
+                table: "Documents",
+                column: "FolderSlug");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Documents_MeetingId",
                 table: "Documents",
                 column: "MeetingId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Documents_UploadedAt",
+                table: "Documents",
+                column: "UploadedAt");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Folders_Slug",
+                table: "Folders",
+                column: "Slug",
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_MeetingAttendees_MeetingId",
@@ -320,9 +463,57 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                 column: "MeetingId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_MeetingAttendees_MeetingId_UserId",
+                table: "MeetingAttendees",
+                columns: new[] { "MeetingId", "UserId" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_MeetingAttendees_UserId",
+                table: "MeetingAttendees",
+                column: "UserId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Meetings_ScheduledAt_Status",
                 table: "Meetings",
                 columns: new[] { "ScheduledAt", "Status" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_VoteBallots_OptionId",
+                table: "VoteBallots",
+                column: "OptionId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_VoteBallots_VoteId_UserId",
+                table: "VoteBallots",
+                columns: new[] { "VoteId", "UserId" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_VoteEligibleUsers_VoteId_UserId",
+                table: "VoteEligibleUsers",
+                columns: new[] { "VoteId", "UserId" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_VoteOptions_VoteId_Order",
+                table: "VoteOptions",
+                columns: new[] { "VoteId", "Order" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_VotePolls_AgendaItemId",
+                table: "VotePolls",
+                column: "AgendaItemId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_VotePolls_CreatedByUserId_CreatedAt",
+                table: "VotePolls",
+                columns: new[] { "CreatedByUserId", "CreatedAt" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_VotePolls_MeetingId",
+                table: "VotePolls",
+                column: "MeetingId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Votes_AgendaItemId",
@@ -352,7 +543,16 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                 name: "Documents");
 
             migrationBuilder.DropTable(
+                name: "Folders");
+
+            migrationBuilder.DropTable(
                 name: "MeetingAttendees");
+
+            migrationBuilder.DropTable(
+                name: "VoteBallots");
+
+            migrationBuilder.DropTable(
+                name: "VoteEligibleUsers");
 
             migrationBuilder.DropTable(
                 name: "Votes");
@@ -362,6 +562,12 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
 
             migrationBuilder.DropTable(
                 name: "AspNetUsers");
+
+            migrationBuilder.DropTable(
+                name: "VoteOptions");
+
+            migrationBuilder.DropTable(
+                name: "VotePolls");
 
             migrationBuilder.DropTable(
                 name: "AgendaItems");

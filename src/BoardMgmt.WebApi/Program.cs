@@ -1,7 +1,9 @@
-﻿using BoardMgmt.Infrastructure;                  // AddInfrastructure(config)
+﻿using BoardMgmt.Application;                     // AddApplication()
+using BoardMgmt.Application.Common.Interfaces;
+using BoardMgmt.Infrastructure;                  // AddInfrastructure(config)
 using BoardMgmt.Infrastructure.Persistence;      // AppDbContext, DbSeeder
-using BoardMgmt.Application;                     // AddApplication()
 using BoardMgmt.WebApi.Common.Http;              // Api middleware + filters
+using BoardMgmt.WebApi.Common.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http.Features;        // FormOptions
 using Microsoft.EntityFrameworkCore;
@@ -9,9 +11,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 
-// ───────────────────────────────────────────────────────────────────────────────
-// Build
-// ───────────────────────────────────────────────────────────────────────────────
 var builder = WebApplication.CreateBuilder(args);
 var config = builder.Configuration;
 
@@ -75,15 +74,14 @@ builder.Services.AddSwaggerGen();
 
 // Global exception formatter (DI)
 builder.Services.AddSingleton<ExceptionHandlingMiddleware>();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 
 // Large upload support (e.g., document uploads up to 50 MB)
 builder.Services.Configure<FormOptions>(o =>
 {
     o.MultipartBodyLengthLimit = 50 * 1024 * 1024; // 50 MB
 });
-
-// OPTIONAL: If you also want to raise Kestrel limits for non-IIS hosting, uncomment:
-// builder.WebHost.ConfigureKestrel(opts => { opts.Limits.MaxRequestBodySize = 50 * 1024 * 1024; });
 
 // ───────────────────────────────────────────────────────────────────────────────
 // App
@@ -119,7 +117,11 @@ if (app.Environment.IsDevelopment())
 // Global exception handler FIRST so it can catch downstream exceptions
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
-app.UseHttpsRedirection();
+// IMPORTANT: No HTTPS redirect in Development (prevents status 0 on HTTP calls)
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 // Serve files from wwwroot (including /uploads/*)
 app.UseStaticFiles();
