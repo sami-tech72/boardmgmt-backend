@@ -19,7 +19,9 @@ public interface IAppDbContext
     DbSet<VoteOption> VoteOptions { get; }
     DbSet<VoteBallot> VoteBallots { get; }
     DbSet<VoteEligibleUser> VoteEligibleUsers { get; }
+
+    // NEW
     DbSet<RolePermission> RolePermissions { get; }
 
-    Task<int> SaveChangesAsync(CancellationToken cancellationToken);
+    Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }
