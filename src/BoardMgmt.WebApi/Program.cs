@@ -29,10 +29,17 @@ var issuer = config["Jwt:Issuer"] ?? "BoardMgmt";
 var audience = config["Jwt:Audience"] ?? "BoardMgmt.Client";
 var key = config["Jwt:Key"] ?? "super-secret-key-change-me";
 
+// 👇 Force JWT as the default scheme
 builder.Services
-    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddAuthentication(options =>
+    {
+        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    })
     .AddJwtBearer(o =>
     {
+        o.RequireHttpsMetadata = false; // dev only
+        o.SaveToken = true;
         o.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
@@ -43,6 +50,21 @@ builder.Services
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key))
         };
     });
+
+// 👇 If Identity cookie auth is enabled, suppress redirects for APIs
+builder.Services.ConfigureApplicationCookie(options =>
+{
+    options.Events.OnRedirectToLogin = ctx =>
+    {
+        ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        return Task.CompletedTask;
+    };
+    options.Events.OnRedirectToAccessDenied = ctx =>
+    {
+        ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
+        return Task.CompletedTask;
+    };
+});
 
 builder.Services.AddAuthorization();
 

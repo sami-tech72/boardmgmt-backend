@@ -3,10 +3,10 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace BoardMgmt.Infrastructure.Migrations
+namespace BoardMgmt.Infrastructure.Persistence.Migrations
 {
     /// <inheritdoc />
-    public partial class AddVotingModule : Migration
+    public partial class InitialCreate : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -98,6 +98,26 @@ namespace BoardMgmt.Infrastructure.Migrations
                     table.PrimaryKey("PK_AspNetRoleClaims", x => x.Id);
                     table.ForeignKey(
                         name: "FK_AspNetRoleClaims_AspNetRoles_RoleId",
+                        column: x => x.RoleId,
+                        principalTable: "AspNetRoles",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "RolePermissions",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    RoleId = table.Column<string>(type: "nvarchar(450)", maxLength: 450, nullable: false),
+                    Module = table.Column<int>(type: "int", nullable: false),
+                    Allowed = table.Column<int>(type: "int", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_RolePermissions", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_RolePermissions_AspNetRoles_RoleId",
                         column: x => x.RoleId,
                         principalTable: "AspNetRoles",
                         principalColumn: "Id",
@@ -478,6 +498,12 @@ namespace BoardMgmt.Infrastructure.Migrations
                 columns: new[] { "ScheduledAt", "Status" });
 
             migrationBuilder.CreateIndex(
+                name: "IX_RolePermissions_RoleId_Module",
+                table: "RolePermissions",
+                columns: new[] { "RoleId", "Module" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
                 name: "IX_VoteBallots_OptionId",
                 table: "VoteBallots",
                 column: "OptionId");
@@ -549,6 +575,9 @@ namespace BoardMgmt.Infrastructure.Migrations
                 name: "MeetingAttendees");
 
             migrationBuilder.DropTable(
+                name: "RolePermissions");
+
+            migrationBuilder.DropTable(
                 name: "VoteBallots");
 
             migrationBuilder.DropTable(
@@ -558,10 +587,10 @@ namespace BoardMgmt.Infrastructure.Migrations
                 name: "Votes");
 
             migrationBuilder.DropTable(
-                name: "AspNetRoles");
+                name: "AspNetUsers");
 
             migrationBuilder.DropTable(
-                name: "AspNetUsers");
+                name: "AspNetRoles");
 
             migrationBuilder.DropTable(
                 name: "VoteOptions");

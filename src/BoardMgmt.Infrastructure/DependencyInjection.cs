@@ -16,7 +16,7 @@ public static class DependencyInjection
     {
         var cs = config.GetConnectionString("DefaultConnection")
                  // Pick one style (Windows auth OR SQL auth) and keep it consistent:
-                 ?? "Server=SAMI-PC\\SQLEXPRESS;Database=BoardMgmtDb;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=True";
+                 ?? "Server=localhost\\SQLEXPRESS;Database=BoardMgmtDb;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=True";
 
         // Concrete context
         services.AddDbContext<AppDbContext>(opt =>

@@ -2,14 +2,13 @@
 
 public enum AppModule : int
 {
-    Dashboard = 1,
-    Meetings,
-    Documents,
-    Voting,
-    Reports,
-    Messages,
-    Users,
-    Settings,
-
-
+    Users = 1,
+    Meetings = 2,
+    Documents = 3,
+    Folders = 4,
+    Votes = 5,
+    Dashboard = 6,
+    Settings = 7,
+    Reports = 8,
+    Messages = 9
 }
