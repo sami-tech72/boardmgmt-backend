@@ -1,10 +1,11 @@
-﻿using BoardMgmt.Domain.Entities;
+﻿using BoardMgmt.Application.Common.Interfaces;            // <-- implement this interface
+using BoardMgmt.Domain.Entities;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace BoardMgmt.Infrastructure.Persistence;
 
-public class AppDbContext : IdentityDbContext<AppUser>
+public class AppDbContext : IdentityDbContext<AppUser>, IAppDbContext
 {
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
@@ -13,9 +14,16 @@ public class AppDbContext : IdentityDbContext<AppUser>
     public DbSet<Document> Documents => Set<Document>();
     public DbSet<Vote> Votes => Set<Vote>();
     public DbSet<MeetingAttendee> MeetingAttendees => Set<MeetingAttendee>();
-
-    // NEW
     public DbSet<Folder> Folders => Set<Folder>();
+
+    public DbSet<VotePoll> VotePolls => Set<VotePoll>();
+    public DbSet<VoteOption> VoteOptions => Set<VoteOption>();
+    public DbSet<VoteBallot> VoteBallots => Set<VoteBallot>();
+    public DbSet<VoteEligibleUser> VoteEligibleUsers => Set<VoteEligibleUser>();
+
+    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+        => base.SaveChangesAsync(cancellationToken);
+
     protected override void OnModelCreating(ModelBuilder b)
     {
         base.OnModelCreating(b);
@@ -40,8 +48,6 @@ public class AppDbContext : IdentityDbContext<AppUser>
                 .HasForeignKey(a => a.MeetingId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-
-
             e.HasIndex(m => new { m.ScheduledAt, m.Status });
         });
 
@@ -51,18 +57,18 @@ public class AppDbContext : IdentityDbContext<AppUser>
             e.Property(a => a.Role).HasMaxLength(100);
             e.Property(a => a.IsRequired).HasDefaultValue(true);
             e.Property(a => a.IsConfirmed).HasDefaultValue(false);
-            e.HasIndex(a => a.MeetingId);
             e.Property(a => a.Email).HasMaxLength(320);
+
+            e.HasIndex(a => a.MeetingId);
             e.HasIndex(x => x.UserId);
+
             e.HasIndex(x => new { x.MeetingId, x.UserId });
 
-            // FK relationship to Identity user (optional, allows NULL)
             e.HasOne<AppUser>()
-             .WithMany()                 // or .WithMany(u => u.MeetingAttendees) if you add nav property
+             .WithMany()                 // or .WithMany(u => u.MeetingAttendees)
              .HasForeignKey(a => a.UserId)
-             .HasPrincipalKey(u => u.Id) // AppUser.Id is string
-             .OnDelete(DeleteBehavior.NoAction); // don’t cascade delete meetings if user deleted
-
+             .HasPrincipalKey(u => u.Id)
+             .OnDelete(DeleteBehavior.NoAction);
         });
 
         b.Entity<AgendaItem>(e =>
@@ -71,23 +77,123 @@ public class AppDbContext : IdentityDbContext<AppUser>
             e.HasIndex(x => new { x.MeetingId, x.Order });
         });
 
-        // NEW: Folders
+
         b.Entity<Folder>(e =>
         {
-            e.Property(f => f.Name).HasMaxLength(100).IsRequired();
-            e.Property(f => f.Slug).HasMaxLength(100).IsRequired();
-            e.HasIndex(f => f.Slug).IsUnique();
+            e.HasIndex(x => x.Slug).IsUnique();
+            e.Property(x => x.Name).HasMaxLength(60).IsRequired();
+            e.Property(x => x.Slug).HasMaxLength(80).IsRequired();
         });
 
-        // NEW: Documents
+
+        //b.Entity<Document>(e =>
+        //{
+        //    e.Property(x => x.OriginalName).HasMaxLength(260).IsRequired();
+        //    e.Property(x => x.FileName).HasMaxLength(260).IsRequired();
+        //    e.Property(x => x.FolderSlug).HasMaxLength(80).HasDefaultValue("root");
+        //    e.Property(x => x.ContentType).HasMaxLength(200);
+        //    e.HasIndex(x => x.FolderSlug);
+        //    e.HasIndex(x => x.MeetingId);
+        //    e.HasIndex(x => x.UploadedAt);
+        //});
+
+
         b.Entity<Document>(e =>
         {
-            e.Property(d => d.FolderSlug).HasMaxLength(100).HasDefaultValue("root");
-            e.Property(d => d.FileName).HasMaxLength(260).IsRequired();
-            e.Property(d => d.OriginalName).HasMaxLength(260).IsRequired();
-            e.Property(d => d.ContentType).HasMaxLength(150);
-            e.Property(d => d.Description).HasMaxLength(1000);
-            e.HasIndex(d => new { d.FolderSlug, d.UploadedAt });
+            e.Property(x => x.OriginalName).HasMaxLength(260).IsRequired();
+            e.Property(x => x.FileName).HasMaxLength(260).IsRequired();
+            e.Property(x => x.FolderSlug).HasMaxLength(80).HasDefaultValue("root");
+            e.Property(x => x.ContentType).HasMaxLength(200);
+
+
+            // A) Implicit enum->int
+            e.Property(x => x.Access)
+             .HasDefaultValue(DocumentAccess.Administrators | DocumentAccess.BoardMembers);
+
+            // B) Explicit conversion (if you prefer)
+            // e.Property(x => x.Access)
+            //  .HasConversion<int>()
+            //  .HasDefaultValue(DocumentAccess.Administrators | DocumentAccess.BoardMembers);
+
+            e.HasIndex(x => x.FolderSlug);
+            e.HasIndex(x => x.MeetingId);
+            e.HasIndex(x => x.UploadedAt);
         });
+
+
+
+        // --- VotePoll
+        b.Entity<VotePoll>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Title).HasMaxLength(160).IsRequired();
+            e.Property(x => x.Description).HasMaxLength(2000);
+            e.Property(x => x.CreatedByUserId).HasMaxLength(450);
+
+            // scope fks
+            e.HasOne(x => x.Meeting)
+             .WithMany(m => m.Votes)            // add List<VotePoll> Votes to Meeting if you want backref; or use WithMany()
+             .HasForeignKey(x => x.MeetingId)
+             .OnDelete(DeleteBehavior.NoAction);
+
+            e.HasOne(x => x.AgendaItem)
+             .WithMany()                             // or .WithMany(ai => ai.Votes) if you add backref
+             .HasForeignKey(x => x.AgendaItemId)
+             .OnDelete(DeleteBehavior.NoAction);
+
+            e.HasIndex(x => x.MeetingId);
+            e.HasIndex(x => x.AgendaItemId);
+            e.HasIndex(x => new { x.CreatedByUserId, x.CreatedAt });
+        });
+
+        // --- VoteOption
+        b.Entity<VoteOption>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Text).HasMaxLength(200).IsRequired();
+            e.HasIndex(x => new { x.VoteId, x.Order }).IsUnique();
+
+            e.HasOne(x => x.Vote)
+             .WithMany(v => v.Options)
+             .HasForeignKey(x => x.VoteId)
+             .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // --- VoteBallot
+        b.Entity<VoteBallot>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.UserId).HasMaxLength(450).IsRequired();
+
+            // one ballot per (Vote, User)
+            e.HasIndex(x => new { x.VoteId, x.UserId }).IsUnique();
+
+            e.HasOne(x => x.Vote)
+             .WithMany(v => v.Ballots)
+             .HasForeignKey(x => x.VoteId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            // optional option FK for MultipleChoice; keep Restrict to avoid cascading null issues
+            e.HasOne(x => x.Option)
+             .WithMany()
+             .HasForeignKey(x => x.OptionId)
+             .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // --- VoteEligibleUser
+        b.Entity<VoteEligibleUser>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.Property(x => x.UserId).HasMaxLength(450).IsRequired();
+
+            e.HasIndex(x => new { x.VoteId, x.UserId }).IsUnique();
+
+            e.HasOne(x => x.Vote)
+             .WithMany(v => v.EligibleUsers)
+             .HasForeignKey(x => x.VoteId)
+             .OnDelete(DeleteBehavior.Cascade);
+        });
+
+
     }
 }

@@ -1,6 +1,8 @@
-﻿using BoardMgmt.Application.Common.Interfaces;
+﻿using BoardMgmt.Application.Common.Identity;
+using BoardMgmt.Application.Common.Interfaces;            // <-- add
 using BoardMgmt.Infrastructure.Auth;
 using BoardMgmt.Infrastructure.Persistence;
+using BoardMgmt.Infrastructure.Storage;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -13,14 +15,19 @@ public static class DependencyInjection
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration config)
     {
         var cs = config.GetConnectionString("DefaultConnection")
-                 ?? "Server=localhost\\SQLEXPRESS;Database=BoardMgmtDb;User=sa;Password=Admin@123;Trusted_Connection=True;TrustServerCertificate=True;";
+                 // Pick one style (Windows auth OR SQL auth) and keep it consistent:
+                 ?? "Server=SAMI-PC\\SQLEXPRESS;Database=BoardMgmtDb;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=True";
 
-        // DbContexts (concrete + mapping for Application's DbContext)
+        // Concrete context
         services.AddDbContext<AppDbContext>(opt =>
             opt.UseSqlServer(cs, sql => sql.MigrationsAssembly(typeof(AppDbContext).Assembly.FullName)));
 
+        // Optional: also resolve EF's DbContext as AppDbContext
         services.AddDbContext<DbContext, AppDbContext>(opt =>
             opt.UseSqlServer(cs, sql => sql.MigrationsAssembly(typeof(AppDbContext).Assembly.FullName)));
+
+        // 🔑 Map the interface used by Application handlers
+        services.AddScoped<IAppDbContext, AppDbContext>();
 
         // Identity
         services.AddIdentityCore<AppUser>(o =>
@@ -33,7 +40,8 @@ public static class DependencyInjection
         })
         .AddRoles<IdentityRole>()
         .AddEntityFrameworkStores<AppDbContext>();
-
+        services.AddScoped<IIdentityUserReader, IdentityUserReader>();
+        services.AddSingleton<IFileStorage, LocalFileStorage>();
         // JWT service
         services.AddScoped<IJwtTokenService, JwtTokenService>();
 
