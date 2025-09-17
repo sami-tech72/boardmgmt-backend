@@ -1,7 +1,8 @@
-﻿using System.Threading;
-using System.Threading.Tasks;
-using BoardMgmt.Domain.Entities;
+﻿using BoardMgmt.Domain.Entities;
+using BoardMgmt.Domain.Identity;
 using Microsoft.EntityFrameworkCore;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace BoardMgmt.Application.Common.Interfaces;
 
@@ -18,6 +19,7 @@ public interface IAppDbContext
     DbSet<VoteOption> VoteOptions { get; }
     DbSet<VoteBallot> VoteBallots { get; }
     DbSet<VoteEligibleUser> VoteEligibleUsers { get; }
+    DbSet<RolePermission> RolePermissions { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }
