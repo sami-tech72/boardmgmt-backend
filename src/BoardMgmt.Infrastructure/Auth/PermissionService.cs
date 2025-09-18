@@ -1,5 +1,9 @@
-﻿using BoardMgmt.Application.Common.Interfaces;
-using BoardMgmt.Domain.Identity;
+﻿using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Collections.Generic;
+using BoardMgmt.Application.Common.Interfaces;
+using BoardMgmt.Domain.Identity;                 // 👈 AppModule, Permission
 using BoardMgmt.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -9,8 +13,10 @@ namespace BoardMgmt.Infrastructure.Auth
     public class PermissionService(
         AppDbContext db,
         RoleManager<IdentityRole> roles,
-        ICurrentUser current) : IPermissionService
+        ICurrentUser current)
+        : IPermissionService, IRolePermissionStore // 👈 implement both
     {
+        // ===== Existing methods you already had =====
         public async Task<Permission> GetMineAsync(AppModule module, CancellationToken ct)
         {
             var roleNames = current.Roles;
@@ -38,6 +44,47 @@ namespace BoardMgmt.Infrastructure.Auth
         {
             if (!await HasMineAsync(module, needed, ct))
                 throw new UnauthorizedAccessException("Insufficient permissions.");
+        }
+
+        // ===== NEW: IRolePermissionStore aggregation =====
+
+        // Single role → { moduleId -> bitmask }
+        public async Task<IDictionary<int, int>> GetAggregatedForRoleAsync(string roleId, CancellationToken ct)
+        {
+            var list = await db.RolePermissions
+                .Where(rp => rp.RoleId == roleId)
+                .GroupBy(rp => (int)rp.Module)
+                .Select(g => new
+                {
+                    Module = g.Key,
+                    Allowed = g.Select(x => (int)x.Allowed).Aggregate(0, (a, b) => a | b)
+                })
+                .ToListAsync(ct);
+
+            return list.ToDictionary(x => x.Module, x => x.Allowed);
+        }
+
+        // Many roles → { roleId -> { moduleId -> bitmask } }
+        public async Task<IDictionary<string, IDictionary<int, int>>> GetAggregatedForRolesAsync(
+            IEnumerable<string> roleIds, CancellationToken ct)
+        {
+            var idSet = roleIds.ToHashSet();
+            var rows = await db.RolePermissions
+                .Where(rp => idSet.Contains(rp.RoleId))
+                .Select(rp => new { rp.RoleId, Module = (int)rp.Module, Allowed = (int)rp.Allowed })
+                .ToListAsync(ct);
+
+            return rows
+                .GroupBy(r => r.RoleId)
+                .ToDictionary(
+                    g => g.Key,
+                    g => (IDictionary<int, int>)g
+                        .GroupBy(x => x.Module)
+                        .ToDictionary(
+                            mg => mg.Key,
+                            mg => mg.Select(x => x.Allowed).Aggregate(0, (a, b) => a | b)
+                        )
+                );
         }
     }
 }

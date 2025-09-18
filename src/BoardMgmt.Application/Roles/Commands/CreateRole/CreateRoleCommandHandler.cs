@@ -3,13 +3,16 @@ using MediatR;
 
 namespace BoardMgmt.Application.Roles.Commands.CreateRole
 {
-    public sealed class CreateRoleCommandHandler(IRoleService roles) : IRequestHandler<CreateRoleCommand, bool>
+    public sealed class CreateRoleCommandHandler(IRoleService roles)
+        : IRequestHandler<CreateRoleCommand, CreateRoleResult>
     {
-        public async Task<bool> Handle(CreateRoleCommand request, CancellationToken ct)
+        public async Task<CreateRoleResult> Handle(CreateRoleCommand request, CancellationToken ct)
         {
-            if (await roles.RoleExistsAsync(request.Name, ct)) return true;
-            var (ok, _) = await roles.CreateRoleAsync(request.Name, ct);
-            return ok;
+            var (ok, roleId, errors) = await roles.CreateRoleAsync(request.Name, ct);
+            if (!ok || string.IsNullOrWhiteSpace(roleId))
+                throw new InvalidOperationException(string.Join("; ", errors));
+
+            return new CreateRoleResult(roleId!, request.Name);
         }
     }
 }

@@ -9,10 +9,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
-
-
-
-
 namespace BoardMgmt.Infrastructure
 {
     public static class DependencyInjection
@@ -45,14 +41,18 @@ namespace BoardMgmt.Infrastructure
             services.AddScoped<IRoleService, RoleService>();
             services.AddScoped<IJwtTokenService, JwtTokenService>();
 
-            services.AddScoped<IIdentityUserReader, IdentityUserReader>(); // 👈 new
+            services.AddScoped<IIdentityUserReader, IdentityUserReader>();
 
-            // 👇 NEW: make handlers that (still) take DbContext happy
+            // If some handlers still take DbContext directly:
             services.AddScoped<DbContext>(sp => sp.GetRequiredService<AppDbContext>());
 
-            // 👇 NEW: current user for handlers needing it
+            // Current user accessor
             services.AddScoped<ICurrentUser, CurrentUser>();
+
+            // 🔑 ONE PermissionService instance per scope, exposed via both interfaces
             services.AddScoped<IPermissionService, PermissionService>();
+            services.AddScoped<IRolePermissionStore>(sp =>
+                (IRolePermissionStore)sp.GetRequiredService<IPermissionService>());
 
             services.AddSingleton<IFileStorage, LocalFileStorage>();
             return services;
