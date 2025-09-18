@@ -171,14 +171,14 @@ public static class DbSeeder
 
         // 6) Role permissions — de-dup using one SQL statement (avoids GroupBy translation issues)
         await db.Database.ExecuteSqlRawAsync(@"
-;WITH d AS (
-    SELECT
-        Id, RoleId, Module, Allowed,
-        ROW_NUMBER() OVER (PARTITION BY RoleId, Module ORDER BY Allowed DESC) AS rn
-    FROM [dbo].[RolePermissions]
-)
-DELETE FROM d WHERE rn > 1;
-");
+                ;WITH d AS (
+                    SELECT
+                        Id, RoleId, Module, Allowed,
+                        ROW_NUMBER() OVER (PARTITION BY RoleId, Module ORDER BY Allowed DESC) AS rn
+                    FROM [dbo].[RolePermissions]
+                )
+                DELETE FROM d WHERE rn > 1;
+                ");
         // end cleanup
 
         // helpers

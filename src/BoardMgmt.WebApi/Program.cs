@@ -1,4 +1,6 @@
-﻿using BoardMgmt.Application;
+﻿using System.Reflection;
+using System.Text;
+using BoardMgmt.Application;
 using BoardMgmt.Infrastructure;
 using BoardMgmt.Infrastructure.Persistence;
 using BoardMgmt.WebApi.Common.Http;
@@ -7,14 +9,14 @@ using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
-using System.Text;
+using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 var config = builder.Configuration;
 
 // Infrastructure then Application
 builder.Services.AddInfrastructure(config);
-builder.Services.AddApplication(); // only once
+builder.Services.AddApplication();
 
 // JWT
 var issuer = config["Jwt:Issuer"] ?? "BoardMgmt";
@@ -51,15 +53,53 @@ builder.Services.AddCors(opt =>
         .AllowAnyHeader()
         .AllowAnyMethod()
         .AllowCredentials()
-        .WithOrigins(config.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? new[] { "http://localhost:4200", "http://localhost:4000" }));
+        .WithOrigins(
+            config.GetSection("Cors:AllowedOrigins").Get<string[]>()
+            ?? new[] { "http://localhost:4200", "http://localhost:4000" }
+        ));
 });
 
 builder.Services
     .AddControllers(o => o.Filters.Add<InvalidModelStateFilter>())
     .ConfigureApiBehaviorOptions(o => o.SuppressModelStateInvalidFilter = true);
 
+// ---- Swagger (fix name collisions + JWT) ----
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(opt =>
+{
+    // Use fully qualified names so types like PermissionDto from different namespaces don't collide
+    opt.CustomSchemaIds(t => t.FullName?.Replace('+', '.'));
+
+    opt.SwaggerDoc("v1", new OpenApiInfo { Title = "BoardMgmt.WebApi", Version = "v1" });
+
+    // JWT auth in Swagger UI
+    opt.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "Enter: Bearer {your JWT}"
+    });
+    opt.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
+            },
+            Array.Empty<string>()
+        }
+    });
+
+    // Include XML comments (optional; guard if file doesn't exist)
+    var xml = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
+    var xmlPath = Path.Combine(AppContext.BaseDirectory, xml);
+    if (File.Exists(xmlPath))
+        opt.IncludeXmlComments(xmlPath);
+});
 
 builder.Services.AddSingleton<ExceptionHandlingMiddleware>();
 builder.Services.AddHttpContextAccessor();
@@ -69,7 +109,8 @@ var app = builder.Build();
 
 // Static files (uploads)
 var webRoot = app.Environment.WebRootPath;
-if (string.IsNullOrWhiteSpace(webRoot)) webRoot = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+if (string.IsNullOrWhiteSpace(webRoot))
+    webRoot = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
 Directory.CreateDirectory(Path.Combine(webRoot, "uploads"));
 
 // auto-migrate + seed
@@ -86,7 +127,10 @@ using (var scope = app.Services.CreateScope())
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "BoardMgmt.WebApi v1");
+    });
 }
 
 app.UseMiddleware<ExceptionHandlingMiddleware>();
