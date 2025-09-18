@@ -1,158 +1,157 @@
 ﻿using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Domain.Entities;
-using BoardMgmt.Domain.Identity;
+using BoardMgmt.Domain.Identity; // ✅ use Domain.AppUser
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
-namespace BoardMgmt.Infrastructure.Persistence;
-
-public class AppDbContext : IdentityDbContext<AppUser>, IAppDbContext
+namespace BoardMgmt.Infrastructure.Persistence
 {
-    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
-
-    public DbSet<Meeting> Meetings => Set<Meeting>();
-    public DbSet<AgendaItem> AgendaItems => Set<AgendaItem>();
-    public DbSet<Document> Documents => Set<Document>();
-    public DbSet<Vote> Votes => Set<Vote>();
-    public DbSet<MeetingAttendee> MeetingAttendees => Set<MeetingAttendee>();
-    public DbSet<Folder> Folders => Set<Folder>();
-
-    public DbSet<VotePoll> VotePolls => Set<VotePoll>();
-    public DbSet<VoteOption> VoteOptions => Set<VoteOption>();
-    public DbSet<VoteBallot> VoteBallots => Set<VoteBallot>();
-    public DbSet<VoteEligibleUser> VoteEligibleUsers => Set<VoteEligibleUser>();
-
-    // Use the Domain entity directly
-    public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
-
-    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
-        => base.SaveChangesAsync(cancellationToken);
-
-    protected override void OnModelCreating(ModelBuilder b)
+    public class AppDbContext : IdentityDbContext<AppUser>, IAppDbContext
     {
-        base.OnModelCreating(b);
+        public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
-        // ------- Meetings (unchanged) -------
-        b.Entity<Meeting>(e =>
+        public DbSet<Meeting> Meetings => Set<Meeting>();
+        public DbSet<AgendaItem> AgendaItems => Set<AgendaItem>();
+        public DbSet<Document> Documents => Set<Document>();
+        public DbSet<Vote> Votes => Set<Vote>();
+        public DbSet<MeetingAttendee> MeetingAttendees => Set<MeetingAttendee>();
+        public DbSet<Folder> Folders => Set<Folder>();
+
+        public DbSet<VotePoll> VotePolls => Set<VotePoll>();
+        public DbSet<VoteOption> VoteOptions => Set<VoteOption>();
+        public DbSet<VoteBallot> VoteBallots => Set<VoteBallot>();
+        public DbSet<VoteEligibleUser> VoteEligibleUsers => Set<VoteEligibleUser>();
+
+        public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
+
+        public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+            => base.SaveChangesAsync(cancellationToken);
+
+        protected override void OnModelCreating(ModelBuilder b)
         {
-            e.Property(m => m.Title).HasMaxLength(200).IsRequired();
-            e.Property(m => m.Location).HasMaxLength(200).IsRequired();
+            base.OnModelCreating(b);
 
-            e.HasMany(m => m.AgendaItems).WithOne().HasForeignKey(ai => ai.MeetingId).OnDelete(DeleteBehavior.Cascade);
-            e.HasMany(m => m.Documents).WithOne().HasForeignKey(d => d.MeetingId).OnDelete(DeleteBehavior.Cascade);
-            e.HasMany(m => m.Attendees).WithOne(a => a.Meeting).HasForeignKey(a => a.MeetingId).OnDelete(DeleteBehavior.Cascade);
+            // ------- Meetings (unchanged) -------
+            b.Entity<Meeting>(e =>
+            {
+                e.Property(m => m.Title).HasMaxLength(200).IsRequired();
+                e.Property(m => m.Location).HasMaxLength(200).IsRequired();
 
-            e.HasIndex(m => new { m.ScheduledAt, m.Status });
-        });
+                e.HasMany(m => m.AgendaItems).WithOne().HasForeignKey(ai => ai.MeetingId).OnDelete(DeleteBehavior.Cascade);
+                e.HasMany(m => m.Documents).WithOne().HasForeignKey(d => d.MeetingId).OnDelete(DeleteBehavior.Cascade);
+                e.HasMany(m => m.Attendees).WithOne(a => a.Meeting).HasForeignKey(a => a.MeetingId).OnDelete(DeleteBehavior.Cascade);
 
-        b.Entity<MeetingAttendee>(e =>
-        {
-            e.Property(a => a.Name).HasMaxLength(200).IsRequired();
-            e.Property(a => a.Role).HasMaxLength(100);
-            e.Property(a => a.IsRequired).HasDefaultValue(true);
-            e.Property(a => a.IsConfirmed).HasDefaultValue(false);
-            e.Property(a => a.Email).HasMaxLength(320);
+                e.HasIndex(m => new { m.ScheduledAt, m.Status });
+            });
 
-            e.HasIndex(a => a.MeetingId);
-            e.HasIndex(x => x.UserId);
-            e.HasIndex(x => new { x.MeetingId, x.UserId });
+            b.Entity<MeetingAttendee>(e =>
+            {
+                e.Property(a => a.Name).HasMaxLength(200).IsRequired();
+                e.Property(a => a.Role).HasMaxLength(100);
+                e.Property(a => a.IsRequired).HasDefaultValue(true);
+                e.Property(a => a.IsConfirmed).HasDefaultValue(false);
+                e.Property(a => a.Email).HasMaxLength(320);
 
-            e.HasOne<AppUser>()
-             .WithMany()
-             .HasForeignKey(a => a.UserId)
-             .HasPrincipalKey(u => u.Id)
-             .OnDelete(DeleteBehavior.NoAction);
-        });
+                e.HasIndex(a => a.MeetingId);
+                e.HasIndex(x => x.UserId);
+                e.HasIndex(x => new { x.MeetingId, x.UserId });
 
-        b.Entity<AgendaItem>(e =>
-        {
-            e.Property(x => x.Title).HasMaxLength(200).IsRequired();
-            e.HasIndex(x => new { x.MeetingId, x.Order });
-        });
+                e.HasOne<AppUser>()
+                 .WithMany()
+                 .HasForeignKey(a => a.UserId)
+                 .HasPrincipalKey(u => u.Id)
+                 .OnDelete(DeleteBehavior.NoAction);
+            });
 
-        b.Entity<Folder>(e =>
-        {
-            e.HasIndex(x => x.Slug).IsUnique();
-            e.Property(x => x.Name).HasMaxLength(60).IsRequired();
-            e.Property(x => x.Slug).HasMaxLength(80).IsRequired();
-        });
+            b.Entity<AgendaItem>(e =>
+            {
+                e.Property(x => x.Title).HasMaxLength(200).IsRequired();
+                e.HasIndex(x => new { x.MeetingId, x.Order });
+            });
 
-        b.Entity<Document>(e =>
-        {
-            e.Property(x => x.OriginalName).HasMaxLength(260).IsRequired();
-            e.Property(x => x.FileName).HasMaxLength(260).IsRequired();
-            e.Property(x => x.FolderSlug).HasMaxLength(80).HasDefaultValue("root");
-            e.Property(x => x.ContentType).HasMaxLength(200);
+            b.Entity<Folder>(e =>
+            {
+                e.HasIndex(x => x.Slug).IsUnique();
+                e.Property(x => x.Name).HasMaxLength(60).IsRequired();
+                e.Property(x => x.Slug).HasMaxLength(80).IsRequired();
+            });
 
-            e.Property(x => x.Access)
-             .HasDefaultValue(DocumentAccess.Administrators | DocumentAccess.BoardMembers);
+            b.Entity<Document>(e =>
+            {
+                e.Property(x => x.OriginalName).HasMaxLength(260).IsRequired();
+                e.Property(x => x.FileName).HasMaxLength(260).IsRequired();
+                e.Property(x => x.FolderSlug).HasMaxLength(80).HasDefaultValue("root");
+                e.Property(x => x.ContentType).HasMaxLength(200);
 
-            e.HasIndex(x => x.FolderSlug);
-            e.HasIndex(x => x.MeetingId);
-            e.HasIndex(x => x.UploadedAt);
-        });
+                
 
-        // ------- Voting (unchanged) -------
-        b.Entity<VotePoll>(e =>
-        {
-            e.HasKey(x => x.Id);
-            e.Property(x => x.Title).HasMaxLength(160).IsRequired();
-            e.Property(x => x.Description).HasMaxLength(2000);
-            e.Property(x => x.CreatedByUserId).HasMaxLength(450);
+                e.HasIndex(x => x.FolderSlug);
+                e.HasIndex(x => x.MeetingId);
+                e.HasIndex(x => x.UploadedAt);
+            });
 
-            e.HasOne(x => x.Meeting).WithMany(m => m.Votes).HasForeignKey(x => x.MeetingId).OnDelete(DeleteBehavior.NoAction);
-            e.HasOne(x => x.AgendaItem).WithMany().HasForeignKey(x => x.AgendaItemId).OnDelete(DeleteBehavior.NoAction);
+            // ------- Voting (unchanged) -------
+            b.Entity<VotePoll>(e =>
+            {
+                e.HasKey(x => x.Id);
+                e.Property(x => x.Title).HasMaxLength(160).IsRequired();
+                e.Property(x => x.Description).HasMaxLength(2000);
+                e.Property(x => x.CreatedByUserId).HasMaxLength(450);
 
-            e.HasIndex(x => x.MeetingId);
-            e.HasIndex(x => x.AgendaItemId);
-            e.HasIndex(x => new { x.CreatedByUserId, x.CreatedAt });
-        });
+                e.HasOne(x => x.Meeting).WithMany(m => m.Votes).HasForeignKey(x => x.MeetingId).OnDelete(DeleteBehavior.NoAction);
+                e.HasOne(x => x.AgendaItem).WithMany().HasForeignKey(x => x.AgendaItemId).OnDelete(DeleteBehavior.NoAction);
 
-        b.Entity<VoteOption>(e =>
-        {
-            e.HasKey(x => x.Id);
-            e.Property(x => x.Text).HasMaxLength(200).IsRequired();
-            e.HasIndex(x => new { x.VoteId, x.Order }).IsUnique();
+                e.HasIndex(x => x.MeetingId);
+                e.HasIndex(x => x.AgendaItemId);
+                e.HasIndex(x => new { x.CreatedByUserId, x.CreatedAt });
+            });
 
-            e.HasOne(x => x.Vote).WithMany(v => v.Options).HasForeignKey(x => x.VoteId).OnDelete(DeleteBehavior.Cascade);
-        });
+            b.Entity<VoteOption>(e =>
+            {
+                e.HasKey(x => x.Id);
+                e.Property(x => x.Text).HasMaxLength(200).IsRequired();
+                e.HasIndex(x => new { x.VoteId, x.Order }).IsUnique();
 
-        b.Entity<VoteBallot>(e =>
-        {
-            e.HasKey(x => x.Id);
-            e.Property(x => x.UserId).HasMaxLength(450).IsRequired();
+                e.HasOne(x => x.Vote).WithMany(v => v.Options).HasForeignKey(x => x.VoteId).OnDelete(DeleteBehavior.Cascade);
+            });
 
-            e.HasIndex(x => new { x.VoteId, x.UserId }).IsUnique();
+            b.Entity<VoteBallot>(e =>
+            {
+                e.HasKey(x => x.Id);
+                e.Property(x => x.UserId).HasMaxLength(450).IsRequired();
 
-            e.HasOne(x => x.Vote).WithMany(v => v.Ballots).HasForeignKey(x => x.VoteId).OnDelete(DeleteBehavior.Cascade);
-            e.HasOne(x => x.Option).WithMany().HasForeignKey(x => x.OptionId).OnDelete(DeleteBehavior.Restrict);
-        });
+                e.HasIndex(x => new { x.VoteId, x.UserId }).IsUnique();
 
-        b.Entity<VoteEligibleUser>(e =>
-        {
-            e.HasKey(x => x.Id);
-            e.Property(x => x.UserId).HasMaxLength(450).IsRequired();
-            e.HasIndex(x => new { x.VoteId, x.UserId }).IsUnique();
-            e.HasOne(x => x.Vote).WithMany(v => v.EligibleUsers).HasForeignKey(x => x.VoteId).OnDelete(DeleteBehavior.Cascade);
-        });
+                e.HasOne(x => x.Vote).WithMany(v => v.Ballots).HasForeignKey(x => x.VoteId).OnDelete(DeleteBehavior.Cascade);
+                e.HasOne(x => x.Option).WithMany().HasForeignKey(x => x.OptionId).OnDelete(DeleteBehavior.Restrict);
+            });
 
-        // ------- RolePermission (SINGLE mapping) -------
-        b.Entity<RolePermission>(e =>
-        {
-            e.ToTable("RolePermissions");
-            e.HasKey(x => x.Id);
+            b.Entity<VoteEligibleUser>(e =>
+            {
+                e.HasKey(x => x.Id);
+                e.Property(x => x.UserId).HasMaxLength(450).IsRequired();
+                e.HasIndex(x => new { x.VoteId, x.UserId }).IsUnique();
+                e.HasOne(x => x.Vote).WithMany(v => v.EligibleUsers).HasForeignKey(x => x.VoteId).OnDelete(DeleteBehavior.Cascade);
+            });
 
-            e.Property(x => x.RoleId).HasMaxLength(450).IsRequired();
-            e.Property(x => x.Module).HasConversion<int>();
-            e.Property(x => x.Allowed).HasConversion<int>();
+            // ------- RolePermission (SINGLE mapping) -------
+            b.Entity<RolePermission>(e =>
+            {
+                e.ToTable("RolePermissions");
+                e.HasKey(x => x.Id);
 
-            e.HasIndex(x => new { x.RoleId, x.Module }).IsUnique();
+                e.Property(x => x.RoleId).HasMaxLength(450).IsRequired();
+                e.Property(x => x.Module).HasConversion<int>();
+                e.Property(x => x.Allowed).HasConversion<int>();
 
-            e.HasOne<IdentityRole>()
-             .WithMany()
-             .HasForeignKey(x => x.RoleId)
-             .OnDelete(DeleteBehavior.Cascade);
-        });
+                e.HasIndex(x => new { x.RoleId, x.Module }).IsUnique();
+
+                e.HasOne<IdentityRole>()
+                 .WithMany()
+                 .HasForeignKey(x => x.RoleId)
+                 .OnDelete(DeleteBehavior.Cascade);
+            });
+        }
     }
 }

@@ -5,38 +5,37 @@ using BoardMgmt.Application.Common.Interfaces;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 
-namespace BoardMgmt.Infrastructure.Auth;
-
-public class JwtTokenService : IJwtTokenService
+namespace BoardMgmt.Infrastructure.Auth
 {
-    private readonly IConfiguration _config;
-    public JwtTokenService(IConfiguration config) => _config = config;
-
-    public string CreateToken(string userId, string email, IEnumerable<string> roles, IEnumerable<Claim>? extraClaims = null)
+    public class JwtTokenService(IConfiguration configuration) : IJwtTokenService
     {
-        var issuer = _config["Jwt:Issuer"] ?? "BoardMgmt";
-        var audience = _config["Jwt:Audience"] ?? "BoardMgmt.Client";
-        var keyString = _config["Jwt:Key"] ?? "super-secret-key-change-me";
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(keyString));
-
-        var claims = new List<Claim>
+        public string CreateToken(string userId, string email, IEnumerable<string> roles)
         {
-            new(JwtRegisteredClaimNames.Sub, userId),
-            new(JwtRegisteredClaimNames.Email, email),
-            new(ClaimTypes.NameIdentifier, userId),
-            new(ClaimTypes.Email, email)
-        };
-        claims.AddRange(roles.Select(r => new Claim(ClaimTypes.Role, r)));
-        if (extraClaims is not null) claims.AddRange(extraClaims);
+            var issuer = configuration["Jwt:Issuer"]!;
+            var audience = configuration["Jwt:Audience"]!;
+            var key = configuration["Jwt:Key"]!;
+            var hours = double.TryParse(configuration["Jwt:ExpiryHours"], out var h) ? h : 24;
 
-        var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-        var token = new JwtSecurityToken(
-            issuer: issuer,
-            audience: audience,
-            claims: claims,
-            expires: DateTime.UtcNow.AddHours(8),
-            signingCredentials: creds);
+            var claims = new List<Claim>
+            {
+                new(JwtRegisteredClaimNames.Sub, userId),
+                new(JwtRegisteredClaimNames.Email, email ?? ""),
+                new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+            };
+            claims.AddRange(roles.Select(r => new Claim(ClaimTypes.Role, r)));
 
-        return new JwtSecurityTokenHandler().WriteToken(token);
+            var creds = new SigningCredentials(new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key)),
+                                               SecurityAlgorithms.HmacSha256);
+
+            var token = new JwtSecurityToken(
+                issuer: issuer,
+                audience: audience,
+                claims: claims,
+                expires: DateTime.UtcNow.AddHours(hours),
+                signingCredentials: creds
+            );
+
+            return new JwtSecurityTokenHandler().WriteToken(token);
+        }
     }
 }

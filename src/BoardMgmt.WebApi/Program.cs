@@ -1,11 +1,9 @@
-﻿using BoardMgmt.Application;                     // AddApplication()
-using BoardMgmt.Application.Common.Interfaces;
-using BoardMgmt.Infrastructure;                  // AddInfrastructure(config)
-using BoardMgmt.Infrastructure.Persistence;      // AppDbContext, DbSeeder
-using BoardMgmt.WebApi.Common.Http;              // Api middleware + filters
-using BoardMgmt.WebApi.Common.Security;
+﻿using BoardMgmt.Application;
+using BoardMgmt.Infrastructure;
+using BoardMgmt.Infrastructure.Persistence;
+using BoardMgmt.WebApi.Common.Http;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Http.Features;        // FormOptions
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
@@ -14,27 +12,20 @@ using System.Text;
 var builder = WebApplication.CreateBuilder(args);
 var config = builder.Configuration;
 
-// ───────────────────────────────────────────────────────────────────────────────
-// Services
-// ───────────────────────────────────────────────────────────────────────────────
-
-// Infrastructure (DbContext, Identity, JwtTokenService)
+// Infrastructure then Application
 builder.Services.AddInfrastructure(config);
+builder.Services.AddApplication(); // only once
 
-// Application (MediatR, Validators, Pipeline)
-builder.Services.AddApplication();
-
-// JWT auth
+// JWT
 var issuer = config["Jwt:Issuer"] ?? "BoardMgmt";
 var audience = config["Jwt:Audience"] ?? "BoardMgmt.Client";
 var key = config["Jwt:Key"] ?? "super-secret-key-change-me";
 
-// 👇 Force JWT as the default scheme
 builder.Services
-    .AddAuthentication(options =>
+    .AddAuthentication(o =>
     {
-        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+        o.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+        o.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
     })
     .AddJwtBearer(o =>
     {
@@ -45,80 +36,43 @@ builder.Services
             ValidateIssuer = true,
             ValidateAudience = true,
             ValidateIssuerSigningKey = true,
+            ValidateLifetime = true,
             ValidIssuer = issuer,
             ValidAudience = audience,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key))
         };
     });
 
-// 👇 If Identity cookie auth is enabled, suppress redirects for APIs
-builder.Services.ConfigureApplicationCookie(options =>
-{
-    options.Events.OnRedirectToLogin = ctx =>
-    {
-        ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
-        return Task.CompletedTask;
-    };
-    options.Events.OnRedirectToAccessDenied = ctx =>
-    {
-        ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
-        return Task.CompletedTask;
-    };
-});
-
 builder.Services.AddAuthorization();
 
-// CORS (named policy used by your UI)
 builder.Services.AddCors(opt =>
 {
     opt.AddPolicy("ui", p => p
         .AllowAnyHeader()
         .AllowAnyMethod()
         .AllowCredentials()
-        .WithOrigins(
-            config.GetSection("Cors:AllowedOrigins").Get<string[]>()
-            ?? new[] { "http://localhost:4200", "http://localhost:4000" }
-        )
-    );
+        .WithOrigins(config.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? new[] { "http://localhost:4200", "http://localhost:4000" }));
 });
 
-// Controllers / Swagger + uniform response setup
 builder.Services
-    .AddControllers(o =>
-    {
-        // uniform ModelState response
-        o.Filters.Add<InvalidModelStateFilter>();
-    })
+    .AddControllers(o => o.Filters.Add<InvalidModelStateFilter>())
     .ConfigureApiBehaviorOptions(o => o.SuppressModelStateInvalidFilter = true);
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Global exception formatter (DI)
 builder.Services.AddSingleton<ExceptionHandlingMiddleware>();
 builder.Services.AddHttpContextAccessor();
-builder.Services.AddScoped<ICurrentUser, CurrentUser>();
+builder.Services.Configure<FormOptions>(o => { o.MultipartBodyLengthLimit = 50 * 1024 * 1024; });
 
-// Large upload support (e.g., document uploads up to 50 MB)
-builder.Services.Configure<FormOptions>(o =>
-{
-    o.MultipartBodyLengthLimit = 50 * 1024 * 1024; // 50 MB
-});
-
-// ───────────────────────────────────────────────────────────────────────────────
-// App
-// ───────────────────────────────────────────────────────────────────────────────
 var app = builder.Build();
 
-// Ensure wwwroot/uploads exists (so StaticFiles can serve uploaded files)
+// Static files (uploads)
 var webRoot = app.Environment.WebRootPath;
-if (string.IsNullOrWhiteSpace(webRoot))
-{
-    webRoot = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
-}
+if (string.IsNullOrWhiteSpace(webRoot)) webRoot = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
 Directory.CreateDirectory(Path.Combine(webRoot, "uploads"));
 
-// Auto-migrate + seed demo data
+// auto-migrate + seed
 using (var scope = app.Services.CreateScope())
 {
     var sp = scope.ServiceProvider;
@@ -129,30 +83,19 @@ using (var scope = app.Services.CreateScope())
     await DbSeeder.SeedAsync(sp, logger);
 }
 
-// Swagger in Development
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-// Global exception handler FIRST so it can catch downstream exceptions
 app.UseMiddleware<ExceptionHandlingMiddleware>();
+if (!app.Environment.IsDevelopment()) app.UseHttpsRedirection();
 
-// IMPORTANT: No HTTPS redirect in Development (prevents status 0 on HTTP calls)
-if (!app.Environment.IsDevelopment())
-{
-    app.UseHttpsRedirection();
-}
-
-// Serve files from wwwroot (including /uploads/*)
 app.UseStaticFiles();
-
 app.UseCors("ui");
-
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
-
 app.Run();

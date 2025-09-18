@@ -1,12 +1,15 @@
-﻿namespace BoardMgmt.Application.Common.Interfaces;
+﻿using System.Security.Claims;
 
-public interface ICurrentUser
+namespace BoardMgmt.Application.Common.Interfaces
 {
-    bool IsAuthenticated { get; }
-    string? UserId { get; }
-    string? Email { get; }
-    IReadOnlyList<string> Roles { get; }
-
-
-    
+    public interface ICurrentUser
+    {
+        string? UserId { get; }
+        string? Email { get; }
+        IReadOnlyList<string> Roles { get; }
+        bool IsAuthenticated { get; }
+        ClaimsPrincipal Principal { get; }
+        bool IsInRole(string role);
+        string? GetClaim(string claimType);
+    }
 }

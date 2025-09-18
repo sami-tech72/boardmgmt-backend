@@ -1,4 +1,4 @@
-﻿using BoardMgmt.Application.Common.Identity;
+﻿using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
