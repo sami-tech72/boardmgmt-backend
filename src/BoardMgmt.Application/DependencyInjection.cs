@@ -1,25 +1,17 @@
-﻿using FluentValidation;
-using MediatR;
+﻿using MediatR;
 using Microsoft.Extensions.DependencyInjection;
+using System.Reflection;
 
-namespace BoardMgmt.Application;
-
-public static class DependencyInjection
+namespace BoardMgmt.Application
 {
-    public static IServiceCollection AddApplication(this IServiceCollection services)
+    public static class DependencyInjection
     {
-        services.AddMediatR(cfg =>
+        public static IServiceCollection AddApplication(this IServiceCollection services)
         {
-            // Scan the Application assembly for handlers/requests/notifications
-            cfg.RegisterServicesFromAssembly(typeof(DependencyInjection).Assembly);
-        });
+            services.AddMediatR(cfg =>
+                cfg.RegisterServicesFromAssembly(Assembly.GetExecutingAssembly()));
 
-        // Optional: auto-register FluentValidation validators in Application
-        services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly);
-
-        // Optional: validation pipeline behavior
-        services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
-
-        return services;
+            return services;
+        }
     }
 }

@@ -1,33 +1,26 @@
 ﻿using FluentValidation;
 using MediatR;
 
-namespace BoardMgmt.Application;
-
-public sealed class ValidationBehavior<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse>
-    where TRequest : notnull
+namespace BoardMgmt.Application.Common.Behaviors
 {
-    private readonly IEnumerable<IValidator<TRequest>> _validators;
-    public ValidationBehavior(IEnumerable<IValidator<TRequest>> validators) => _validators = validators;
-
-    public async Task<TResponse> Handle(
-        TRequest request,
-        RequestHandlerDelegate<TResponse> next,
-        CancellationToken ct)
+    public sealed class ValidationBehavior<TRequest, TResponse>(
+        IEnumerable<IValidator<TRequest>> validators
+    ) : IPipelineBehavior<TRequest, TResponse>
+        where TRequest : IRequest<TResponse>
     {
-        if (_validators.Any())
+        public async Task<TResponse> Handle(
+            TRequest request,
+            RequestHandlerDelegate<TResponse> next,
+            CancellationToken ct)
         {
-            var ctx = new ValidationContext<TRequest>(request);
-            var failures = (await Task.WhenAll(_validators.Select(v => v.ValidateAsync(ctx, ct))))
-                .SelectMany(r => r.Errors)
-                .Where(f => f is not null)
-                .ToList();
-
-            if (failures.Count != 0)
+            if (validators.Any())
             {
-                var message = string.Join("; ", failures.Select(f => f.ErrorMessage));
-                throw new ValidationException(message, failures);
+                var ctx = new ValidationContext<TRequest>(request);
+                var results = await Task.WhenAll(validators.Select(v => v.ValidateAsync(ctx, ct)));
+                var failures = results.SelectMany(r => r.Errors).Where(e => e is not null).ToList();
+                if (failures.Count != 0) throw new ValidationException(failures);
             }
+            return await next();
         }
-        return await next();
     }
 }

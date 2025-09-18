@@ -1,8 +1,7 @@
-﻿using System.Security.Claims;
-
-namespace BoardMgmt.Application.Common.Interfaces;
-
-public interface IJwtTokenService
+﻿namespace BoardMgmt.Application.Common.Interfaces
 {
-    string CreateToken(string userId, string email, IEnumerable<string> roles, IEnumerable<Claim>? extraClaims = null);
+    public interface IJwtTokenService
+    {
+        string CreateToken(string userId, string email, IEnumerable<string> roles);
+    }
 }

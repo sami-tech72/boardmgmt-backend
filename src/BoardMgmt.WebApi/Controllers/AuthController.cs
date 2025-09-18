@@ -1,40 +1,50 @@
-﻿using BoardMgmt.Application.Common.Interfaces;
-using BoardMgmt.Infrastructure.Persistence;
-using BoardMgmt.WebApi.Common.Http;   // <= add
-using Microsoft.AspNetCore.Identity;
+﻿using BoardMgmt.Application.Users.Commands.Login;
+using BoardMgmt.Application.Users.Commands.Register;
+using BoardMgmt.WebApi.Common.Http;
+using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BoardMgmt.WebApi.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class AuthController : ControllerBase
+public class AuthController(ISender mediator) : ControllerBase
 {
-    private readonly UserManager<AppUser> _userManager;
-    private readonly IJwtTokenService _jwt;
-
-    public AuthController(UserManager<AppUser> userManager, IJwtTokenService jwt)
+    [HttpPost("register")]
+    public async Task<IActionResult> Register([FromBody] RegisterCommand command)
     {
-        _userManager = userManager;
-        _jwt = jwt;
+        var result = await mediator.Send(command);
+
+        if (!result.Success)
+        {
+            return this.BadRequestApi("registration_failed", result.Errors.FirstOrDefault() ?? "Registration failed");
+        }
+
+        return this.OkApi(new
+        {
+            result.UserId,
+            result.Email,
+            result.FirstName,
+            result.LastName
+        }, "Registration successful");
     }
 
-    public record LoginDto(string Email, string Password);
-
     [HttpPost("login")]
-    public async Task<IActionResult> Login([FromBody] LoginDto dto)
+    public async Task<IActionResult> Login([FromBody] LoginCommand command)
     {
-        var user = await _userManager.FindByEmailAsync(dto.Email);
-        if (user is null)
-            return this.UnauthorizedApi("invalid_credentials", "Invalid email or password.");
+        var result = await mediator.Send(command);
 
-        var ok = await _userManager.CheckPasswordAsync(user, dto.Password);
-        if (!ok)
-            return this.UnauthorizedApi("invalid_credentials", "Invalid email or password.");
+        if (!result.Success)
+        {
+            return this.UnauthorizedApi("invalid_credentials", result.Errors.FirstOrDefault() ?? "Invalid credentials");
+        }
 
-        var roles = await _userManager.GetRolesAsync(user);
-        var token = _jwt.CreateToken(user.Id, user.Email!, roles);
-
-        return this.OkApi(new { token }, "Login successful");
+        return this.OkApi(new
+        {
+            result.Token,
+            result.UserId,
+            result.Email,
+            result.FullName
+        }, "Login successful");
     }
 }

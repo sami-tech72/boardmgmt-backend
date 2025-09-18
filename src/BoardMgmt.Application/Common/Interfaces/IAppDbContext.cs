@@ -4,24 +4,24 @@ using Microsoft.EntityFrameworkCore;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace BoardMgmt.Application.Common.Interfaces;
-
-public interface IAppDbContext
+namespace BoardMgmt.Application.Common.Interfaces
 {
-    DbSet<Meeting> Meetings { get; }
-    DbSet<AgendaItem> AgendaItems { get; }
-    DbSet<Document> Documents { get; }
-    DbSet<Vote> Votes { get; }
-    DbSet<MeetingAttendee> MeetingAttendees { get; }
-    DbSet<Folder> Folders { get; }
+    public interface IAppDbContext
+    {
+        DbSet<Meeting> Meetings { get; }
+        DbSet<AgendaItem> AgendaItems { get; }
+        DbSet<Document> Documents { get; }
+        DbSet<Vote> Votes { get; }
+        DbSet<MeetingAttendee> MeetingAttendees { get; }
+        DbSet<Folder> Folders { get; }
 
-    DbSet<VotePoll> VotePolls { get; }
-    DbSet<VoteOption> VoteOptions { get; }
-    DbSet<VoteBallot> VoteBallots { get; }
-    DbSet<VoteEligibleUser> VoteEligibleUsers { get; }
+        DbSet<VotePoll> VotePolls { get; }
+        DbSet<VoteOption> VoteOptions { get; }
+        DbSet<VoteBallot> VoteBallots { get; }
+        DbSet<VoteEligibleUser> VoteEligibleUsers { get; }
 
-    // NEW
-    DbSet<RolePermission> RolePermissions { get; }
+        DbSet<RolePermission> RolePermissions { get; }
 
-    Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
+        Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
+    }
 }

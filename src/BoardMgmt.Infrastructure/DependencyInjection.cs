@@ -1,6 +1,7 @@
-﻿using BoardMgmt.Application.Common.Identity;
-using BoardMgmt.Application.Common.Interfaces;            // <-- add
+﻿using BoardMgmt.Application.Common.Interfaces;
+using BoardMgmt.Domain.Entities;
 using BoardMgmt.Infrastructure.Auth;
+using BoardMgmt.Infrastructure.Identity;
 using BoardMgmt.Infrastructure.Persistence;
 using BoardMgmt.Infrastructure.Storage;
 using Microsoft.AspNetCore.Identity;
@@ -8,43 +9,53 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace BoardMgmt.Infrastructure;
 
-public static class DependencyInjection
+
+
+
+namespace BoardMgmt.Infrastructure
 {
-    public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration config)
+    public static class DependencyInjection
     {
-        var cs = config.GetConnectionString("DefaultConnection")
-                 // Pick one style (Windows auth OR SQL auth) and keep it consistent:
-                 ?? "Server=localhost\\SQLEXPRESS;Database=BoardMgmtDb;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=True";
-
-        // Concrete context
-        services.AddDbContext<AppDbContext>(opt =>
-            opt.UseSqlServer(cs, sql => sql.MigrationsAssembly(typeof(AppDbContext).Assembly.FullName)));
-
-        // Optional: also resolve EF's DbContext as AppDbContext
-        services.AddDbContext<DbContext, AppDbContext>(opt =>
-            opt.UseSqlServer(cs, sql => sql.MigrationsAssembly(typeof(AppDbContext).Assembly.FullName)));
-
-        // 🔑 Map the interface used by Application handlers
-        services.AddScoped<IAppDbContext, AppDbContext>();
-
-        // Identity
-        services.AddIdentityCore<AppUser>(o =>
+        public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration config)
         {
-            o.Password.RequiredLength = 6;
-            o.Password.RequireDigit = true;
-            o.Password.RequireNonAlphanumeric = false;
-            o.Password.RequireUppercase = false;
-            o.Password.RequireLowercase = false;
-        })
-        .AddRoles<IdentityRole>()
-        .AddEntityFrameworkStores<AppDbContext>();
-        services.AddScoped<IIdentityUserReader, IdentityUserReader>();
-        services.AddSingleton<IFileStorage, LocalFileStorage>();
-        // JWT service
-        services.AddScoped<IJwtTokenService, JwtTokenService>();
+            var cs = config.GetConnectionString("DefaultConnection")
+                     ?? "Server=localhost\\SQLEXPRESS;Database=BoardMgmtDb;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=True";
 
-        return services;
+            services.AddDbContext<AppDbContext>(opt =>
+                opt.UseSqlServer(cs, sql => sql.MigrationsAssembly(typeof(AppDbContext).Assembly.FullName)));
+
+            services.AddScoped<IAppDbContext, AppDbContext>();
+
+            services
+                .AddIdentityCore<AppUser>(o =>
+                {
+                    o.User.RequireUniqueEmail = true;
+                    o.Password.RequiredLength = 6;
+                    o.Password.RequireDigit = true;
+                    o.Password.RequireLowercase = false;
+                    o.Password.RequireUppercase = false;
+                    o.Password.RequireNonAlphanumeric = false;
+                })
+                .AddRoles<IdentityRole>()
+                .AddEntityFrameworkStores<AppDbContext>()
+                .AddDefaultTokenProviders();
+
+            services.AddScoped<IIdentityService, IdentityService>();
+            services.AddScoped<IRoleService, RoleService>();
+            services.AddScoped<IJwtTokenService, JwtTokenService>();
+
+            services.AddScoped<IIdentityUserReader, IdentityUserReader>(); // 👈 new
+
+            // 👇 NEW: make handlers that (still) take DbContext happy
+            services.AddScoped<DbContext>(sp => sp.GetRequiredService<AppDbContext>());
+
+            // 👇 NEW: current user for handlers needing it
+            services.AddScoped<ICurrentUser, CurrentUser>();
+            services.AddScoped<IPermissionService, PermissionService>();
+
+            services.AddSingleton<IFileStorage, LocalFileStorage>();
+            return services;
+        }
     }
 }

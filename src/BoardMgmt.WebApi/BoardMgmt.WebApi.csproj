@@ -1,25 +1,28 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
 	<PropertyGroup>
 		<TargetFramework>net8.0</TargetFramework>
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
 	</PropertyGroup>
+
 	<ItemGroup>
-		<PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="12.0.0" />
-		<PackageReference Include="MediatR" Version="13.0.0" />
-		<PackageReference Include="MediatR.Extensions.Microsoft.DependencyInjection" Version="11.1.0" />
+		<PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="11.9.0" />
+		<PackageReference Include="MediatR" Version="12.2.0" />
 		<PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.8" />
-		<PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.9" />
-		<PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.9">
-		  <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-		  <PrivateAssets>all</PrivateAssets>
+		<PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.8" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.8">
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+			<PrivateAssets>all</PrivateAssets>
 		</PackageReference>
-		<PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="9.0.9" />
-		<PackageReference Include="Swashbuckle.AspNetCore" Version="9.0.4" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.8" />
+		<PackageReference Include="Swashbuckle.AspNetCore" Version="6.4.0" />
 	</ItemGroup>
+
 	<ItemGroup>
-	  <ProjectReference Include="..\BoardMgmt.Application\BoardMgmt.Application.csproj" />
-	  <ProjectReference Include="..\BoardMgmt.Infrastructure\BoardMgmt.Infrastructure.csproj" />
-	  <ProjectReference Include="..\BoardMgmt.Domain\BoardMgmt.Domain.csproj" />
+		<ProjectReference Include="..\BoardMgmt.Application\BoardMgmt.Application.csproj" />
+		<ProjectReference Include="..\BoardMgmt.Infrastructure\BoardMgmt.Infrastructure.csproj" />
+		<ProjectReference Include="..\BoardMgmt.Domain\BoardMgmt.Domain.csproj" />
 	</ItemGroup>
+
 </Project>
