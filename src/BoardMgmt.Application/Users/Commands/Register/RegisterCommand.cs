@@ -6,7 +6,9 @@ public record RegisterCommand(
     string Email,
     string Password,
     string FirstName,
-    string LastName) : IRequest<RegisterResponse>;
+    string LastName,
+    string? Role = null // single role NAME (optional)
+) : IRequest<RegisterResponse>;
 
 public record RegisterResponse(
     string UserId,

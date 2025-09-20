@@ -12,4 +12,7 @@ public class AppUser : IdentityUser
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
     public bool IsActive { get; set; } = true;
+
+    public const string Admin = "Admin";
+    public static readonly string[] All = [Admin];
 }

@@ -9,11 +9,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
 
-namespace BoardMgmt.Infrastructure.Persistence.Migrations
+namespace BoardMgmt.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20250918192541_CreateRolePermissions")]
-    partial class CreateRolePermissions
+    [Migration("20250920054900_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

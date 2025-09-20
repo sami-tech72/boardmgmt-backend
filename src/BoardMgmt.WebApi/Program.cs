@@ -1,15 +1,18 @@
-﻿using System.Reflection;
-using System.Text;
-using BoardMgmt.Application;
+﻿using BoardMgmt.Application;
+using BoardMgmt.Domain.Identity;
 using BoardMgmt.Infrastructure;
 using BoardMgmt.Infrastructure.Persistence;
 using BoardMgmt.WebApi.Common.Http;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using System.Reflection;
+using System.Text;
+using BoardMgmt.WebApi.Auth;
 
 var builder = WebApplication.CreateBuilder(args);
 var config = builder.Configuration;
@@ -58,6 +61,20 @@ builder.Services.AddCors(opt =>
             ?? new[] { "http://localhost:4200", "http://localhost:4000" }
         ));
 });
+
+//const string UsersModuleKey = "1"; // or ((int)AppModule.Users).ToString()
+var authBuilder = builder.Services.AddAuthorizationBuilder();
+authBuilder.AddPolicy("Users.View", p => p.Requirements.Add(new PermissionRequirement("1", Permission.View)));
+//builder.Services.AddAuthorization(options =>
+//{
+//    options.AddPolicy("Users.Page", p => p.AddRequirements(new PermissionRequirement(UsersModuleKey, Permission.Page)));
+//    options.AddPolicy("Users.View", p => p.AddRequirements(new PermissionRequirement(UsersModuleKey, Permission.View)));
+//    options.AddPolicy("Users.Create", p => p.AddRequirements(new PermissionRequirement(UsersModuleKey, Permission.Create)));
+//    options.AddPolicy("Users.Update", p => p.AddRequirements(new PermissionRequirement(UsersModuleKey, Permission.Update)));
+//    options.AddPolicy("Users.Delete", p => p.AddRequirements(new PermissionRequirement(UsersModuleKey, Permission.Delete)));
+//});
+
+builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
 
 builder.Services
     .AddControllers(o => o.Filters.Add<InvalidModelStateFilter>())
@@ -114,15 +131,7 @@ if (string.IsNullOrWhiteSpace(webRoot))
 Directory.CreateDirectory(Path.Combine(webRoot, "uploads"));
 
 // auto-migrate + seed
-using (var scope = app.Services.CreateScope())
-{
-    var sp = scope.ServiceProvider;
-    var db = sp.GetRequiredService<AppDbContext>();
-    await db.Database.MigrateAsync();
-
-    var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("DbSeeder");
-    await DbSeeder.SeedAsync(sp, logger);
-}
+await DbSeeder.SeedAsync(app.Services, app.Logger);
 
 if (app.Environment.IsDevelopment())
 {

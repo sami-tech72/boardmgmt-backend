@@ -1,4 +1,5 @@
-﻿using BoardMgmt.Application.Common.Interfaces;
+﻿// backend/src/BoardMgmt.Infrastructure/Identity/RoleService.cs
+using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Application.Roles.Commands.SetRolePermissions;
 using BoardMgmt.Domain.Identity;
 using BoardMgmt.Infrastructure.Persistence;
@@ -72,9 +73,16 @@ namespace BoardMgmt.Infrastructure.Identity
             var olds = await _db.RolePermissions.Where(rp => rp.RoleId == roleId).ToListAsync(ct);
             _db.RolePermissions.RemoveRange(olds);
 
+            // 🔸 normalize before persisting
             var entities = items
+                .Select(i => (i.module, allowed: i.allowed.Normalize()))
                 .Where(i => i.allowed != Permission.None)
-                .Select(i => new RolePermission { RoleId = roleId, Module = i.module, Allowed = i.allowed })
+                .Select(i => new RolePermission
+                {
+                    RoleId = roleId,
+                    Module = i.module,
+                    Allowed = i.allowed
+                })
                 .ToList();
 
             if (entities.Count > 0)
@@ -85,7 +93,6 @@ namespace BoardMgmt.Infrastructure.Identity
             return entities.Select(e => new SavedRolePermission(e.Id, e.Module, e.Allowed)).ToList();
         }
 
-        // ✅ Rename + replace permissions atomically
         public async Task<(bool ok, string[] errors)> UpdateRoleAndPermissionsAsync(
             string roleId,
             string name,
@@ -108,8 +115,14 @@ namespace BoardMgmt.Infrastructure.Identity
                 _db.RolePermissions.RemoveRange(olds);
 
                 var ents = items
+                    .Select(i => (i.module, allowed: i.allowed.Normalize()))
                     .Where(i => i.allowed != Permission.None)
-                    .Select(i => new RolePermission { RoleId = roleId, Module = i.module, Allowed = i.allowed })
+                    .Select(i => new RolePermission
+                    {
+                        RoleId = roleId,
+                        Module = i.module,
+                        Allowed = i.allowed
+                    })
                     .ToList();
 
                 if (ents.Count > 0)
@@ -129,14 +142,39 @@ namespace BoardMgmt.Infrastructure.Identity
         public async Task<IReadOnlyList<string>> GetAllRoleNamesAsync(CancellationToken ct) =>
             await _roles.Roles.Select(r => r.Name!).OrderBy(n => n).ToListAsync(ct);
 
-        // ✅ For edit prefill
+        // 🔹 Used by LoginCommandHandler
+        public async Task<string?> GetRoleIdByNameAsync(string roleName, CancellationToken ct)
+        {
+            var role = await _roles.Roles
+                .Where(r => r.Name == roleName)
+                .Select(r => new { r.Id })
+                .FirstOrDefaultAsync(ct);
+
+            return role?.Id;
+        }
+
+        // 🔹 MUST return PermissionDto (NOT a tuple)
         public async Task<IReadOnlyList<PermissionDto>> GetRolePermissionsAsync(string roleId, CancellationToken ct)
         {
             var rows = await _db.RolePermissions
                 .Where(rp => rp.RoleId == roleId)
-                .Select(rp => new PermissionDto(rp.Module, rp.Allowed))
+                .Select(rp => new { rp.Module, rp.Allowed })
                 .ToListAsync(ct);
-            return rows;
+
+            // defensive normalize on read, and project to PermissionDto
+            var list = new List<PermissionDto>(rows.Count);
+            foreach (var r in rows)
+            {
+                var normalizedInt = PermissionExtensions.NormalizeInt((int)r.Allowed);
+                var normalizedPerm = (Permission)normalizedInt;
+
+                // if rp.Module is stored as int → cast to AppModule
+                var module = (AppModule)Convert.ToInt32(r.Module);
+
+                list.Add(new PermissionDto(module, normalizedPerm));
+            }
+
+            return list;
         }
     }
 }
