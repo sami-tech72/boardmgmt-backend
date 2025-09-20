@@ -1,4 +1,5 @@
 ﻿using BoardMgmt.Application.Common.Interfaces;
+using BoardMgmt.Domain.Identity;
 using MediatR;
 
 namespace BoardMgmt.Application.Roles.Commands.SetRolePermissions
@@ -8,8 +9,9 @@ namespace BoardMgmt.Application.Roles.Commands.SetRolePermissions
     {
         public Task<IReadOnlyList<SavedRolePermission>> Handle(SetRolePermissionsCommand request, CancellationToken ct)
         {
-            var tuples = request.Items.Select(i => (i.Module, i.Allowed));
-            return roles.SetRolePermissionsAsync(request.RoleId, tuples, ct);
+            // Application-level safety
+            var normalized = request.Items.Select(i => (i.Module, i.Allowed.Normalize()));
+            return roles.SetRolePermissionsAsync(request.RoleId, normalized, ct);
         }
     }
 }

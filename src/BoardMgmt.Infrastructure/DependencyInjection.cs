@@ -27,11 +27,13 @@ namespace BoardMgmt.Infrastructure
                 .AddIdentityCore<AppUser>(o =>
                 {
                     o.User.RequireUniqueEmail = true;
-                    o.Password.RequiredLength = 6;
+
+                    // Keep this strong enough to pass your seed password
+                    o.Password.RequiredLength = 8;
                     o.Password.RequireDigit = true;
-                    o.Password.RequireLowercase = false;
-                    o.Password.RequireUppercase = false;
-                    o.Password.RequireNonAlphanumeric = false;
+                    o.Password.RequireLowercase = true;
+                    o.Password.RequireUppercase = true;
+                    o.Password.RequireNonAlphanumeric = true;
                 })
                 .AddRoles<IdentityRole>()
                 .AddEntityFrameworkStores<AppDbContext>()
