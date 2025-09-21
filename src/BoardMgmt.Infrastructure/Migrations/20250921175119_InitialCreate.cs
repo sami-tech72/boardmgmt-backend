@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace BoardMgmt.Infrastructure.Persistence.Migrations
+namespace BoardMgmt.Infrastructure.Migrations
 {
     /// <inheritdoc />
     public partial class InitialCreate : Migration
@@ -480,6 +480,11 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                 column: "NormalizedUserName",
                 unique: true,
                 filter: "[NormalizedUserName] IS NOT NULL");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_DocumentRoleAccess_RoleId",
+                table: "DocumentRoleAccess",
+                column: "RoleId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Documents_FolderSlug",
