@@ -353,6 +353,24 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "DocumentRoleAccess",
+                columns: table => new
+                {
+                    DocumentId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    RoleId = table.Column<string>(type: "nvarchar(450)", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_DocumentRoleAccess", x => new { x.DocumentId, x.RoleId });
+                    table.ForeignKey(
+                        name: "FK_DocumentRoleAccess_Documents_DocumentId",
+                        column: x => x.DocumentId,
+                        principalTable: "Documents",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "VoteEligibleUsers",
                 columns: table => new
                 {
@@ -568,7 +586,7 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                 name: "AspNetUserTokens");
 
             migrationBuilder.DropTable(
-                name: "Documents");
+                name: "DocumentRoleAccess");
 
             migrationBuilder.DropTable(
                 name: "Folders");
@@ -587,6 +605,9 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
 
             migrationBuilder.DropTable(
                 name: "Votes");
+
+            migrationBuilder.DropTable(
+                name: "Documents");
 
             migrationBuilder.DropTable(
                 name: "AspNetUsers");

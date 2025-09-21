@@ -18,4 +18,6 @@ public class Document
     public int Version { get; set; } = 1;
     public string? Description { get; set; }
     public DateTimeOffset UploadedAt { get; set; } = DateTimeOffset.UtcNow;
+
+    public ICollection<DocumentRoleAccess> RoleAccesses { get; set; } = new List<DocumentRoleAccess>();
 }

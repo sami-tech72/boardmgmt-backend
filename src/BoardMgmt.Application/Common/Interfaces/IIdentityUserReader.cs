@@ -6,5 +6,10 @@ namespace BoardMgmt.Application.Common.Interfaces
     public interface IIdentityUserReader
     {
         Task<IReadOnlyList<AppUser>> GetByIdsAsync(IEnumerable<string> ids, CancellationToken ct);
+
+        /// <summary>
+        /// Gets the current user's role IDs.
+        /// </summary>
+        Task<IReadOnlyList<string>> GetCurrentUserRoleIdsAsync(CancellationToken ct);
     }
 }

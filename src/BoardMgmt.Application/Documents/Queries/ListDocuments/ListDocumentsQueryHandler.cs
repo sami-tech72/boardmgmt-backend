@@ -1,66 +1,65 @@
 ﻿using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Application.Documents.DTOs;
-using BoardMgmt.Domain.Identity;
+using BoardMgmt.Application.Documents.Queries.ListDocuments;
+using BoardMgmt.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
-namespace BoardMgmt.Application.Documents.Queries.ListDocuments;
-
-public sealed class ListDocumentsQueryHandler(
+public class ListDocumentsQueryHandler(
     IAppDbContext db,
-    IPermissionService perms) : IRequestHandler<ListDocumentsQuery, IReadOnlyList<DocumentDto>>
+    IIdentityUserReader users
+) : IRequestHandler<ListDocumentsQuery, IReadOnlyList<DocumentDto>>
 {
-    private static readonly Dictionary<string, string[]> TypeMap = new()
-    {
-        ["pdf"] = new[] { "application/pdf" },
-        ["word"] = new[] { "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document" },
-        ["excel"] = new[] { "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" },
-        ["powerpoint"] = new[] { "application/vnd.ms-powerpoint", "application/vnd.openxmlformats-officedocument.presentationml.presentation" },
-    };
-
     public async Task<IReadOnlyList<DocumentDto>> Handle(ListDocumentsQuery request, CancellationToken ct)
     {
-        // Permission: need View (and Page) on Documents
-        var canView = await perms.HasMineAsync(AppModule.Documents, Permission.View | Permission.Page, ct);
-        if (!canView) throw new UnauthorizedAccessException("You cannot view documents.");
+        var myRoleIds = await users.GetCurrentUserRoleIdsAsync(ct);
+        if (myRoleIds.Count == 0)
+            return Array.Empty<DocumentDto>();
 
-        var q = db.Documents.AsQueryable();
+        // documents visible if any DocumentRoleAccess.RoleId ∈ myRoleIds
+        var q = db.Documents.AsNoTracking()
+            .Where(d => d.RoleAccesses.Any(ra => myRoleIds.Contains(ra.RoleId)));
 
-        // folder
-        q = string.IsNullOrWhiteSpace(request.FolderSlug)
-            ? q.Where(d => d.FolderSlug == "root")
-            : q.Where(d => d.FolderSlug == request.FolderSlug);
+        // filters
+        if (!string.IsNullOrWhiteSpace(request.FolderSlug))
+            q = q.Where(d => d.FolderSlug == request.FolderSlug);
 
-        // type
-        if (!string.IsNullOrWhiteSpace(request.Type) && TypeMap.TryGetValue(request.Type!, out var mimes))
-            q = q.Where(d => mimes.Contains(d.ContentType));
+        if (!string.IsNullOrWhiteSpace(request.Type))
+        {
+            var t = request.Type.ToLower();
+            q = t switch
+            {
+                "pdf" => q.Where(d => d.ContentType.Contains("pdf")),
+                "powerpoint" => q.Where(d => d.ContentType.Contains("presentation") || d.ContentType.Contains("powerpoint") || d.ContentType.Contains("ppt")),
+                "excel" => q.Where(d => d.ContentType.Contains("spreadsheet") || d.ContentType.Contains("excel") || d.ContentType.Contains("sheet")),
+                "word" => q.Where(d => d.ContentType.Contains("word") || d.ContentType.Contains("msword") || d.ContentType.Contains("officedocument.wordprocessingml")),
+                _ => q
+            };
+        }
 
-        // search
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
             var s = request.Search.Trim();
             q = q.Where(d => d.OriginalName.Contains(s) || (d.Description != null && d.Description.Contains(s)));
         }
 
-        // date preset
         if (!string.IsNullOrWhiteSpace(request.DatePreset))
         {
             var now = DateTimeOffset.UtcNow;
-            DateTimeOffset start = request.DatePreset!.ToLower() switch
+            q = request.DatePreset.ToLower() switch
             {
-                "today" => now.Date,
-                "week" => now.AddDays(-7),
-                "month" => now.AddMonths(-1),
-                _ => DateTimeOffset.MinValue
+                "today" => q.Where(d => d.UploadedAt >= now.Date),
+                "week" => q.Where(d => d.UploadedAt >= now.AddDays(-7)),
+                "month" => q.Where(d => d.UploadedAt >= now.AddDays(-30)),
+                _ => q
             };
-            if (start > DateTimeOffset.MinValue)
-                q = q.Where(d => d.UploadedAt >= start);
         }
 
         return await q.OrderByDescending(d => d.UploadedAt)
             .Select(d => new DocumentDto(
                 d.Id, d.OriginalName, d.Url, d.ContentType, d.SizeBytes,
-                d.Version, d.FolderSlug, d.MeetingId, d.Description, d.UploadedAt))
+                d.Version, d.FolderSlug, d.MeetingId, d.Description, d.UploadedAt
+            ))
             .ToListAsync(ct);
     }
 }

@@ -11,4 +11,6 @@ public sealed record DocumentDto(
     Guid? MeetingId,
     string? Description,
     DateTimeOffset UploadedAt
+
+
 );
