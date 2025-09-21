@@ -1,36 +1,61 @@
 ﻿using System.Security.Claims;
+using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Domain.Identity;
 using Microsoft.AspNetCore.Authorization;
 
 namespace BoardMgmt.WebApi.Auth
 {
-    // A simple requirement that says:
-    // "User must have perm:{ModuleKey} claim with the Needed bit set"
-    public sealed record PermissionRequirement(string ModuleKey, Permission Needed) : IAuthorizationRequirement;
-
-    // Correctly derive from AuthorizationHandler<TRequirement>
-    public sealed class PermissionAuthorizationHandler : AuthorizationHandler<PermissionRequirement>
+    /// A single policy = (module, neededPermission).
+    public sealed class PermissionRequirement(string moduleId, Permission needed) : IAuthorizationRequirement
     {
-        // ✅ Must override HandleRequirementAsync (not HandleAsync)
-        protected override Task HandleRequirementAsync(
+        public string ModuleId { get; } = moduleId;   // e.g. "1" for Users
+        public Permission Needed { get; } = needed;
+    }
+
+    /// Checks (a) fast path from claims if present, else (b) DB via IPermissionService.
+    public sealed class PermissionAuthorizationHandler(IPermissionService perms)
+        : AuthorizationHandler<PermissionRequirement>
+    {
+        private const string ClaimType = "permission"; // we store "permission" claims
+
+        protected override async Task HandleRequirementAsync(
             AuthorizationHandlerContext context,
             PermissionRequirement requirement)
         {
-            // Example claim type: "perm:9" => "17"
-            var claimType = $"perm:{requirement.ModuleKey}";
-            var claim = context.User.FindFirst(claimType);
-
-            if (claim is not null && int.TryParse(claim.Value, out var maskInt))
+            // ---- 1) Try fast path from claims on the principal (JWT / user claims)
+            // Format: type="permission", value = "<moduleInt>:<maskInt>"
+            if (int.TryParse(requirement.ModuleId, out var moduleInt))
             {
-                var mask = ((Permission)maskInt).Normalize(); // defensive: ensure Page is implied
-                // Bitwise include check
-                if ((mask & requirement.Needed) == requirement.Needed)
+                var claim = context.User.FindAll(ClaimType)
+                    .Select(c => c.Value)
+                    .Select(v =>
+                    {
+                        var parts = v.Split(':', 2);
+                        return parts.Length == 2
+                               && int.TryParse(parts[0], out var mod)
+                               && int.TryParse(parts[1], out var mask)
+                            ? (ok: true, mod, mask)
+                            : (ok: false, mod: 0, mask: 0);
+                    })
+                    .Where(t => t.ok && t.mod == moduleInt)
+                    .Select(t => t.mask)
+                    .Cast<int?>()
+                    .FirstOrDefault();
+
+                if (claim is int maskFromClaim &&
+                    (((Permission)maskFromClaim) & requirement.Needed) == requirement.Needed)
                 {
                     context.Succeed(requirement);
+                    return;
                 }
             }
 
-            return Task.CompletedTask;
+            // ---- 2) Authoritative check from DB (always reflects latest changes)
+            var module = (AppModule)moduleInt;
+            if (await perms.HasMineAsync(module, requirement.Needed, CancellationToken.None))
+            {
+                context.Succeed(requirement);
+            }
         }
     }
 }
