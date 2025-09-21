@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace BoardMgmt.Infrastructure.Migrations
+namespace BoardMgmt.Infrastructure.Persistence.Migrations
 {
     /// <inheritdoc />
     public partial class InitialCreate : Migration
@@ -269,12 +269,13 @@ namespace BoardMgmt.Infrastructure.Migrations
                 {
                     Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     MeetingId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    UserId = table.Column<string>(type: "nvarchar(450)", nullable: true),
+                    UserId = table.Column<string>(type: "nvarchar(450)", maxLength: 450, nullable: true),
                     Name = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
                     Role = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
                     Email = table.Column<string>(type: "nvarchar(320)", maxLength: 320, nullable: true),
                     IsRequired = table.Column<bool>(type: "bit", nullable: false, defaultValue: true),
-                    IsConfirmed = table.Column<bool>(type: "bit", nullable: false, defaultValue: false)
+                    IsConfirmed = table.Column<bool>(type: "bit", nullable: false, defaultValue: false),
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
                 },
                 constraints: table =>
                 {
@@ -283,7 +284,8 @@ namespace BoardMgmt.Infrastructure.Migrations
                         name: "FK_MeetingAttendees_AspNetUsers_UserId",
                         column: x => x.UserId,
                         principalTable: "AspNetUsers",
-                        principalColumn: "Id");
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
                     table.ForeignKey(
                         name: "FK_MeetingAttendees_Meetings_MeetingId",
                         column: x => x.MeetingId,
@@ -486,11 +488,6 @@ namespace BoardMgmt.Infrastructure.Migrations
                 name: "IX_MeetingAttendees_MeetingId",
                 table: "MeetingAttendees",
                 column: "MeetingId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_MeetingAttendees_MeetingId_UserId",
-                table: "MeetingAttendees",
-                columns: new[] { "MeetingId", "UserId" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_MeetingAttendees_UserId",

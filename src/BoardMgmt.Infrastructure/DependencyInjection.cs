@@ -1,13 +1,19 @@
-﻿using BoardMgmt.Application.Common.Interfaces;
+﻿// File: src/BoardMgmt.Infrastructure/DependencyInjection.cs
+using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Domain.Entities;
+using BoardMgmt.Domain.Identity;
 using BoardMgmt.Infrastructure.Auth;
 using BoardMgmt.Infrastructure.Identity;
 using BoardMgmt.Infrastructure.Persistence;
 using BoardMgmt.Infrastructure.Storage;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using System;
 
 namespace BoardMgmt.Infrastructure
 {
@@ -15,20 +21,63 @@ namespace BoardMgmt.Infrastructure
     {
         public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration config)
         {
+            // --- Connection string (fallback safe for local dev) ---
             var cs = config.GetConnectionString("DefaultConnection")
                      ?? "Server=localhost\\SQLEXPRESS;Database=BoardMgmtDb;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=True";
 
-            services.AddDbContext<AppDbContext>(opt =>
-                opt.UseSqlServer(cs, sql => sql.MigrationsAssembly(typeof(AppDbContext).Assembly.FullName)));
+            // --- DbContext with robust SQL Server + logging setup ---
+            services.AddDbContext<AppDbContext>((sp, options) =>
+            {
+                options.UseSqlServer(cs, sql =>
+                {
+                    sql.MigrationsAssembly(typeof(AppDbContext).Assembly.FullName);
+                    sql.EnableRetryOnFailure(maxRetryCount: 5, maxRetryDelay: TimeSpan.FromSeconds(10), errorNumbersToAdd: null);
+                    sql.CommandTimeout(60);
+                });
 
-            services.AddScoped<IAppDbContext, AppDbContext>();
+                // Route EF logs through Microsoft.Extensions.Logging (which Program.cs sends to Serilog)
+                var env = sp.GetRequiredService<IHostEnvironment>();
+                var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+                options.UseLoggerFactory(loggerFactory);
 
+                options.EnableDetailedErrors();
+
+                // Show parameter values only in Development (avoid secrets in prod logs)
+                if (env.IsDevelopment())
+                    options.EnableSensitiveDataLogging();
+
+                // Optional: fine-grained EF event selection
+                options.LogTo(
+                    // Send EF messages to MEL -> Serilog
+                    message =>
+                    {
+                        var efLogger = loggerFactory.CreateLogger("EFCore");
+                        efLogger.LogInformation("{EFCoreMessage}", message);
+                    },
+                    new[]
+                    {
+                        RelationalEventId.CommandExecuting,
+                        RelationalEventId.CommandExecuted,
+                        RelationalEventId.CommandError,
+                        RelationalEventId.ConnectionOpened,
+                        RelationalEventId.ConnectionClosed,
+                        CoreEventId.SaveChangesStarting,
+                        CoreEventId.SaveChangesCompleted
+                    },
+                    LogLevel.Information
+                );
+            });
+
+            // Expose the abstraction if you use it
+            services.AddScoped<IAppDbContext>(sp => sp.GetRequiredService<AppDbContext>());
+
+            // --- ASP.NET Core Identity ---
             services
                 .AddIdentityCore<AppUser>(o =>
                 {
                     o.User.RequireUniqueEmail = true;
 
-                    // Keep this strong enough to pass your seed password
+                    // Keep strong enough to satisfy your seeding password
                     o.Password.RequiredLength = 8;
                     o.Password.RequireDigit = true;
                     o.Password.RequireLowercase = true;
@@ -39,24 +88,26 @@ namespace BoardMgmt.Infrastructure
                 .AddEntityFrameworkStores<AppDbContext>()
                 .AddDefaultTokenProviders();
 
+            // --- Auth / Permissions ---
             services.AddScoped<IIdentityService, IdentityService>();
             services.AddScoped<IRoleService, RoleService>();
             services.AddScoped<IJwtTokenService, JwtTokenService>();
-
             services.AddScoped<IIdentityUserReader, IdentityUserReader>();
 
-            // If some handlers still take DbContext directly:
+            // Some handlers may still take DbContext directly:
             services.AddScoped<DbContext>(sp => sp.GetRequiredService<AppDbContext>());
 
             // Current user accessor
             services.AddScoped<ICurrentUser, CurrentUser>();
 
-            // 🔑 ONE PermissionService instance per scope, exposed via both interfaces
+            // ONE PermissionService per scope, exposed via both interfaces
             services.AddScoped<IPermissionService, PermissionService>();
             services.AddScoped<IRolePermissionStore>(sp =>
                 (IRolePermissionStore)sp.GetRequiredService<IPermissionService>());
 
+            // File storage
             services.AddSingleton<IFileStorage, LocalFileStorage>();
+
             return services;
         }
     }

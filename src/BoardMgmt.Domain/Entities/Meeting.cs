@@ -1,4 +1,6 @@
-﻿namespace BoardMgmt.Domain.Entities;
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace BoardMgmt.Domain.Entities;
 
 public enum MeetingStatus { Draft = 0, Scheduled = 1, Completed = 2, Cancelled = 3 }
 public enum MeetingType { Board = 0, Committee = 1, Emergency = 2 }

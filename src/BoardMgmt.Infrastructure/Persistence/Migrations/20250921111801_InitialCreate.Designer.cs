@@ -9,10 +9,10 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
 
-namespace BoardMgmt.Infrastructure.Migrations
+namespace BoardMgmt.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20250921042933_InitialCreate")]
+    [Migration("20250921111801_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -295,7 +295,14 @@ namespace BoardMgmt.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<string>("UserId")
+                        .HasMaxLength(450)
                         .HasColumnType("nvarchar(450)");
 
                     b.HasKey("Id");
@@ -303,8 +310,6 @@ namespace BoardMgmt.Infrastructure.Migrations
                     b.HasIndex("MeetingId");
 
                     b.HasIndex("UserId");
-
-                    b.HasIndex("MeetingId", "UserId");
 
                     b.ToTable("MeetingAttendees");
                 });
@@ -672,7 +677,7 @@ namespace BoardMgmt.Infrastructure.Migrations
                     b.HasOne("BoardMgmt.Domain.Entities.AppUser", null)
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.NoAction);
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Meeting");
                 });
