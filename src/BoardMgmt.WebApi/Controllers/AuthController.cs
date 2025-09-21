@@ -50,7 +50,7 @@ public class AuthController(ISender mediator) : ControllerBase
 
     // keep Admin-only if you want
     [HttpPut("{id}/roles")]
-    [Authorize(Roles = AppRoles.Admin)]
+    [Authorize(Policy = "Users.Page")]
     public async Task<IActionResult> AssignRoles(string id, [FromBody] AssignRolesBody body, CancellationToken ct)
     {
         var result = await mediator.Send(new AssignRoleCommand(id, body.Roles), ct);

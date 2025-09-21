@@ -1,8 +1,6 @@
 ﻿// backend/src/BoardMgmt.Application/Users/Commands/Login/LoginCommandHandler.cs
 using System.Security.Claims;
-using System.Linq;
 using BoardMgmt.Application.Common.Interfaces;
-using BoardMgmt.Application.Roles.Commands.SetRolePermissions; // PermissionDto
 using BoardMgmt.Domain.Identity;
 using MediatR;
 
@@ -11,49 +9,77 @@ namespace BoardMgmt.Application.Users.Commands.Login;
 public class LoginCommandHandler(
     IIdentityService identityService,
     IJwtTokenService jwtTokenService,
-    IRoleService roleService
+    IRoleService roleService,
+    IRolePermissionStore rolePermissionStore // 👈 add this
 ) : IRequestHandler<LoginCommand, LoginResponse>
 {
+    private const string PermissionClaimType = "permission"; // 👈 handler expects this
+
     public async Task<LoginResponse> Handle(LoginCommand request, CancellationToken ct)
     {
         var user = await identityService.FindUserByEmailAsync(request.Email);
-        if (user == null)
+        if (user is null)
         {
-            return new LoginResponse(string.Empty, string.Empty, request.Email, string.Empty,
+            return new LoginResponse(
+                string.Empty, string.Empty, request.Email, string.Empty,
                 false, new[] { "Invalid email or password." });
         }
 
         var passwordValid = await identityService.CheckPasswordAsync(user, request.Password);
         if (!passwordValid)
         {
-            return new LoginResponse(string.Empty, string.Empty, request.Email, string.Empty,
+            return new LoginResponse(
+                string.Empty, string.Empty, request.Email, string.Empty,
                 false, new[] { "Invalid email or password." });
         }
 
-        var roles = (await identityService.GetUserRolesAsync(user)).ToList();
+        // Roles (names) for token
+        var roleNames = (await identityService.GetUserRolesAsync(user)).ToList();
 
-        // Build per-module permission claims: perm:{moduleKey} = normalized int mask
+        // ===== Aggregate permissions across ALL roles =====
+        var roleIds = new List<string>();
+        foreach (var rn in roleNames)
+        {
+            var rid = await roleService.GetRoleIdByNameAsync(rn, ct);
+            if (!string.IsNullOrWhiteSpace(rid))
+                roleIds.Add(rid!);
+        }
+
         var extraClaims = new List<Claim>();
 
-        if (roles.Count > 0)
+        if (roleIds.Count > 0)
         {
-            var roleId = await roleService.GetRoleIdByNameAsync(roles[0], ct);
-            if (!string.IsNullOrWhiteSpace(roleId))
+            // roleId -> { module -> mask }
+            var agg = await rolePermissionStore.GetAggregatedForRolesAsync(roleIds, ct);
+
+            // union per module across all roles
+            var perModule = new Dictionary<int, int>();
+            foreach (var kv in agg) // each role
             {
-                var perModule = await roleService.GetRolePermissionsAsync(roleId!, ct);
-                foreach (PermissionDto row in perModule)
+                foreach (var mm in kv.Value) // each module->mask for that role
                 {
-                    var moduleKey = Convert.ToInt32(row.Module).ToString(); // "1","2",...
-                    var allowedInt = (int)row.Allowed;                      // already normalized
-                    extraClaims.Add(new Claim($"perm:{moduleKey}", allowedInt.ToString()));
+                    perModule[mm.Key] = perModule.TryGetValue(mm.Key, out var cur)
+                        ? (cur | mm.Value)
+                        : mm.Value;
                 }
+            }
+
+            // emit "permission" claims with value "{module}:{mask}"
+            foreach (var (moduleInt, rawMask) in perModule)
+            {
+                var normalized = PermissionExtensions.NormalizeInt(rawMask);
+                extraClaims.Add(new Claim(PermissionClaimType, $"{moduleInt}:{normalized}"));
             }
         }
 
-        var token = jwtTokenService.CreateToken(user.Id, user.Email!, roles, extraClaims);
+        var token = jwtTokenService.CreateToken(user.Id, user.Email!, roleNames, extraClaims);
 
         return new LoginResponse(
-            token, user.Id, user.Email!, $"{user.FirstName} {user.LastName}",
-            true, Array.Empty<string>());
+            token,
+            user.Id,
+            user.Email!,
+            $"{user.FirstName} {user.LastName}",
+            true,
+            Array.Empty<string>());
     }
 }

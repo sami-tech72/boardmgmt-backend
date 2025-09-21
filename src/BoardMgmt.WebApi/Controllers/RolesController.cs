@@ -16,15 +16,16 @@ namespace BoardMgmt.WebApi.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize(Roles = AppRoles.Admin)]
+    [Authorize]
     public class RolesController(ISender mediator, IRoleService roles) : ControllerBase
     {
         [HttpGet]
-        [Authorize(Roles = AppRoles.Admin)]
+        [Authorize(Policy = "Users.Page")]
         public async Task<ActionResult<object>> Get(CancellationToken ct)
             => Ok(new { success = true, data = await mediator.Send(new GetRolesQuery(), ct) });
 
         [HttpGet("list")]
+        [Authorize(Policy = "Users.Page")]
         public async Task<IActionResult> GetAll()
         {
             var roles = await mediator.Send(new GetRoleNamesQuery());

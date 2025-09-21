@@ -62,19 +62,29 @@ builder.Services.AddCors(opt =>
         ));
 });
 
-//const string UsersModuleKey = "1"; // or ((int)AppModule.Users).ToString()
-var authBuilder = builder.Services.AddAuthorizationBuilder();
-authBuilder.AddPolicy("Users.View", p => p.Requirements.Add(new PermissionRequirement("1", Permission.View)));
-//builder.Services.AddAuthorization(options =>
-//{
-//    options.AddPolicy("Users.Page", p => p.AddRequirements(new PermissionRequirement(UsersModuleKey, Permission.Page)));
-//    options.AddPolicy("Users.View", p => p.AddRequirements(new PermissionRequirement(UsersModuleKey, Permission.View)));
-//    options.AddPolicy("Users.Create", p => p.AddRequirements(new PermissionRequirement(UsersModuleKey, Permission.Create)));
-//    options.AddPolicy("Users.Update", p => p.AddRequirements(new PermissionRequirement(UsersModuleKey, Permission.Update)));
-//    options.AddPolicy("Users.Delete", p => p.AddRequirements(new PermissionRequirement(UsersModuleKey, Permission.Delete)));
-//});
+var authz = builder.Services.AddAuthorizationBuilder();
+void AddModulePolicies(string name, AppModule m)
+{
+    var key = ((int)m).ToString();
 
-builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
+    authz.AddPolicy($"{name}.Page", p => p.Requirements.Add(new PermissionRequirement(key, Permission.Page)));
+    authz.AddPolicy($"{name}.View", p => p.Requirements.Add(new PermissionRequirement(key, Permission.View)));
+    authz.AddPolicy($"{name}.Create", p => p.Requirements.Add(new PermissionRequirement(key, Permission.Create)));
+    authz.AddPolicy($"{name}.Update", p => p.Requirements.Add(new PermissionRequirement(key, Permission.Update)));
+    authz.AddPolicy($"{name}.Delete", p => p.Requirements.Add(new PermissionRequirement(key, Permission.Delete)));
+}
+
+AddModulePolicies("Users", AppModule.Users);
+AddModulePolicies("Meetings", AppModule.Meetings);
+AddModulePolicies("Documents", AppModule.Documents);
+AddModulePolicies("Folders", AppModule.Folders);
+AddModulePolicies("Votes", AppModule.Votes);
+AddModulePolicies("Dashboard", AppModule.Dashboard);
+AddModulePolicies("Settings", AppModule.Settings);
+AddModulePolicies("Reports", AppModule.Reports);
+AddModulePolicies("Messages", AppModule.Messages);
+
+builder.Services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
 
 builder.Services
     .AddControllers(o => o.Filters.Add<InvalidModelStateFilter>())
