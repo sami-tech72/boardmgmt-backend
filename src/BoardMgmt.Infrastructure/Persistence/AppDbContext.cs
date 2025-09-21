@@ -198,6 +198,8 @@ namespace BoardMgmt.Infrastructure.Persistence
             b.Entity<DocumentRoleAccess>(e =>
             {
                 e.HasKey(x => new { x.DocumentId, x.RoleId });
+                e.HasIndex(x => x.RoleId); // ✅ helpful for visibility queries
+
                 e.HasOne(x => x.Document)
                     .WithMany(d => d.RoleAccesses)
                     .HasForeignKey(x => x.DocumentId)
