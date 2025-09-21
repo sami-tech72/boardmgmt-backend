@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace BoardMgmt.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20250921111801_InitialCreate")]
+    [Migration("20250921121318_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -193,6 +193,19 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                     b.HasIndex("UploadedAt");
 
                     b.ToTable("Documents");
+                });
+
+            modelBuilder.Entity("BoardMgmt.Domain.Entities.DocumentRoleAccess", b =>
+                {
+                    b.Property<Guid>("DocumentId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("RoleId")
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("DocumentId", "RoleId");
+
+                    b.ToTable("DocumentRoleAccess");
                 });
 
             modelBuilder.Entity("BoardMgmt.Domain.Entities.Folder", b =>
@@ -666,6 +679,17 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade);
                 });
 
+            modelBuilder.Entity("BoardMgmt.Domain.Entities.DocumentRoleAccess", b =>
+                {
+                    b.HasOne("BoardMgmt.Domain.Entities.Document", "Document")
+                        .WithMany("RoleAccesses")
+                        .HasForeignKey("DocumentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Document");
+                });
+
             modelBuilder.Entity("BoardMgmt.Domain.Entities.MeetingAttendee", b =>
                 {
                     b.HasOne("BoardMgmt.Domain.Entities.Meeting", "Meeting")
@@ -811,6 +835,11 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("BoardMgmt.Domain.Entities.AgendaItem", b =>
                 {
                     b.Navigation("Votes");
+                });
+
+            modelBuilder.Entity("BoardMgmt.Domain.Entities.Document", b =>
+                {
+                    b.Navigation("RoleAccesses");
                 });
 
             modelBuilder.Entity("BoardMgmt.Domain.Entities.Meeting", b =>

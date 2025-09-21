@@ -8,6 +8,7 @@ public sealed record UploadDocumentsCommand(
     Guid? MeetingId,
     string FolderSlug,
     string? Description,
+    IReadOnlyList<string>? RoleIds, // ← dynamic role IDs (AspNetRoles.Id)
     IReadOnlyList<UploadItem> Files
 ) : IRequest<IReadOnlyList<DocumentDto>>
 {

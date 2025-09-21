@@ -24,6 +24,7 @@ namespace BoardMgmt.Infrastructure.Persistence
         public DbSet<VoteEligibleUser> VoteEligibleUsers => Set<VoteEligibleUser>();
 
         public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
+        public DbSet<DocumentRoleAccess> DocumentRoleAccess => Set<DocumentRoleAccess>();
 
         public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
             => base.SaveChangesAsync(cancellationToken);
@@ -192,6 +193,19 @@ namespace BoardMgmt.Infrastructure.Persistence
                  .WithMany()
                  .HasForeignKey(x => x.RoleId)
                  .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            b.Entity<DocumentRoleAccess>(e =>
+            {
+                e.HasKey(x => new { x.DocumentId, x.RoleId });
+                e.HasOne(x => x.Document)
+                    .WithMany(d => d.RoleAccesses)
+                    .HasForeignKey(x => x.DocumentId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                // RoleId references AspNetRoles.Id (string), but we keep it as plain string FK
+                // If you want FK constraint to AspNetRoles, you can add it, but it's optional:
+                // e.HasOne<IdentityRole>().WithMany().HasForeignKey(x => x.RoleId).OnDelete(DeleteBehavior.Cascade);
             });
         }
     }

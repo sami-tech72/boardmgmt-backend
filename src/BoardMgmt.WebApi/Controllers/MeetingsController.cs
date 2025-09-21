@@ -114,4 +114,5 @@ public class MeetingsController : ControllerBase
             ? this.OkApi(new { id }, "Meeting updated")
             : this.BadRequestApi("update_failed", "Could not update meeting.");
     }
+
 }
