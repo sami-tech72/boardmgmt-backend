@@ -21,7 +21,7 @@ public sealed class AppDbContextFactory : IDesignTimeDbContextFactory<AppDbConte
             .Build();
 
         var cs = config.GetConnectionString("DefaultConnection")
-                 ?? "Server=SAMI-PC\\SQLEXPRESS;Database=BoardMgmtDb;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=True";
+                 ?? "Server=localhost\\SQLEXPRESS;Database=BoardMgmtDb;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=True";
 
         var options = new DbContextOptionsBuilder<AppDbContext>()
             .UseSqlServer(cs)

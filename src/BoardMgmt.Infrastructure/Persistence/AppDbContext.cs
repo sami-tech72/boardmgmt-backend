@@ -32,12 +32,13 @@ namespace BoardMgmt.Infrastructure.Persistence
         {
             base.OnModelCreating(b);
 
+
             // ------- Meetings (unchanged) -------
             b.Entity<Meeting>(e =>
             {
                 e.Property(m => m.Title).HasMaxLength(200).IsRequired();
                 e.Property(m => m.Location).HasMaxLength(200).IsRequired();
-
+               
                 e.HasMany(m => m.AgendaItems).WithOne().HasForeignKey(ai => ai.MeetingId).OnDelete(DeleteBehavior.Cascade);
                 e.HasMany(m => m.Documents).WithOne().HasForeignKey(d => d.MeetingId).OnDelete(DeleteBehavior.Cascade);
                 e.HasMany(m => m.Attendees).WithOne(a => a.Meeting).HasForeignKey(a => a.MeetingId).OnDelete(DeleteBehavior.Cascade);
@@ -45,23 +46,63 @@ namespace BoardMgmt.Infrastructure.Persistence
                 e.HasIndex(m => new { m.ScheduledAt, m.Status });
             });
 
+            //b.Entity<MeetingAttendee>(e =>
+            //{
+            //    e.Property(a => a.Name).HasMaxLength(200).IsRequired();
+            //    e.Property(a => a.Role).HasMaxLength(100);
+            //    e.Property(a => a.IsRequired).HasDefaultValue(true);
+            //    e.Property(a => a.IsConfirmed).HasDefaultValue(false);
+            //    e.Property(a => a.Email).HasMaxLength(320);
+
+            //    e.HasIndex(a => a.MeetingId);
+            //    e.Property(a => a.UserId).HasMaxLength(450);   // nvarchar(450)
+            //                                                   // lookups
+            //    e.HasIndex(a => a.MeetingId);
+            //    e.HasIndex(a => a.UserId);
+
+            //    // 👇 prevent duplicate (MeetingId, UserId) attendees, but allow multiple external attendees (UserId = NULL)
+            //    e.HasIndex(x => new { x.MeetingId, x.UserId })
+            //     .IsUnique()
+            //     .HasFilter("[UserId] IS NOT NULL"); // SQL Server filter; for PostgreSQL use "WHERE ""UserId"" IS NOT NULL"
+
+            //    e.HasOne<AppUser>()
+            //     .WithMany()
+            //     .HasForeignKey(a => a.UserId)
+            //     .HasPrincipalKey(u => u.Id)
+            //     .OnDelete(DeleteBehavior.NoAction);
+            //});
+
+            // BoardMgmt.Infrastructure/Persistence/AppDbContext.cs (excerpt)
             b.Entity<MeetingAttendee>(e =>
             {
+                e.HasKey(a => a.Id);
+
                 e.Property(a => a.Name).HasMaxLength(200).IsRequired();
                 e.Property(a => a.Role).HasMaxLength(100);
                 e.Property(a => a.IsRequired).HasDefaultValue(true);
                 e.Property(a => a.IsConfirmed).HasDefaultValue(false);
                 e.Property(a => a.Email).HasMaxLength(320);
+                e.Property(a => a.UserId).HasMaxLength(450);
 
                 e.HasIndex(a => a.MeetingId);
-                e.HasIndex(x => x.UserId);
-                e.HasIndex(x => new { x.MeetingId, x.UserId });
+                e.HasIndex(a => a.UserId);
+
+                e.Property(x => x.RowVersion)
+                    .IsRowVersion()
+                    .IsConcurrencyToken();
+
+
+
+                e.HasOne(x => x.Meeting)
+                    .WithMany(m => m.Attendees)
+                    .HasForeignKey(x => x.MeetingId)
+                    .OnDelete(DeleteBehavior.Cascade);
 
                 e.HasOne<AppUser>()
-                 .WithMany()
-                 .HasForeignKey(a => a.UserId)
-                 .HasPrincipalKey(u => u.Id)
-                 .OnDelete(DeleteBehavior.NoAction);
+                    .WithMany()
+                    .HasForeignKey(a => a.UserId)
+                    .OnDelete(DeleteBehavior.SetNull)
+                    .IsRequired(false);
             });
 
             b.Entity<AgendaItem>(e =>

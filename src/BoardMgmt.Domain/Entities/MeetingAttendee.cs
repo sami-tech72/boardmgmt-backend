@@ -1,4 +1,6 @@
-﻿namespace BoardMgmt.Domain.Entities;
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace BoardMgmt.Domain.Entities;
 
 public class MeetingAttendee
 {
@@ -15,5 +17,9 @@ public class MeetingAttendee
     public string? Email { get; set; }       // optional fallback
     public bool IsRequired { get; set; } = true;
     public bool IsConfirmed { get; set; } = false;
+
+
+    [Timestamp] // optimistic concurrency token
+    public byte[] RowVersion { get; set; } = Array.Empty<byte>();
 
 }

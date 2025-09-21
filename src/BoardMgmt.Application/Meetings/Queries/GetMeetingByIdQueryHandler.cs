@@ -2,26 +2,22 @@
 using BoardMgmt.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace BoardMgmt.Application.Meetings.Queries;
 
-public class GetMeetingsQueryHandler : IRequestHandler<GetMeetingsQuery, IReadOnlyList<MeetingDto>>
+public sealed class GetMeetingByIdQueryHandler : IRequestHandler<GetMeetingByIdQuery, MeetingDto?>
 {
     private readonly DbContext _db;
-    public GetMeetingsQueryHandler(DbContext db) => _db = db;
+    public GetMeetingByIdQueryHandler(DbContext db) => _db = db;
 
-    public async Task<IReadOnlyList<MeetingDto>> Handle(GetMeetingsQuery request, CancellationToken ct)
+    public async Task<MeetingDto?> Handle(GetMeetingByIdQuery request, CancellationToken ct)
     {
         return await _db.Set<Meeting>()
             .AsNoTracking()
             .Include(m => m.AgendaItems)
             .Include(m => m.Attendees)
-            .OrderBy(m => m.ScheduledAt)
-             .Select(m => new MeetingDto(
+            .Where(m => m.Id == request.Id)
+            .Select(m => new MeetingDto(
                 m.Id,
                 m.Title,
                 m.Description,
@@ -49,6 +45,6 @@ public class GetMeetingsQueryHandler : IRequestHandler<GetMeetingsQuery, IReadOn
                     ))
                  .ToList()
             ))
-            .ToListAsync(ct);
+            .FirstOrDefaultAsync(ct);
     }
 }

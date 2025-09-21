@@ -14,5 +14,7 @@ public record MeetingDto(
     string Location,
     MeetingStatus Status,
     int AttendeesCount,
-    IReadOnlyList<AgendaItemDto> AgendaItems
+    
+    IReadOnlyList<AgendaItemDto> AgendaItems,
+     IReadOnlyList<AttendeeDto> Attendees
 );

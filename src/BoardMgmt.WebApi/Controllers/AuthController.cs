@@ -3,7 +3,6 @@ using BoardMgmt.Application.Roles.Commands.DTOs;
 using BoardMgmt.Application.Users.Commands.Login;
 using BoardMgmt.Application.Users.Commands.Register;
 using BoardMgmt.Application.Users.Queries.GetUsers;
-using BoardMgmt.Domain.Auth;
 using BoardMgmt.WebApi.Common.Http;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -15,16 +14,32 @@ namespace BoardMgmt.WebApi.Controllers;
 [Route("api/[controller]")]
 public class AuthController(ISender mediator) : ControllerBase
 {
-    // Users.View
+    // GET /api/auth?q=&page=&pageSize=&activeOnly=&roles=Admin,BoardMember
     [HttpGet]
     [Authorize(Policy = "Users.View")]
-    public async Task<IActionResult> GetAll()
+    public async Task<IActionResult> GetAll(
+        [FromQuery] string? q,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        [FromQuery] bool? activeOnly = null,
+        [FromQuery] string? roles = null, // comma separated names
+        CancellationToken ct = default
+    )
     {
-        var users = await mediator.Send(new GetUsersQuery());
-        return this.OkApi(users, "Users loaded");
+        var roleList = (roles ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
+
+        var result = await mediator.Send(
+            new GetUsersQuery(q, page, pageSize, activeOnly, roleList),
+            ct
+        );
+
+        // Return a paged envelope { items, total } so Angular can read res.items/res.total
+        return this.OkApi(new { items = result.Items, total = result.Total }, "Users loaded");
     }
 
-    // Users.Create
+    // POST /api/auth/register
     [HttpPost("register")]
     [Authorize(Policy = "Users.Create")]
     public async Task<IActionResult> Register([FromBody] RegisterCommand command)
@@ -36,7 +51,7 @@ public class AuthController(ISender mediator) : ControllerBase
         return this.OkApi(new { result.UserId, result.Email, result.FirstName, result.LastName }, "Registration successful");
     }
 
-    // anonymous
+    // POST /api/auth/login (anonymous)
     [HttpPost("login")]
     [AllowAnonymous]
     public async Task<IActionResult> Login([FromBody] LoginCommand command)
@@ -48,9 +63,9 @@ public class AuthController(ISender mediator) : ControllerBase
         return this.OkApi(new { result.Token, result.UserId, result.Email, result.FullName }, "Login successful");
     }
 
-    // keep Admin-only if you want
+    // PUT /api/auth/{id}/roles  (adjust policy as you prefer)
     [HttpPut("{id}/roles")]
-    [Authorize(Policy = "Users.Page")]
+    [Authorize] // or "Users.ManageRoles" if you have it
     public async Task<IActionResult> AssignRoles(string id, [FromBody] AssignRolesBody body, CancellationToken ct)
     {
         var result = await mediator.Send(new AssignRoleCommand(id, body.Roles), ct);

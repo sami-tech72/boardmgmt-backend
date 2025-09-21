@@ -14,10 +14,20 @@ using System.Reflection;
 using System.Text;
 using BoardMgmt.WebApi.Auth;
 
+// ✅ ADD THIS
+using Serilog;
+
 var builder = WebApplication.CreateBuilder(args);
 var config = builder.Configuration;
 
-// Infrastructure then Application
+// ✅ ADD THIS (Serilog as the logging provider, reading from appsettings.json)
+builder.Logging.ClearProviders();
+builder.Host.UseSerilog((ctx, lc) => lc
+    .ReadFrom.Configuration(ctx.Configuration)
+    .Enrich.FromLogContext()
+);
+
+/// Infrastructure then Application
 builder.Services.AddInfrastructure(config);
 builder.Services.AddApplication();
 
@@ -48,6 +58,7 @@ builder.Services
         };
     });
 
+// (you can keep this or remove; you also use AddAuthorizationBuilder below)
 builder.Services.AddAuthorization();
 
 builder.Services.AddCors(opt =>
@@ -132,6 +143,7 @@ builder.Services.AddSingleton<ExceptionHandlingMiddleware>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.Configure<FormOptions>(o => { o.MultipartBodyLengthLimit = 50 * 1024 * 1024; });
 
+// ✅ Serilog already configured above
 var app = builder.Build();
 
 // Static files (uploads)
