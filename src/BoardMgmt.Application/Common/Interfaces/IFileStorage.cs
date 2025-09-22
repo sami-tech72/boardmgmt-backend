@@ -13,4 +13,6 @@ public interface IFileStorage
 
     
     string MapToPhysicalPath(string publicUrl);
+
+    Task DeleteAsync(string fileName, CancellationToken ct = default);
 }
