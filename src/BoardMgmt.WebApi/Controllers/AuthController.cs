@@ -2,7 +2,6 @@
 using BoardMgmt.Application.Roles.Commands.DTOs;
 using BoardMgmt.Application.Users.Commands.Login;
 using BoardMgmt.Application.Users.Commands.Register;
-using BoardMgmt.Application.Users.Queries.GetUsers;
 using BoardMgmt.WebApi.Common.Http;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -23,6 +22,7 @@ public class AuthController(ISender mediator) : ControllerBase
         [FromQuery] int pageSize = 50,
         [FromQuery] bool? activeOnly = null,
         [FromQuery] string? roles = null, // comma separated names
+         [FromQuery] Guid? departmentId = null,
         CancellationToken ct = default
     )
     {
@@ -31,7 +31,7 @@ public class AuthController(ISender mediator) : ControllerBase
             .ToList();
 
         var result = await mediator.Send(
-            new GetUsersQuery(q, page, pageSize, activeOnly, roleList),
+            new GetUsersQuery(q, page, pageSize, activeOnly, roleList, departmentId),
             ct
         );
 
@@ -73,5 +73,19 @@ public class AuthController(ISender mediator) : ControllerBase
             return this.BadRequestApi("assign_roles_failed", string.Join("; ", result.Errors));
 
         return this.OkApi(new { userId = id, roles = result.AppliedRoles }, "Roles updated");
+    }
+
+
+
+    public sealed record AssignDepartmentBody(Guid? DepartmentId);
+
+    // PUT /api/auth/{id}/department
+    [HttpPut("{id}/department")]
+    [Authorize(Policy = "Users.Edit")]
+    public async Task<IActionResult> AssignDepartment(string id, [FromBody] AssignDepartmentBody body, CancellationToken ct)
+    {
+        var ok = await mediator.Send(new AssignDepartmentCommand(id, body.DepartmentId), ct);
+        return ok ? this.OkApi(new { userId = id, departmentId = body.DepartmentId })
+                  : this.BadRequestApi("assign_department_failed", string.Join("; ", ok)); 
     }
 }

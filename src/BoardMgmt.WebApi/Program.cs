@@ -2,6 +2,7 @@
 using BoardMgmt.Domain.Identity;
 using BoardMgmt.Infrastructure;
 using BoardMgmt.Infrastructure.Persistence;
+using BoardMgmt.Infrastructure.Persistence.Seed;
 using BoardMgmt.WebApi.Common.Http;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -153,6 +154,14 @@ if (string.IsNullOrWhiteSpace(webRoot))
 Directory.CreateDirectory(Path.Combine(webRoot, "uploads"));
 
 // auto-migrate + seed
+
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await db.Database.MigrateAsync();
+    await DepartmentSeeder.SeedAsync(db);
+}
+
 await DbSeeder.SeedAsync(app.Services, app.Logger);
 
 if (app.Environment.IsDevelopment())

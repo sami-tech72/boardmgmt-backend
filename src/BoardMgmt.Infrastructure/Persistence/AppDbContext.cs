@@ -25,9 +25,12 @@ namespace BoardMgmt.Infrastructure.Persistence
 
         public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
         public DbSet<DocumentRoleAccess> DocumentRoleAccess => Set<DocumentRoleAccess>();
+        public DbSet<Department> Departments => Set<Department>();
 
         public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
             => base.SaveChangesAsync(cancellationToken);
+
+
 
         protected override void OnModelCreating(ModelBuilder b)
         {
@@ -208,6 +211,26 @@ namespace BoardMgmt.Infrastructure.Persistence
                 // RoleId references AspNetRoles.Id (string), but we keep it as plain string FK
                 // If you want FK constraint to AspNetRoles, you can add it, but it's optional:
                 // e.HasOne<IdentityRole>().WithMany().HasForeignKey(x => x.RoleId).OnDelete(DeleteBehavior.Cascade);
+            });
+
+
+            // Department config
+            b.Entity<Department>(cfg =>
+            {
+                cfg.ToTable("Departments");
+                cfg.HasKey(x => x.Id);
+                cfg.Property(x => x.Name).HasMaxLength(160).IsRequired();
+                cfg.Property(x => x.Description).HasMaxLength(400);
+                cfg.Property(x => x.IsActive).HasDefaultValue(true);
+                cfg.HasIndex(x => x.Name).IsUnique();
+            });
+
+            b.Entity<AppUser>(cfg =>
+            {
+                cfg.HasOne(u => u.Department)
+                   .WithMany(d => d.Users)
+                   .HasForeignKey(u => u.DepartmentId)
+                   .OnDelete(DeleteBehavior.SetNull);
             });
         }
     }
