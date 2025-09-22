@@ -3,6 +3,7 @@ using BoardMgmt.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
+
 namespace BoardMgmt.Application.Votes.Commands;
 
 public sealed record SubmitBallotCommand(Guid VoteId, VoteChoice? Choice, Guid? OptionId) : IRequest;

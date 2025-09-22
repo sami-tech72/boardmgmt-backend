@@ -38,7 +38,7 @@ public class MeetingsController : ControllerBase
     }
 
     // -----------------------------
-    // Create DTO (POST body)
+    // POST /api/meetings
     // -----------------------------
     public record CreateMeetingDto(
         string Title,
@@ -51,9 +51,6 @@ public class MeetingsController : ControllerBase
         List<string>? Attendees = null
     );
 
-    // -----------------------------
-    // POST /api/meetings
-    // -----------------------------
     [HttpPost]
     [Authorize(Policy = "Meetings.Create")]
     public async Task<IActionResult> Create([FromBody] CreateMeetingDto dto)
@@ -73,12 +70,9 @@ public class MeetingsController : ControllerBase
     }
 
     // -----------------------------
-    // Update DTO (PUT body)
+    // PUT /api/meetings/{id}
     // -----------------------------
-
-    // WebApi controller (can be in DTOs namespace if you prefer)
     // ✅ Update DTO: remove duplicate Attendees; add AttendeesRich
-    // BoardMgmt.WebApi/Controllers/MeetingsController.cs  (excerpt)
     public record UpdateMeetingDto(
         Guid Id,
         string Title,
@@ -115,4 +109,15 @@ public class MeetingsController : ControllerBase
             : this.BadRequestApi("update_failed", "Could not update meeting.");
     }
 
+    // -----------------------------
+    // GET /api/meetings/select-list
+    // Lightweight list for picker/modal
+    // -----------------------------
+    [HttpGet("select-list")]
+    [Authorize] // relax if you want to use it on a public create form
+    public async Task<IActionResult> SelectList(CancellationToken ct)
+    {
+        var list = await _mediator.Send(new GetMeetingsSelectListQuery(), ct);
+        return this.OkApi(list);
+    }
 }
