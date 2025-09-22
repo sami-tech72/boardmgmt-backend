@@ -55,4 +55,14 @@ public sealed class LocalFileStorage : IFileStorage
         var relative = publicUrl.Replace(_publicBase, string.Empty).TrimStart('/', '\\');
         return Path.Combine(_rootPath, relative.Replace('/', Path.DirectorySeparatorChar));
     }
+
+    public Task DeleteAsync(string fileName, CancellationToken ct = default)
+    {
+        var filePath = Path.Combine(_rootPath, fileName);
+        if (File.Exists(filePath))
+        {
+            File.Delete(filePath);
+        }
+        return Task.CompletedTask;
+    }
 }

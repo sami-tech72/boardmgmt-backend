@@ -55,7 +55,7 @@ public class MeetingsController : ControllerBase
     // POST /api/meetings
     // -----------------------------
     [HttpPost]
-    [Authorize(Roles = "Admin,Secretary")]
+    [Authorize(Policy = "Meetings.Create")]
     public async Task<IActionResult> Create([FromBody] CreateMeetingDto dto)
     {
         var id = await _mediator.Send(new CreateMeetingCommand(
@@ -92,7 +92,7 @@ public class MeetingsController : ControllerBase
     );
 
     [HttpPut("{id:guid}")]
-    [Authorize(Roles = "Admin,Secretary")]
+    [Authorize(Policy = "Meetings.Update")]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateMeetingDto dto)
     {
         if (id != dto.Id)
