@@ -15,4 +15,10 @@ public class Vote
     public int Abstain { get; set; }
 
     public DateTimeOffset VotedAt { get; set; } = DateTimeOffset.UtcNow;
+
+
+
+
+
+
 }

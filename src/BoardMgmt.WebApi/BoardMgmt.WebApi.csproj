@@ -24,7 +24,6 @@
 	<ItemGroup>
 		<ProjectReference Include="..\BoardMgmt.Application\BoardMgmt.Application.csproj" />
 		<ProjectReference Include="..\BoardMgmt.Infrastructure\BoardMgmt.Infrastructure.csproj" />
-		<ProjectReference Include="..\BoardMgmt.Domain\BoardMgmt.Domain.csproj" />
 	</ItemGroup>
 
 </Project>

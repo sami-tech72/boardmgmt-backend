@@ -1,6 +1,5 @@
 ﻿namespace BoardMgmt.Domain.Entities;
 
-public enum VoteChoice { Yes = 1, No = 2, Abstain = 3 }
 
 public class AgendaItem
 {
@@ -11,4 +10,7 @@ public class AgendaItem
     public int Order { get; set; }
 
     public List<Vote> Votes { get; set; } = new();
+
+
+
 }

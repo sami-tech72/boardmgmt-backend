@@ -17,7 +17,7 @@ public sealed class GetVoteQueryHandler(IAppDbContext db, ICurrentUser user)
             .Include(x => x.Options)
             .Include(x => x.Ballots)
             .Include(x => x.EligibleUsers)
-            .Include(x => x.Meeting)!.ThenInclude(m => m.Attendees) // safe even if MeetingId is null
+            .Include(x => x.Meeting)!.ThenInclude(m => m.Attendees)
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.Id == request.Id, ct);
 
@@ -29,7 +29,6 @@ public sealed class GetVoteQueryHandler(IAppDbContext db, ICurrentUser user)
                 o.Id, o.Text, o.Order, v.Ballots.Count(b => b.OptionId == o.Id)))
             .ToArray();
 
-        // non-MC totals
         var total = v.Ballots.Count;
         var yes = v.Type == VoteType.MultipleChoice ? 0 : v.Ballots.Count(b => b.Choice == VoteChoice.Yes);
         var no = v.Type == VoteType.MultipleChoice ? 0 : v.Ballots.Count(b => b.Choice == VoteChoice.No);
@@ -40,20 +39,53 @@ public sealed class GetVoteQueryHandler(IAppDbContext db, ICurrentUser user)
         var now = DateTimeOffset.UtcNow;
         var isOpen = v.IsOpen(now);
 
-        // Can the current user vote?
         var uid = user.UserId;
         var isAuthed = user.IsAuthenticated && !string.IsNullOrEmpty(uid);
 
         bool eligible = v.Eligibility switch
         {
             VoteEligibility.Public => true,
-            VoteEligibility.SpecificUsers => isAuthed && v.EligibleUsers.Any(e => e.UserId == uid),
-            VoteEligibility.MeetingAttendees => isAuthed && v.MeetingId != null &&
-                                                v.Meeting!.Attendees.Any(a => a.UserId == uid),
+            VoteEligibility.SpecificUsers =>
+                isAuthed && v.EligibleUsers.Any(e => e.UserId == uid),
+            VoteEligibility.MeetingAttendees =>
+                isAuthed && v.MeetingId != null &&
+                (v.Meeting?.Attendees?.Any(a => a.UserId == uid) ?? false),
             _ => false
         };
 
         var alreadyVoted = isAuthed && v.Ballots.Any(b => b.UserId == uid);
+
+        // Build individual votes WITHOUT display names (Application layer stays pure)
+        IReadOnlyList<IndividualVoteDto>? individualVotes = null;
+
+        if (!v.Anonymous && v.Ballots.Count > 0)
+        {
+            string LabelFor(VoteBallot b) =>
+                b.Choice switch
+                {
+                    VoteChoice.Yes => "Yes",
+                    VoteChoice.No => "No",
+                    VoteChoice.Abstain => "Abstain",
+                    _ => b.OptionId.HasValue
+                        ? options.FirstOrDefault(o => o.Id == b.OptionId.Value)?.Text ?? "—"
+                        : "—"
+                };
+
+            string? OptionTextFor(VoteBallot b) =>
+                b.OptionId.HasValue
+                    ? options.FirstOrDefault(o => o.Id == b.OptionId.Value)?.Text
+                    : null;
+
+            individualVotes = v.Ballots
+                .OrderByDescending(b => b.VotedAt)
+                .Select(b => new IndividualVoteDto(
+                    b.UserId,
+                    null,                     // DisplayName filled in WebApi
+                    b.Choice.HasValue ? LabelFor(b) : null,
+                    OptionTextFor(b),
+                    b.VotedAt))
+                .ToList();
+        }
 
         return new VoteDetailDto(
             v.Id, v.MeetingId, v.AgendaItemId,
@@ -63,7 +95,8 @@ public sealed class GetVoteQueryHandler(IAppDbContext db, ICurrentUser user)
             options,
             results,
             CanVote: isOpen && eligible && !alreadyVoted,
-            AlreadyVoted: alreadyVoted
+            AlreadyVoted: alreadyVoted,
+            IndividualVotes: individualVotes
         );
     }
 }
