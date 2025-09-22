@@ -13,6 +13,11 @@ public class AppUser : IdentityUser
     public DateTime? UpdatedAt { get; set; }
     public bool IsActive { get; set; } = true;
 
+    public Guid? DepartmentId { get; set; }
+    public Department? Department { get; set; }
+
+
+
     public const string Admin = "Admin";
     public static readonly string[] All = [Admin];
 }

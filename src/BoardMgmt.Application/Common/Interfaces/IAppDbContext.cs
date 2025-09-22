@@ -22,6 +22,9 @@ namespace BoardMgmt.Application.Common.Interfaces
 
         DbSet<RolePermission> RolePermissions { get; }
 
+        // NEW
+        DbSet<Department> Departments { get; }
+
         Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
     }
 }
