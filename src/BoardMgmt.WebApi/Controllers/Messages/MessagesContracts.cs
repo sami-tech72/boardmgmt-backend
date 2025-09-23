@@ -3,11 +3,11 @@
 public record CreateMessageBody(
     string Subject,
     string Body,
-    string Priority,                   // "Low|Normal|High"
+    string Priority,                 // "Low|Normal|High|Urgent"
     bool ReadReceiptRequested,
     bool IsConfidential,
-    List<Guid> RecipientIds,
-    bool asDraft = true
+    IReadOnlyList<Guid> RecipientIds,
+    bool asDraft
 );
 
 public record UpdateMessageBody(
@@ -16,5 +16,5 @@ public record UpdateMessageBody(
     string Priority,
     bool ReadReceiptRequested,
     bool IsConfidential,
-    List<Guid> RecipientIds
+    IReadOnlyList<Guid> RecipientIds
 );

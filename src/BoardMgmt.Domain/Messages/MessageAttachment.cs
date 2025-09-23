@@ -8,5 +8,5 @@ public class MessageAttachment
     public string FileName { get; set; } = string.Empty;
     public string ContentType { get; set; } = "application/octet-stream";
     public long FileSize { get; set; }
-    public string StoragePath { get; set; } = string.Empty; // disk or blob path
+    public string StoragePath { get; set; } = string.Empty; // disk/blob path in your storage
 }
