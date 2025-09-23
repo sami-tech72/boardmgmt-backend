@@ -17,18 +17,27 @@ public class RegisterCommandHandler(
         if (!success || string.IsNullOrWhiteSpace(userId))
             return new(userId!, request.Email, request.FirstName, request.LastName, success, errors);
 
+        var mergedErrors = errors?.ToList() ?? new List<string>();
+
+        // Assign role if provided
         if (!string.IsNullOrWhiteSpace(request.Role))
         {
-            // Assign; handler validates existence in RoleManager
             var assign = await mediator.Send(new AssignRoleCommand(userId, new[] { request.Role! }), ct);
             if (!assign.Success)
-            {
-                var merged = errors?.ToList() ?? new List<string>();
-                merged.AddRange(assign.Errors);
-                return new(userId, request.Email, request.FirstName, request.LastName, false, merged);
-            }
+                mergedErrors.AddRange(assign.Errors);
         }
 
-        return new(userId, request.Email, request.FirstName, request.LastName, true, errors);
+        // Assign department if provided
+        if (request.DepartmentId.HasValue)
+        {
+            var ok = await mediator.Send(new AssignDepartmentCommand(userId, request.DepartmentId), ct);
+            if (!ok)
+                mergedErrors.Add("Failed to assign department.");
+        }
+
+        var finalSuccess = !mergedErrors.Any();
+
+        return new(userId, request.Email, request.FirstName, request.LastName, finalSuccess, mergedErrors);
     }
 }
+

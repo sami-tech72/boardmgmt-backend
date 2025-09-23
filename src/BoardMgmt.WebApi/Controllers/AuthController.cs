@@ -2,6 +2,7 @@
 using BoardMgmt.Application.Roles.Commands.DTOs;
 using BoardMgmt.Application.Users.Commands.Login;
 using BoardMgmt.Application.Users.Commands.Register;
+using BoardMgmt.Application.Users.Commands.Update;
 using BoardMgmt.WebApi.Common.Http;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -36,7 +37,8 @@ public class AuthController(ISender mediator) : ControllerBase
         );
 
         // Return a paged envelope { items, total } so Angular can read res.items/res.total
-        return this.OkApi(new { items = result.Items, total = result.Total }, "Users loaded");
+        return this.OkApi(result.Items, "Users loaded");
+
     }
 
     // POST /api/auth/register
@@ -75,17 +77,42 @@ public class AuthController(ISender mediator) : ControllerBase
         return this.OkApi(new { userId = id, roles = result.AppliedRoles }, "Roles updated");
     }
 
+    public record UpdateUserBody(
+     string? FirstName,
+     string? LastName,
+     string? Email,
+     string? NewPassword,
+     string? Role,
+     Guid? DepartmentId,
+     bool? IsActive
+    );
 
 
-    public sealed record AssignDepartmentBody(Guid? DepartmentId);
 
-    // PUT /api/auth/{id}/department
-    [HttpPut("{id}/department")]
-    [Authorize(Policy = "Users.Edit")]
-    public async Task<IActionResult> AssignDepartment(string id, [FromBody] AssignDepartmentBody body, CancellationToken ct)
+    [HttpPut("{id}")]
+    [Authorize(Policy = "Users.Update")]
+    public async Task<IActionResult> UpdateUser(string id, [FromBody] UpdateUserBody body, CancellationToken ct)
     {
-        var ok = await mediator.Send(new AssignDepartmentCommand(id, body.DepartmentId), ct);
-        return ok ? this.OkApi(new { userId = id, departmentId = body.DepartmentId })
-                  : this.BadRequestApi("assign_department_failed", string.Join("; ", ok)); 
+        var cmd = new UpdateUserCommand(          // ← FIX: pass id here
+            id,
+            body.FirstName,
+            body.LastName,
+            body.Email,
+            body.NewPassword,
+            body.Role,
+            body.DepartmentId,
+            body.IsActive
+        );
+
+        var result = await mediator.Send(cmd, ct);
+        if (!result.Success)
+            return this.BadRequestApi("update_failed", string.Join("; ", result.Errors));
+
+        return this.OkApi(new { result.UserId }, "User updated");
     }
+
+
+
+
+
 }
