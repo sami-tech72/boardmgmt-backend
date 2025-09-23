@@ -1,10 +1,13 @@
 ﻿// File: src/BoardMgmt.Infrastructure/DependencyInjection.cs
 using BoardMgmt.Application.Common.Interfaces;
+using BoardMgmt.Application.Common.Interfaces.Repositories;
 using BoardMgmt.Domain.Entities;
 using BoardMgmt.Domain.Identity;
 using BoardMgmt.Infrastructure.Auth;
+using BoardMgmt.Infrastructure.Files;
 using BoardMgmt.Infrastructure.Identity;
 using BoardMgmt.Infrastructure.Persistence;
+using BoardMgmt.Infrastructure.Persistence.Repositories;
 using BoardMgmt.Infrastructure.Storage;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -107,6 +110,14 @@ namespace BoardMgmt.Infrastructure
 
             // File storage
             services.AddSingleton<IFileStorage, LocalFileStorage>();
+            services.AddScoped<IFileStorage, DiskFileStorage>();
+
+            services.AddScoped<IMeetingReadRepository, MeetingReadRepository>();
+            services.AddScoped<IDocumentReadRepository, DocumentReadRepository>();
+            services.AddScoped<IVoteReadRepository, VoteReadRepository>();
+            services.AddScoped<IMessageReadRepository, MessageReadRepository>();
+            services.AddScoped<IActivityReadRepository, ActivityReadRepository>();
+
 
             return services;
         }

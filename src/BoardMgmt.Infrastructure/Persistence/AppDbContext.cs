@@ -1,5 +1,6 @@
 ﻿using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Domain.Entities;
+using BoardMgmt.Domain.Messages;
 using BoardMgmt.Domain.Identity; // ✅ use Domain.AppUser
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
@@ -26,6 +27,11 @@ namespace BoardMgmt.Infrastructure.Persistence
         public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
         public DbSet<DocumentRoleAccess> DocumentRoleAccess => Set<DocumentRoleAccess>();
         public DbSet<Department> Departments => Set<Department>();
+
+        public DbSet<Message> Messages => Set<Message>();
+        public DbSet<MessageRecipient> MessageRecipients => Set<MessageRecipient>();
+        public DbSet<MessageAttachment> MessageAttachments => Set<MessageAttachment>();
+
 
         public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
             => base.SaveChangesAsync(cancellationToken);
@@ -232,6 +238,66 @@ namespace BoardMgmt.Infrastructure.Persistence
                    .HasForeignKey(u => u.DepartmentId)
                    .OnDelete(DeleteBehavior.SetNull);
             });
+
+
+            // ------- Messaging (new) -------
+            b.Entity<Message>(e =>
+            {
+                e.HasKey(x => x.Id);
+
+                e.Property(x => x.Subject)
+                    .HasMaxLength(300)
+                    .IsRequired();
+
+                e.Property(x => x.Body)
+                    .IsRequired();
+
+                e.Property(x => x.Priority)
+                    .HasConversion<string>()
+                    .HasMaxLength(16);
+
+                e.Property(x => x.Status)
+                    .HasConversion<string>()
+                    .HasMaxLength(16);
+
+                e.Property(x => x.ReadReceiptRequested);
+                e.Property(x => x.IsConfidential);
+
+                e.Property(x => x.CreatedAtUtc)
+                    .IsRequired();
+
+                e.Property(x => x.UpdatedAtUtc)
+                    .IsRequired();
+
+                e.HasMany(x => x.Recipients)
+                    .WithOne()
+                    .HasForeignKey(r => r.MessageId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                e.HasMany(x => x.Attachments)
+                    .WithOne()
+                    .HasForeignKey(a => a.MessageId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            b.Entity<MessageRecipient>(e =>
+            {
+                e.HasKey(x => x.Id);
+
+                e.Property(x => x.UserId).HasMaxLength(450);
+                e.Property(x => x.IsRead).HasDefaultValue(false);
+                e.HasIndex(x => new { x.MessageId, x.UserId }).IsUnique();
+            });
+
+            b.Entity<MessageAttachment>(e =>
+            {
+                e.HasKey(x => x.Id);
+
+                e.Property(x => x.FileName).HasMaxLength(255).IsRequired();
+                e.Property(x => x.ContentType).HasMaxLength(128).IsRequired();
+                e.Property(x => x.StoragePath).HasMaxLength(1024).IsRequired();
+            });
+
         }
     }
 }

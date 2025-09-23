@@ -1,4 +1,5 @@
 ﻿using BoardMgmt.Application;
+using BoardMgmt.Application.Common.Interfaces; // IFileStorage
 using BoardMgmt.Domain.Identity;
 using BoardMgmt.Infrastructure;
 using BoardMgmt.Infrastructure.Persistence;
@@ -14,14 +15,13 @@ using Microsoft.OpenApi.Models;
 using System.Reflection;
 using System.Text;
 using BoardMgmt.WebApi.Auth;
-
-// ✅ ADD THIS
 using Serilog;
+using Microsoft.Extensions.DependencyInjection.Extensions; // for RemoveAll
 
 var builder = WebApplication.CreateBuilder(args);
 var config = builder.Configuration;
 
-// ✅ ADD THIS (Serilog as the logging provider, reading from appsettings.json)
+// ✅ Serilog logging
 builder.Logging.ClearProviders();
 builder.Host.UseSerilog((ctx, lc) => lc
     .ReadFrom.Configuration(ctx.Configuration)
@@ -31,6 +31,19 @@ builder.Host.UseSerilog((ctx, lc) => lc
 /// Infrastructure then Application
 builder.Services.AddInfrastructure(config);
 builder.Services.AddApplication();
+
+// ---- File storage provider selection ----
+builder.Services.RemoveAll<IFileStorage>(); // remove default if Infrastructure registered one
+var uploadsProvider = builder.Configuration["Uploads:Provider"] ?? "Local";
+
+if (uploadsProvider.Equals("Local", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddSingleton<IFileStorage, BoardMgmt.Infrastructure.Storage.LocalFileStorage>();
+}
+else
+{
+    builder.Services.AddSingleton<IFileStorage, BoardMgmt.Infrastructure.Files.DiskFileStorage>();
+}
 
 // JWT
 var issuer = config["Jwt:Issuer"] ?? "BoardMgmt";
@@ -59,7 +72,6 @@ builder.Services
         };
     });
 
-// (you can keep this or remove; you also use AddAuthorizationBuilder below)
 builder.Services.AddAuthorization();
 
 builder.Services.AddCors(opt =>
@@ -106,12 +118,10 @@ builder.Services
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(opt =>
 {
-    // Use fully qualified names so types like PermissionDto from different namespaces don't collide
     opt.CustomSchemaIds(t => t.FullName?.Replace('+', '.'));
 
     opt.SwaggerDoc("v1", new OpenApiInfo { Title = "BoardMgmt.WebApi", Version = "v1" });
 
-    // JWT auth in Swagger UI
     opt.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
@@ -133,7 +143,6 @@ builder.Services.AddSwaggerGen(opt =>
         }
     });
 
-    // Include XML comments (optional; guard if file doesn't exist)
     var xml = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
     var xmlPath = Path.Combine(AppContext.BaseDirectory, xml);
     if (File.Exists(xmlPath))
@@ -144,17 +153,15 @@ builder.Services.AddSingleton<ExceptionHandlingMiddleware>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.Configure<FormOptions>(o => { o.MultipartBodyLengthLimit = 50 * 1024 * 1024; });
 
-// ✅ Serilog already configured above
 var app = builder.Build();
 
-// Static files (uploads)
+// Ensure /wwwroot/uploads exists
 var webRoot = app.Environment.WebRootPath;
 if (string.IsNullOrWhiteSpace(webRoot))
     webRoot = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
 Directory.CreateDirectory(Path.Combine(webRoot, "uploads"));
 
 // auto-migrate + seed
-
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
