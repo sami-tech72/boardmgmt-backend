@@ -7,7 +7,8 @@ public record RegisterCommand(
     string Password,
     string FirstName,
     string LastName,
-    string? Role = null // single role NAME (optional)
+    string? Role = null, // single role NAME (optional)
+    Guid? DepartmentId = null // 👈 NEW
 ) : IRequest<RegisterResponse>;
 
 public record RegisterResponse(
