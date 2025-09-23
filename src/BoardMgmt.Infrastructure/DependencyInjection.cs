@@ -101,6 +101,7 @@ namespace BoardMgmt.Infrastructure
             services.AddScoped<DbContext>(sp => sp.GetRequiredService<AppDbContext>());
 
             // Current user accessor
+            services.AddHttpContextAccessor();
             services.AddScoped<ICurrentUser, CurrentUser>();
 
             // ONE PermissionService per scope, exposed via both interfaces

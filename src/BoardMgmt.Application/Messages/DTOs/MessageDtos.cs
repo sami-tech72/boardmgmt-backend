@@ -1,6 +1,14 @@
 ﻿namespace BoardMgmt.Application.Messages.DTOs;
 
-public record MessageAttachmentDto(Guid Id, string FileName, string ContentType, long FileSize);
+public record MinimalUserDto(Guid Id, string? FullName, string? Email);
+
+public record MessageAttachmentDto(
+    Guid AttachmentId,
+    string FileName,
+    string ContentType,
+    long FileSize
+);
+
 public record MessageRecipientDto(Guid UserId, bool IsRead, DateTime? ReadAtUtc);
 
 public record MessageDto(
@@ -17,10 +25,34 @@ public record MessageDto(
     DateTime UpdatedAtUtc,
     IReadOnlyList<MessageRecipientDto> Recipients,
     IReadOnlyList<MessageAttachmentDto> Attachments,
-    bool HasAttachments // <-- add this
+    bool HasAttachments
+);
 
+public record MessageListItemVm(
+    Guid Id,
+    string Subject,
+    string Preview,
+    MinimalUserDto? FromUser,
+    string Priority,
+    string Status,
+    DateTime CreatedAtUtc,
+    DateTime? SentAtUtc,
+    DateTime UpdatedAtUtc,
+    bool HasAttachments
+);
 
-
+public record MessageDetailVm(
+    Guid Id,
+    string Subject,
+    string Body,
+    MinimalUserDto? FromUser,
+    IReadOnlyList<MinimalUserDto> Recipients,
+    string Priority,
+    string Status,
+    DateTime CreatedAtUtc,
+    DateTime? SentAtUtc,
+    DateTime UpdatedAtUtc,
+    IReadOnlyList<MessageAttachmentDto> Attachments
 );
 
 public record PagedResult<T>(IReadOnlyList<T> Items, int Total);
