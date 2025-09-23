@@ -22,28 +22,32 @@ public class MessagesController : ControllerBase
         _files = files;
     }
 
-    // GET /api/messages
     [HttpGet]
     public async Task<IActionResult> List(
-        [FromQuery] Guid? forUserId,
-        [FromQuery] Guid? sentByUserId,
-        [FromQuery] string? q,
-        [FromQuery] string? priority,
-        [FromQuery] string? status,
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 20,
-        CancellationToken ct = default)
+       [FromQuery] Guid? forUserId,
+       [FromQuery] Guid? sentByUserId,
+       [FromQuery] string? q,
+       [FromQuery] string? priority,
+       [FromQuery] string? status,
+       [FromQuery] int page = 1,
+       [FromQuery] int pageSize = 20,
+       CancellationToken ct = default)
     {
-        var res = await _mediator.Send(new ListMessagesQuery(forUserId, sentByUserId, q, priority, status, page, pageSize), ct);
-        return this.OkApi(res);
+        var res = await _mediator.Send(
+            new ListMessageItemsQuery(forUserId, sentByUserId, q, priority, status, page, pageSize),
+            ct);
+
+        // Angular expects { items, total }
+        return this.OkApi(new { items = res.Items, total = res.Total }, "Messages loaded");
     }
 
     // GET /api/messages/{id}
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> Get(Guid id, CancellationToken ct)
     {
-        var res = await _mediator.Send(new GetMessageQuery(id), ct);
-        return this.OkApi(res);
+        var res = await _mediator.Send(new GetMessageViewQuery(id), ct);
+        if (res is null) return this.NotFoundApi("not_found", "Message not found");
+        return this.OkApi(res, "Message loaded");
     }
 
     // POST /api/messages

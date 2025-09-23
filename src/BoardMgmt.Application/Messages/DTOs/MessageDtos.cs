@@ -8,15 +8,19 @@ public record MessageDto(
     Guid SenderId,
     string Subject,
     string Body,
-    string Priority,         // "Low|Normal|High"
+    string Priority,
     bool ReadReceiptRequested,
     bool IsConfidential,
-    string Status,           // "Draft|Sent"
+    string Status,
     DateTime? SentAtUtc,
     DateTime CreatedAtUtc,
     DateTime UpdatedAtUtc,
     IReadOnlyList<MessageRecipientDto> Recipients,
-    IReadOnlyList<MessageAttachmentDto> Attachments
+    IReadOnlyList<MessageAttachmentDto> Attachments,
+    bool HasAttachments // <-- add this
+
+
+
 );
 
 public record PagedResult<T>(IReadOnlyList<T> Items, int Total);

@@ -8,13 +8,16 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
+// ⬇️ Make sure this matches where GetUsersQuery lives
+using BoardMgmt.Application.Users.Queries; // e.g., GetUsersQuery namespace
+
 namespace BoardMgmt.WebApi.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
 public class AuthController(ISender mediator) : ControllerBase
 {
-    // GET /api/auth?q=&page=&pageSize=&activeOnly=&roles=Admin,BoardMember
+    // GET /api/auth?q=&page=&pageSize=&activeOnly=&roles=Admin,BoardMember&departmentId=
     [HttpGet]
     [Authorize(Policy = "Users.View")]
     public async Task<IActionResult> GetAll(
@@ -22,8 +25,8 @@ public class AuthController(ISender mediator) : ControllerBase
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
         [FromQuery] bool? activeOnly = null,
-        [FromQuery] string? roles = null, // comma separated names
-         [FromQuery] Guid? departmentId = null,
+        [FromQuery] string? roles = null,        // comma separated names
+        [FromQuery] Guid? departmentId = null,
         CancellationToken ct = default
     )
     {
@@ -36,9 +39,34 @@ public class AuthController(ISender mediator) : ControllerBase
             ct
         );
 
-        // Return a paged envelope { items, total } so Angular can read res.items/res.total
-        return this.OkApi(result.Items, "Users loaded");
+        // ✅ Return a paged envelope the Angular code expects
+        return this.OkApi(new { items = result.Items, total = result.Total }, "Users loaded");
+    }
 
+    // GET /api/auth/search?query=ali&take=10
+    // Returns minimal shape for autocomplete: [{ id, name, email }]
+    [HttpGet("search")]
+    [Authorize(Policy = "Users.View")]
+    public async Task<IActionResult> Search(
+        [FromQuery(Name = "query")] string? query,
+        [FromQuery] int take = 10,
+        CancellationToken ct = default
+    )
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            return this.OkApi(Array.Empty<object>(), "No query");
+
+        // Use page 1 with small pageSize=take; optionally pass activeOnly=true
+        var res = await mediator.Send(new GetUsersQuery(query, 1, Math.Clamp(take, 1, 50), true, new List<string>(), null), ct);
+
+        var minimal = res.Items.Select(u => new
+        {
+            id = u.Id.ToString(),
+            name = u.FullName,
+            email = u.Email
+        }).ToList();
+
+        return this.OkApi(minimal, "Search results");
     }
 
     // POST /api/auth/register
@@ -65,9 +93,9 @@ public class AuthController(ISender mediator) : ControllerBase
         return this.OkApi(new { result.Token, result.UserId, result.Email, result.FullName }, "Login successful");
     }
 
-    // PUT /api/auth/{id}/roles  (adjust policy as you prefer)
+    // PUT /api/auth/{id}/roles
     [HttpPut("{id}/roles")]
-    [Authorize] // or "Users.ManageRoles" if you have it
+    [Authorize] // or [Authorize(Policy = "Users.ManageRoles")]
     public async Task<IActionResult> AssignRoles(string id, [FromBody] AssignRolesBody body, CancellationToken ct)
     {
         var result = await mediator.Send(new AssignRoleCommand(id, body.Roles), ct);
@@ -77,23 +105,24 @@ public class AuthController(ISender mediator) : ControllerBase
         return this.OkApi(new { userId = id, roles = result.AppliedRoles }, "Roles updated");
     }
 
+    public record AssignRolesBody(IReadOnlyList<string> Roles);
+
     public record UpdateUserBody(
-     string? FirstName,
-     string? LastName,
-     string? Email,
-     string? NewPassword,
-     string? Role,
-     Guid? DepartmentId,
-     bool? IsActive
+        string? FirstName,
+        string? LastName,
+        string? Email,
+        string? NewPassword,
+        string? Role,
+        Guid? DepartmentId,
+        bool? IsActive
     );
 
-
-
+    // PUT /api/auth/{id}
     [HttpPut("{id}")]
     [Authorize(Policy = "Users.Update")]
     public async Task<IActionResult> UpdateUser(string id, [FromBody] UpdateUserBody body, CancellationToken ct)
     {
-        var cmd = new UpdateUserCommand(          // ← FIX: pass id here
+        var cmd = new UpdateUserCommand( // ✅ include id
             id,
             body.FirstName,
             body.LastName,
@@ -110,9 +139,4 @@ public class AuthController(ISender mediator) : ControllerBase
 
         return this.OkApi(new { result.UserId }, "User updated");
     }
-
-
-
-
-
 }

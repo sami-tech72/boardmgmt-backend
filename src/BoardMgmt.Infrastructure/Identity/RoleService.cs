@@ -1,4 +1,9 @@
-﻿using BoardMgmt.Application.Common.Interfaces;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Application.Roles.Commands.SetRolePermissions;
 using BoardMgmt.Domain.Identity;
 using BoardMgmt.Infrastructure.Persistence;
@@ -20,6 +25,7 @@ namespace BoardMgmt.Infrastructure.Identity
             _db = db;
         }
 
+        // Optional convenience (not required by IRoleService)
         public Task<bool> RoleExistsAsync(string name, CancellationToken ct)
             => _roles.RoleExistsAsync(name);
 
@@ -36,7 +42,9 @@ namespace BoardMgmt.Infrastructure.Identity
         }
 
         public async Task<IReadOnlyList<(string Id, string Name)>> GetAllAsync(CancellationToken ct)
-            => await _roles.Roles.Select(r => new ValueTuple<string, string>(r.Id, r.Name!)).ToListAsync(ct);
+            => await _roles.Roles
+                .Select(r => new ValueTuple<string, string>(r.Id, r.Name!))
+                .ToListAsync(ct);
 
         public async Task<(bool ok, string[] errors)> RenameRoleAsync(string roleId, string name, CancellationToken ct)
         {
@@ -53,11 +61,11 @@ namespace BoardMgmt.Infrastructure.Identity
 
         public async Task<(bool ok, string[] errors)> DeleteRoleAsync(string roleId, CancellationToken ct)
         {
-            // remove our custom table rows
+            // Remove our custom table rows
             var olds = await _db.RolePermissions.Where(rp => rp.RoleId == roleId).ToListAsync(ct);
             _db.RolePermissions.RemoveRange(olds);
 
-            // remove role-level permission claims
+            // Remove role-level permission claims
             var oldClaims = await _db.Set<IdentityRoleClaim<string>>()
                 .Where(rc => rc.RoleId == roleId && rc.ClaimType == PermissionClaimType)
                 .ToListAsync(ct);
@@ -118,7 +126,7 @@ namespace BoardMgmt.Infrastructure.Identity
 
             await _db.SaveChangesAsync(ct);
 
-            // 3) Mirror to affected users’ UserClaims (useful for future tokens / inspection)
+            // 3) Mirror to affected users’ UserClaims
             await UpdateUsersPermissionClaimsForRoleAsync(roleId, ct);
 
             return entities.Select(e => new SavedRolePermission(e.Id, e.Module, e.Allowed)).ToList();
@@ -130,64 +138,86 @@ namespace BoardMgmt.Infrastructure.Identity
             IEnumerable<(AppModule module, Permission allowed)> items,
             CancellationToken ct)
         {
-            await using var tx = await _db.Database.BeginTransactionAsync(ct);
+            // Use resilient execution strategy to allow retries + a user transaction
+            var strategy = _db.Database.CreateExecutionStrategy();
+
             try
             {
-                var role = await _roles.FindByIdAsync(roleId);
-                if (role is null) return (false, new[] { "Role not found." });
-
-                role.Name = name;
-                role.NormalizedName = name.ToUpperInvariant();
-                var rename = await _roles.UpdateAsync(role);
-                if (!rename.Succeeded)
-                    return (false, rename.Errors.Select(e => e.Description).ToArray());
-
-                // Replace RolePermissions
-                var olds = await _db.RolePermissions.Where(rp => rp.RoleId == roleId).ToListAsync(ct);
-                _db.RolePermissions.RemoveRange(olds);
-
-                var normalized = items
-                    .Select(i => (i.module, allowed: i.allowed.Normalize()))
-                    .Where(i => i.allowed != Permission.None)
-                    .ToList();
-
-                var ents = normalized.Select(i => new RolePermission
+                return await strategy.ExecuteAsync<(bool ok, string[] errors)>(async () =>
                 {
-                    RoleId = roleId,
-                    Module = i.module,
-                    Allowed = i.allowed
-                }).ToList();
-
-                if (ents.Count > 0)
-                    await _db.RolePermissions.AddRangeAsync(ents, ct);
-
-                // Replace RoleClaims snapshot
-                var oldClaims = await _db.Set<IdentityRoleClaim<string>>()
-                    .Where(rc => rc.RoleId == roleId && rc.ClaimType == PermissionClaimType)
-                    .ToListAsync(ct);
-                _db.RemoveRange(oldClaims);
-
-                foreach (var e in ents)
-                {
-                    _db.Add(new IdentityRoleClaim<string>
+                    await using var tx = await _db.Database.BeginTransactionAsync(ct);
+                    try
                     {
-                        RoleId = roleId,
-                        ClaimType = PermissionClaimType,
-                        ClaimValue = $"{(int)e.Module}:{(int)e.Allowed}"
-                    });
-                }
+                        // Rename via RoleManager (must share SAME scoped AppDbContext)
+                        var role = await _roles.FindByIdAsync(roleId);
+                        if (role is null)
+                        {
+                            await tx.RollbackAsync(ct);
+                            return (false, new[] { "Role not found." });
+                        }
 
-                await _db.SaveChangesAsync(ct);
-                await tx.CommitAsync(ct);
+                        role.Name = name;
+                        role.NormalizedName = name.ToUpperInvariant();
 
-                // Mirror to users
-                await UpdateUsersPermissionClaimsForRoleAsync(roleId, ct);
+                        var renameRes = await _roles.UpdateAsync(role);
+                        if (!renameRes.Succeeded)
+                        {
+                            await tx.RollbackAsync(ct);
+                            return (false, renameRes.Errors.Select(e => e.Description).ToArray());
+                        }
 
-                return (true, Array.Empty<string>());
+                        // Replace RolePermissions
+                        var olds = await _db.RolePermissions.Where(rp => rp.RoleId == roleId).ToListAsync(ct);
+                        _db.RolePermissions.RemoveRange(olds);
+
+                        var normalized = items
+                            .Select(i => (i.module, allowed: i.allowed.Normalize()))
+                            .Where(i => i.allowed != Permission.None)
+                            .ToList();
+
+                        var ents = normalized.Select(i => new RolePermission
+                        {
+                            RoleId = roleId,
+                            Module = i.module,
+                            Allowed = i.allowed
+                        }).ToList();
+
+                        if (ents.Count > 0)
+                            await _db.RolePermissions.AddRangeAsync(ents, ct);
+
+                        // Replace RoleClaims snapshot
+                        var oldClaims = await _db.Set<IdentityRoleClaim<string>>()
+                            .Where(rc => rc.RoleId == roleId && rc.ClaimType == PermissionClaimType)
+                            .ToListAsync(ct);
+                        _db.RemoveRange(oldClaims);
+
+                        foreach (var e in ents)
+                        {
+                            _db.Add(new IdentityRoleClaim<string>
+                            {
+                                RoleId = roleId,
+                                ClaimType = PermissionClaimType,
+                                ClaimValue = $"{(int)e.Module}:{(int)e.Allowed}"
+                            });
+                        }
+
+                        await _db.SaveChangesAsync(ct);
+                        await tx.CommitAsync(ct);
+
+                        // Mirror to affected users (outside tx is fine; still under strategy scope)
+                        await UpdateUsersPermissionClaimsForRoleAsync(roleId, ct);
+
+                        return (true, Array.Empty<string>());
+                    }
+                    catch
+                    {
+                        await tx.RollbackAsync(ct);
+                        throw; // allow strategy to retry
+                    }
+                });
             }
             catch (Exception ex)
             {
-                await tx.RollbackAsync(ct);
                 return (false, new[] { ex.Message });
             }
         }
@@ -222,8 +252,10 @@ namespace BoardMgmt.Infrastructure.Identity
 
         // --- helpers ---
 
-        /// For each user in roleId, recompute union of ALL their roles’ permissions and
+        /// <summary>
+        /// For each user in the given role, recompute union of ALL their roles’ permissions and
         /// replace their type="permission" user claims accordingly.
+        /// </summary>
         private async Task UpdateUsersPermissionClaimsForRoleAsync(string roleId, CancellationToken ct)
         {
             // All affected users
@@ -235,7 +267,7 @@ namespace BoardMgmt.Infrastructure.Identity
 
             if (userIds.Count == 0) return;
 
-            // Preload all role-perms and role memberships
+            // Preload all role memberships for these users
             var memberships = await _db.UserRoles
                 .Where(ur => userIds.Contains(ur.UserId))
                 .GroupBy(ur => ur.UserId)
@@ -250,9 +282,11 @@ namespace BoardMgmt.Infrastructure.Identity
 
             var byRole = rolePermRows
                 .GroupBy(r => r.RoleId)
-                .ToDictionary(g => g.Key,
+                .ToDictionary(
+                    g => g.Key,
                     g => g.GroupBy(x => x.Module)
-                          .ToDictionary(mg => mg.Key, mg => mg.Select(x => x.Allowed).Aggregate(0, (a, b) => a | b)));
+                          .ToDictionary(mg => mg.Key, mg => mg.Select(x => x.Allowed).Aggregate(0, (a, b) => a | b))
+                );
 
             // For each user, compute union mask per module from all of their roles
             foreach (var uid in userIds)
