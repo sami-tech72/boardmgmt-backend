@@ -1,32 +1,8 @@
-﻿namespace BoardMgmt.Application.Messages.DTOs;
+namespace BoardMgmt.Application.Messages.DTOs;
 
 public record MinimalUserDto(Guid Id, string? FullName, string? Email);
-
-public record MessageAttachmentDto(
-    Guid AttachmentId,
-    string FileName,
-    string ContentType,
-    long FileSize
-);
-
+public record MessageAttachmentDto(Guid AttachmentId, string FileName, string ContentType, long FileSize);
 public record MessageRecipientDto(Guid UserId, bool IsRead, DateTime? ReadAtUtc);
-
-public record MessageDto(
-    Guid Id,
-    Guid SenderId,
-    string Subject,
-    string Body,
-    string Priority,
-    bool ReadReceiptRequested,
-    bool IsConfidential,
-    string Status,
-    DateTime? SentAtUtc,
-    DateTime CreatedAtUtc,
-    DateTime UpdatedAtUtc,
-    IReadOnlyList<MessageRecipientDto> Recipients,
-    IReadOnlyList<MessageAttachmentDto> Attachments,
-    bool HasAttachments
-);
 
 public record MessageListItemVm(
     Guid Id,
@@ -53,6 +29,21 @@ public record MessageDetailVm(
     DateTime? SentAtUtc,
     DateTime UpdatedAtUtc,
     IReadOnlyList<MessageAttachmentDto> Attachments
+);
+
+public record MessageBubbleVm(
+    Guid Id,
+    MinimalUserDto FromUser,
+    string Body,
+    DateTime CreatedAtUtc,
+    IReadOnlyList<MessageAttachmentDto> Attachments
+);
+
+public record MessageThreadVm(
+    Guid AnchorMessageId,
+    string Subject,
+    IReadOnlyList<MinimalUserDto> Participants,
+    IReadOnlyList<MessageBubbleVm> Items
 );
 
 public record PagedResult<T>(IReadOnlyList<T> Items, int Total);

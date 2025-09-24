@@ -9,10 +9,10 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
 
-namespace BoardMgmt.Infrastructure.Migrations
+namespace BoardMgmt.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20250923193218_InitialCreate")]
+    [Migration("20250924092957_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />

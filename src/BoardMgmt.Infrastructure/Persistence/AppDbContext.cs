@@ -29,6 +29,7 @@ namespace BoardMgmt.Infrastructure.Persistence
         public DbSet<Department> Departments => Set<Department>();
 
         public DbSet<Message> Messages => Set<Message>();
+        public DbSet<AppUser> AppUser => Set<AppUser>();
         public DbSet<MessageRecipient> MessageRecipients => Set<MessageRecipient>();
         public DbSet<MessageAttachment> MessageAttachments => Set<MessageAttachment>();
 
