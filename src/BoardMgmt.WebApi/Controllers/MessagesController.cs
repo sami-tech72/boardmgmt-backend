@@ -1,202 +1,116 @@
-﻿using BoardMgmt.Application.Common.Interfaces;
+using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Application.Messages.Commands;
+using BoardMgmt.Application.Messages.DTOs;
 using BoardMgmt.Application.Messages.Queries;
-using BoardMgmt.WebApi.Common.Http;
-using BoardMgmt.WebApi.Controllers.Messages;
+using BoardMgmt.Domain.Messages;
+using BoardMgmt.WebApi.Hubs;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
-
-namespace BoardMgmt.WebApi.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class MessagesController : ControllerBase
 {
-    private readonly IMediator _mediator;
-    private readonly IFileStorage _files;
-    private readonly DbContext _db;
-    private readonly ICurrentUser _currentUser;
+    private readonly ISender _mediator;
+    private readonly IHubContext<MessagesHub> _hub;
+    private readonly ICurrentUser _current;
+    public MessagesController(ISender mediator, IHubContext<MessagesHub> hub, ICurrentUser current)
+    { _mediator = mediator; _hub = hub; _current = current; }
 
-    public MessagesController(IMediator mediator, IFileStorage files, DbContext db, ICurrentUser currentUser)
-    {
-        _mediator = mediator;
-        _files = files;
-        _db = db;
-        _currentUser = currentUser;
-    }
+    private Guid CurrentUserId => Guid.TryParse(_current.UserId, out var g)
+        ? g : throw new UnauthorizedAccessException("No valid user id");
 
-    private Guid GetUserIdOrThrow()
-    {
-        if (!_currentUser.IsAuthenticated || string.IsNullOrWhiteSpace(_currentUser.UserId))
-            throw new UnauthorizedAccessException();
+    public record CreateMessageBody(string Subject, string Body, string Priority,
+        bool ReadReceiptRequested, bool IsConfidential, IReadOnlyList<string> RecipientIds, bool AsDraft);
 
-        return Guid.Parse(_currentUser.UserId);
-    }
-
-
-    // GET /api/messages/{id}/thread
-    [HttpGet("{id:guid}/thread")]
-    public async Task<IActionResult> Thread(Guid id, CancellationToken ct)
-    {
-        // TODO: replace with your auth current user id
-        var currentUserId = GetUserIdOrThrow();
-
-        var vm = await _mediator.Send(new GetMessageThreadQuery(id, currentUserId), ct);
-        return this.OkApi(vm, "Thread loaded");
-    }
-
-
-    // GET /api/messages
     [HttpGet]
-    public async Task<IActionResult> List(
-        [FromQuery] Guid? forUserId,
-        [FromQuery] Guid? sentByUserId,
-        [FromQuery] string? q,
-        [FromQuery] string? priority,
-        [FromQuery] string? status,
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 20,
-        CancellationToken ct = default)
-    {
-        var res = await _mediator.Send(
-            new ListMessageItemsQuery(forUserId, sentByUserId, q, priority, status, page, pageSize),
-            ct);
+    public Task<PagedResult<MessageListItemVm>> List([FromQuery] Guid? forUserId, [FromQuery] Guid? sentByUserId,
+        [FromQuery] string? q, [FromQuery] string? priority, [FromQuery] string? status,
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 20) =>
+        _mediator.Send(new ListMessageItemsQuery(forUserId, sentByUserId, q, priority, status, page, pageSize));
 
-        return this.OkApi(new { items = res.Items, total = res.Total }, "Messages loaded");
-    }
-
-    // GET /api/messages/{id}
     [HttpGet("{id:guid}")]
-    public async Task<IActionResult> Get(Guid id, CancellationToken ct)
-    {
-        var res = await _mediator.Send(new GetMessageViewQuery(id), ct);
-        if (res is null) return this.NotFoundApi("not_found", "Message not found");
-        return this.OkApi(res, "Message loaded");
-    }
+    public Task<MessageDetailVm?> Get(Guid id) => _mediator.Send(new GetMessageViewQuery(id));
 
-    // POST /api/messages
+    [HttpGet("{id:guid}/thread")]
+    public Task<MessageThreadVm> Thread(Guid id) => _mediator.Send(new GetMessageThreadQuery(id, CurrentUserId));
+
     [HttpPost]
-    public async Task<IActionResult> Create([FromBody] CreateMessageBody body, CancellationToken ct)
+    public async Task<ActionResult<object>> Create([FromBody] CreateMessageBody body)
     {
-        var senderId = GetUserIdOrThrow();
+        var guids = body.RecipientIds.Where(x => Guid.TryParse(x, out _)).Select(Guid.Parse).Distinct().ToList();
+        var id = await _mediator.Send(new CreateMessageCommand(CurrentUserId, body.Subject, body.Body,
+            body.Priority, body.ReadReceiptRequested, body.IsConfidential, guids, body.AsDraft));
 
-        var res = await _mediator.Send(new CreateMessageCommand(
-            senderId,
-            body.Subject,
-            body.Body,
-            body.Priority,
-            body.ReadReceiptRequested,
-            body.IsConfidential,
-            body.RecipientIds,
-            body.asDraft
-        ), ct);
+        if (!body.AsDraft)
+            foreach (var rid in guids)
+                await _hub.Clients.Group($"user:{rid}").SendAsync("NewMessage", new { id });
 
-        return this.OkApi(res, "Message created");
+        return Ok(new { id });
     }
 
-
-    // PUT /api/messages/{id}
-    [HttpPut("{id:guid}")]
-    public async Task<IActionResult> Update(Guid id, [FromBody] UpdateMessageBody body, CancellationToken ct)
-    {
-        var res = await _mediator.Send(new UpdateMessageCommand(
-            id,
-            body.Subject,
-            body.Body,
-            body.Priority,
-            body.ReadReceiptRequested,
-            body.IsConfidential,
-            body.RecipientIds
-        ), ct);
-
-        return this.OkApi(res, "Message updated");
-    }
-
-    // DELETE /api/messages/{id}
-    [HttpDelete("{id:guid}")]
-    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
-    {
-        var ok = await _mediator.Send(new DeleteMessageCommand(id), ct);
-        return ok ? this.OkApi(new { id }, "Message deleted")
-                  : this.NotFoundApi("not_found", "Message not found");
-    }
-
-    // POST /api/messages/{id}/send
     [HttpPost("{id:guid}/send")]
-    public async Task<IActionResult> Send(Guid id, CancellationToken ct)
+    public async Task<ActionResult<object>> Send(Guid id)
     {
-        var res = await _mediator.Send(new SendMessageCommand(id), ct);
-        return this.OkApi(res, "Message sent");
+        var ok = await _mediator.Send(new SendMessageCommand(id));
+        if (!ok) return NotFound();
+        return Ok(new { id });
     }
 
-    // POST /api/messages/{id}/read
+    [HttpPut("{id:guid}")]
+    public async Task<ActionResult<object>> Update(Guid id, [FromBody] CreateMessageBody body)
+    {
+        var guids = body.RecipientIds.Where(x => Guid.TryParse(x, out _)).Select(Guid.Parse).Distinct().ToList();
+        var ok = await _mediator.Send(new UpdateMessageCommand(id, body.Subject, body.Body, body.Priority,
+            body.ReadReceiptRequested, body.IsConfidential, guids));
+        return ok ? Ok(new { id }) : NotFound();
+    }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<ActionResult<object>> Delete(Guid id)
+        => (await _mediator.Send(new DeleteMessageCommand(id))) ? Ok(new { id }) : NotFound();
+
     [HttpPost("{id:guid}/read")]
-    public async Task<IActionResult> MarkRead(Guid id, CancellationToken ct)
+    public async Task<ActionResult<object>> MarkRead(Guid id)
     {
-        var userId = GetUserIdOrThrow();
-        var ok = await _mediator.Send(new MarkMessageReadCommand(id, userId), ct);
-
-        return ok ? this.OkApi(new { id }, "Marked as read")
-                  : this.NotFoundApi("not_recipient", "Not a recipient or message not found");
+        var ok = await _mediator.Send(new MarkMessageReadCommand(id, CurrentUserId));
+        if (!ok) return NotFound();
+        await _hub.Clients.Group($"user:{CurrentUserId}").SendAsync("ReadReceipt", new { messageId = id, userId = CurrentUserId });
+        return Ok(new { id });
     }
 
-
-    // POST /api/messages/{id}/attachments
-    [HttpPost("{id:guid}/attachments")]
     [RequestSizeLimit(50_000_000)]
-    public async Task<IActionResult> Upload(Guid id, CancellationToken ct)
+    [HttpPost("{id:guid}/attachments")]
+    public async Task<ActionResult<IEnumerable<object>>> Upload(Guid id)
     {
         if (!Request.HasFormContentType || Request.Form.Files.Count == 0)
-            return this.BadRequestApi("no_files", "No files uploaded");
+            return BadRequest(new { error = "No files uploaded" });
 
-        var msg = await _db.Set<BoardMgmt.Domain.Messages.Message>()
-            .Include(m => m.Attachments)
-            .FirstOrDefaultAsync(m => m.Id == id, ct);
-
-        if (msg is null) return this.NotFoundApi("not_found", "Message not found");
-
-        var savedDtos = new List<object>();
-
-        foreach (var file in Request.Form.Files)
+        var toSave = new List<(string FileName, string ContentType, long FileSize, string StoragePath)>();
+        Directory.CreateDirectory(Path.Combine("storage", "messages", id.ToString()));
+        foreach (var f in Request.Form.Files)
         {
-            await using var s = file.OpenReadStream();
-            var path = await _files.SaveAsync("messages", file.FileName, s, ct);
-
-            var att = new BoardMgmt.Domain.Messages.MessageAttachment
-            {
-                Id = Guid.NewGuid(),
-                MessageId = msg.Id,
-                FileName = file.FileName,
-                ContentType = file.ContentType ?? "application/octet-stream",
-                FileSize = file.Length,
-                StoragePath = path
-            };
-            msg.Attachments.Add(att);
-
-            savedDtos.Add(new
-            {
-                attachmentId = att.Id,
-                fileName = att.FileName,
-                contentType = att.ContentType,
-                fileSize = att.FileSize
-            });
+            var path = Path.Combine("storage", "messages", id.ToString(), f.FileName);
+            await using var fs = System.IO.File.Create(path);
+            await f.CopyToAsync(fs);
+            toSave.Add((f.FileName, f.ContentType ?? "application/octet-stream", f.Length, path));
         }
 
-        await _db.SaveChangesAsync(ct);
-        return this.OkApi(savedDtos, "Attachments uploaded");
+        await _mediator.Send(new AddMessageAttachmentsCommand(id, toSave));
+        var dtos = toSave.Select(x => new { attachmentId = Guid.NewGuid(), fileName = x.FileName, contentType = x.ContentType, fileSize = x.FileSize });
+        return Ok(dtos);
     }
 
-    // GET /api/messages/{id}/attachments/{attachmentId}
     [HttpGet("{id:guid}/attachments/{attachmentId:guid}")]
-    public async Task<IActionResult> Download(Guid id, Guid attachmentId, CancellationToken ct)
+    public async Task<IActionResult> Download(Guid id, Guid attachmentId, [FromServices] DbContext db)
     {
-        var att = await _db.Set<BoardMgmt.Domain.Messages.MessageAttachment>()
-            .FirstOrDefaultAsync(a => a.Id == attachmentId && a.MessageId == id, ct);
-
-        if (att is null) return this.NotFoundApi("not_found", "Attachment not found");
-
-        var stream = await _files.OpenAsync(att.StoragePath, ct);
+        var att = await db.Set<MessageAttachment>().FirstOrDefaultAsync(a => a.Id == attachmentId && a.MessageId == id);
+        if (att is null) return NotFound();
+        var stream = System.IO.File.OpenRead(att.StoragePath);
         return File(stream, att.ContentType, att.FileName);
     }
 }

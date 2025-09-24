@@ -4,19 +4,20 @@ using BoardMgmt.Domain.Identity;
 using BoardMgmt.Infrastructure;
 using BoardMgmt.Infrastructure.Persistence;
 using BoardMgmt.Infrastructure.Persistence.Seed;
+using BoardMgmt.WebApi.Auth;
 using BoardMgmt.WebApi.Common.Http;
+using BoardMgmt.WebApi.Hubs;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection.Extensions; // for RemoveAll
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Serilog;
 using System.Reflection;
 using System.Text;
-using BoardMgmt.WebApi.Auth;
-using Serilog;
-using Microsoft.Extensions.DependencyInjection.Extensions; // for RemoveAll
 
 var builder = WebApplication.CreateBuilder(args);
 var config = builder.Configuration;
@@ -73,16 +74,17 @@ builder.Services
     });
 
 builder.Services.AddAuthorization();
-
+builder.Services.AddSignalR();
 builder.Services.AddCors(opt =>
 {
     opt.AddPolicy("ui", p => p
         .AllowAnyHeader()
         .AllowAnyMethod()
         .AllowCredentials()
+        .SetIsOriginAllowed(_ => true)
         .WithOrigins(
             config.GetSection("Cors:AllowedOrigins").Get<string[]>()
-            ?? new[] { "http://localhost:4200", "http://localhost:4000" }
+            ?? new[] { "http://localhost:4200", "https://localhost:4200" }
         ));
 });
 
@@ -189,4 +191,5 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<MessagesHub>("/hubs/messages");
 app.Run();
