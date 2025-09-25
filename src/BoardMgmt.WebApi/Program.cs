@@ -191,5 +191,5 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
-app.MapHub<MessagesHub>("/hubs/messages");
+app.MapHub<ChatHub>("/hubs/chat");
 app.Run();

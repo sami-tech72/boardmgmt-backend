@@ -26,6 +26,22 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "Chat_Conversations",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    Type = table.Column<int>(type: "int", nullable: false),
+                    Name = table.Column<string>(type: "nvarchar(120)", maxLength: 120, nullable: true),
+                    IsPrivate = table.Column<bool>(type: "bit", nullable: false),
+                    CreatedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: false),
+                    UpdatedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Chat_Conversations", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "Departments",
                 columns: table => new
                 {
@@ -349,6 +365,70 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "Chat_ConversationMembers",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    ConversationId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    UserId = table.Column<string>(type: "nvarchar(450)", maxLength: 450, nullable: false),
+                    Role = table.Column<int>(type: "int", nullable: false),
+                    JoinedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: false),
+                    LastReadAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Chat_ConversationMembers", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Chat_ConversationMembers_AspNetUsers_UserId",
+                        column: x => x.UserId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_Chat_ConversationMembers_Chat_Conversations_ConversationId",
+                        column: x => x.ConversationId,
+                        principalTable: "Chat_Conversations",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Chat_Messages",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    ConversationId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    SenderId = table.Column<string>(type: "nvarchar(450)", maxLength: 450, nullable: false),
+                    ThreadRootId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
+                    BodyHtml = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    CreatedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: false),
+                    EditedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
+                    DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Chat_Messages", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Chat_Messages_AspNetUsers_SenderId",
+                        column: x => x.SenderId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "FK_Chat_Messages_Chat_Conversations_ConversationId",
+                        column: x => x.ConversationId,
+                        principalTable: "Chat_Conversations",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_Chat_Messages_Chat_Messages_ThreadRootId",
+                        column: x => x.ThreadRootId,
+                        principalTable: "Chat_Messages",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "MeetingAttendees",
                 columns: table => new
                 {
@@ -452,6 +532,67 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                         name: "FK_DocumentRoleAccess_Documents_DocumentId",
                         column: x => x.DocumentId,
                         principalTable: "Documents",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Chat_Attachments",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    MessageId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    FileName = table.Column<string>(type: "nvarchar(255)", maxLength: 255, nullable: false),
+                    ContentType = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
+                    FileSize = table.Column<long>(type: "bigint", nullable: false),
+                    StoragePath = table.Column<string>(type: "nvarchar(1024)", maxLength: 1024, nullable: false),
+                    ChatMessageId = table.Column<Guid>(type: "uniqueidentifier", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Chat_Attachments", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Chat_Attachments_Chat_Messages_ChatMessageId",
+                        column: x => x.ChatMessageId,
+                        principalTable: "Chat_Messages",
+                        principalColumn: "Id");
+                    table.ForeignKey(
+                        name: "FK_Chat_Attachments_Chat_Messages_MessageId",
+                        column: x => x.MessageId,
+                        principalTable: "Chat_Messages",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Chat_Reactions",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    MessageId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    UserId = table.Column<string>(type: "nvarchar(450)", maxLength: 450, nullable: false),
+                    Emoji = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: false),
+                    CreatedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: false),
+                    ChatMessageId = table.Column<Guid>(type: "uniqueidentifier", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Chat_Reactions", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Chat_Reactions_AspNetUsers_UserId",
+                        column: x => x.UserId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_Chat_Reactions_Chat_Messages_ChatMessageId",
+                        column: x => x.ChatMessageId,
+                        principalTable: "Chat_Messages",
+                        principalColumn: "Id");
+                    table.ForeignKey(
+                        name: "FK_Chat_Reactions_Chat_Messages_MessageId",
+                        column: x => x.MessageId,
+                        principalTable: "Chat_Messages",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
@@ -571,6 +712,58 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                 column: "NormalizedUserName",
                 unique: true,
                 filter: "[NormalizedUserName] IS NOT NULL");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Chat_Attachments_ChatMessageId",
+                table: "Chat_Attachments",
+                column: "ChatMessageId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Chat_Attachments_MessageId",
+                table: "Chat_Attachments",
+                column: "MessageId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Chat_ConversationMembers_ConversationId_UserId",
+                table: "Chat_ConversationMembers",
+                columns: new[] { "ConversationId", "UserId" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Chat_ConversationMembers_UserId",
+                table: "Chat_ConversationMembers",
+                column: "UserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Chat_Messages_ConversationId_CreatedAtUtc",
+                table: "Chat_Messages",
+                columns: new[] { "ConversationId", "CreatedAtUtc" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Chat_Messages_SenderId",
+                table: "Chat_Messages",
+                column: "SenderId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Chat_Messages_ThreadRootId",
+                table: "Chat_Messages",
+                column: "ThreadRootId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Chat_Reactions_ChatMessageId",
+                table: "Chat_Reactions",
+                column: "ChatMessageId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Chat_Reactions_MessageId_UserId_Emoji",
+                table: "Chat_Reactions",
+                columns: new[] { "MessageId", "UserId", "Emoji" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Chat_Reactions_UserId",
+                table: "Chat_Reactions",
+                column: "UserId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Departments_Name",
@@ -699,6 +892,15 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                 name: "AspNetUserTokens");
 
             migrationBuilder.DropTable(
+                name: "Chat_Attachments");
+
+            migrationBuilder.DropTable(
+                name: "Chat_ConversationMembers");
+
+            migrationBuilder.DropTable(
+                name: "Chat_Reactions");
+
+            migrationBuilder.DropTable(
                 name: "DocumentRoleAccess");
 
             migrationBuilder.DropTable(
@@ -726,10 +928,10 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                 name: "Votes");
 
             migrationBuilder.DropTable(
-                name: "Documents");
+                name: "Chat_Messages");
 
             migrationBuilder.DropTable(
-                name: "AspNetUsers");
+                name: "Documents");
 
             migrationBuilder.DropTable(
                 name: "Messages");
@@ -741,10 +943,16 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                 name: "VoteOptions");
 
             migrationBuilder.DropTable(
-                name: "Departments");
+                name: "AspNetUsers");
+
+            migrationBuilder.DropTable(
+                name: "Chat_Conversations");
 
             migrationBuilder.DropTable(
                 name: "VotePolls");
+
+            migrationBuilder.DropTable(
+                name: "Departments");
 
             migrationBuilder.DropTable(
                 name: "AgendaItems");
