@@ -1,5 +1,8 @@
 ﻿namespace BoardMgmt.Application.Chat;
 
+
+public record CreateDirectConversationCommand(string CreatorId, IReadOnlyList<string> MemberIds)
+  : MediatR.IRequest<Guid>;
 public record CreateChannelCommand(string CreatorId, string Name, bool IsPrivate, IReadOnlyList<string> MemberIds)
   : MediatR.IRequest<Guid>;
 public record JoinChannelCommand(Guid ConversationId, string UserId) : MediatR.IRequest<bool>;
@@ -22,3 +25,10 @@ public record MarkConversationReadCommand(Guid ConversationId, string UserId, Da
   : MediatR.IRequest<bool>;
 
 public record SetTypingCommand(Guid ConversationId, string UserId, bool IsTyping) : MediatR.IRequest;
+
+public record CreateOrGetDirectConversationCommand(
+    string UserId,
+    string OtherUserId
+) : MediatR.IRequest<Guid>;
+
+

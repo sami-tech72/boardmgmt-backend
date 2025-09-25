@@ -29,7 +29,7 @@ builder.Host.UseSerilog((ctx, lc) => lc
     .Enrich.FromLogContext()
 );
 
-/// Infrastructure then Application
+// ---- DI: Infrastructure then Application ----
 builder.Services.AddInfrastructure(config);
 builder.Services.AddApplication();
 
@@ -46,7 +46,7 @@ else
     builder.Services.AddSingleton<IFileStorage, BoardMgmt.Infrastructure.Files.DiskFileStorage>();
 }
 
-// JWT
+// ---- JWT ----
 var issuer = config["Jwt:Issuer"] ?? "BoardMgmt";
 var audience = config["Jwt:Audience"] ?? "BoardMgmt.Client";
 var key = config["Jwt:Key"] ?? "super-secret-key-change-me";
@@ -71,24 +71,28 @@ builder.Services
             ValidAudience = audience,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key))
         };
+
+        // >>> allow SignalR to send token via access_token in query
+        o.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = ctx => {
+                var token = ctx.Request.Query["access_token"];
+                if (!string.IsNullOrEmpty(token) && ctx.HttpContext.Request.Path.StartsWithSegments("/hubs/chat"))
+                    ctx.Token = token;
+                return Task.CompletedTask;
+            }
+        };
+
     });
 
-builder.Services.AddAuthorization();
+// ---- SignalR ----
 builder.Services.AddSignalR();
-builder.Services.AddCors(opt =>
-{
-    opt.AddPolicy("ui", p => p
-        .AllowAnyHeader()
-        .AllowAnyMethod()
-        .AllowCredentials()
-        .SetIsOriginAllowed(_ => true)
-        .WithOrigins(
-            config.GetSection("Cors:AllowedOrigins").Get<string[]>()
-            ?? new[] { "http://localhost:4200", "https://localhost:4200" }
-        ));
-});
+
+// ---- Authorization / policies ----
+builder.Services.AddAuthorization();
 
 var authz = builder.Services.AddAuthorizationBuilder();
+
 void AddModulePolicies(string name, AppModule m)
 {
     var key = ((int)m).ToString();
@@ -112,16 +116,30 @@ AddModulePolicies("Messages", AppModule.Messages);
 
 builder.Services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
 
+// ---- MVC + filters ----
 builder.Services
     .AddControllers(o => o.Filters.Add<InvalidModelStateFilter>())
     .ConfigureApiBehaviorOptions(o => o.SuppressModelStateInvalidFilter = true);
+
+// ---- CORS (SignalR needs credentials + explicit origins) ----
+builder.Services.AddCors(opt =>
+{
+    opt.AddPolicy("ui", p => p
+        .AllowAnyHeader()
+        .AllowAnyMethod()
+        .AllowCredentials()
+        .WithOrigins(
+            config.GetSection("Cors:AllowedOrigins").Get<string[]>()
+            ?? new[] { "http://localhost:4200", "https://localhost:4200" }
+        )
+    );
+});
 
 // ---- Swagger (fix name collisions + JWT) ----
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(opt =>
 {
     opt.CustomSchemaIds(t => t.FullName?.Replace('+', '.'));
-
     opt.SwaggerDoc("v1", new OpenApiInfo { Title = "BoardMgmt.WebApi", Version = "v1" });
 
     opt.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
@@ -151,6 +169,7 @@ builder.Services.AddSwaggerGen(opt =>
         opt.IncludeXmlComments(xmlPath);
 });
 
+// ---- Misc ----
 builder.Services.AddSingleton<ExceptionHandlingMiddleware>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.Configure<FormOptions>(o => { o.MultipartBodyLengthLimit = 50 * 1024 * 1024; });
@@ -173,6 +192,7 @@ using (var scope = app.Services.CreateScope())
 
 await DbSeeder.SeedAsync(app.Services, app.Logger);
 
+// ---- Swagger only in Development ----
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -182,14 +202,20 @@ if (app.Environment.IsDevelopment())
     });
 }
 
+// ---- Pipeline ----
 app.UseMiddleware<ExceptionHandlingMiddleware>();
-if (!app.Environment.IsDevelopment()) app.UseHttpsRedirection();
+
+if (!app.Environment.IsDevelopment())
+    app.UseHttpsRedirection();
 
 app.UseStaticFiles();
-app.UseCors("ui");
-app.UseAuthentication();
-app.UseAuthorization();
+
+app.UseCors("ui");            // CORS BEFORE auth
+app.UseAuthentication();      // then auth
+app.UseAuthorization();       // then authorization
 
 app.MapControllers();
 app.MapHub<ChatHub>("/hubs/chat");
+
+
 app.Run();
