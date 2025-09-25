@@ -113,8 +113,8 @@ public class MeetingsController : ControllerBase
     // GET /api/meetings/select-list
     // Lightweight list for picker/modal
     // -----------------------------
+    [AllowAnonymous]
     [HttpGet("select-list")]
-    [Authorize] // relax if you want to use it on a public create form
     public async Task<IActionResult> SelectList(CancellationToken ct)
     {
         var list = await _mediator.Send(new GetMeetingsSelectListQuery(), ct);

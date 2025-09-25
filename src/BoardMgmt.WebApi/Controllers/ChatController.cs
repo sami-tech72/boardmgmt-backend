@@ -175,4 +175,28 @@ public class ChatController : ControllerBase
     [HttpGet("search")]
     public Task<IReadOnlyList<ChatMessageDto>> Search([FromQuery] string term, [FromQuery] int take = 50)
         => _mediator.Send(new SearchMessagesQuery(CurrentUserId, term, take));
+
+
+    // ===== Direct Messages =====
+    public record CreateDirectBody(IReadOnlyList<string> MemberIds);
+
+    [HttpPost("directs")]
+    public async Task<ActionResult<object>> CreateDirect([FromBody] CreateDirectBody b)
+    {
+        var ids = (b.MemberIds ?? Array.Empty<string>()).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().ToList();
+        // handler ensures creator is included and min size == 2
+        var id = await _mediator.Send(new CreateDirectConversationCommand(CurrentUserId, ids));
+        return Ok(new { id });
+    }
+
+    [HttpPost("direct/{otherUserId}")]
+    public async Task<ActionResult<object>> StartDirect(string otherUserId)
+    {
+        // MediatR command you should already have; or implement similarly:
+        // Creates or returns existing 1:1 Direct conversation between CurrentUserId and otherUserId
+        var id = await _mediator.Send(new CreateOrGetDirectConversationCommand(CurrentUserId, otherUserId));
+        return Ok(new { id });
+    }
+
+
 }
