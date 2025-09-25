@@ -1,7 +1,10 @@
-﻿using BoardMgmt.Application.Common.Interfaces;
+﻿using System.Threading;
+using System.Threading.Tasks;
+using BoardMgmt.Application.Common.Interfaces;
+using BoardMgmt.Domain.Chat;
 using BoardMgmt.Domain.Entities;
-using BoardMgmt.Domain.Messages;
-using BoardMgmt.Domain.Identity; // ✅ use Domain.AppUser
+using BoardMgmt.Domain.Identity;          // AppUser
+using BoardMgmt.Domain.Messages;         // Message, MessageRecipient, MessageAttachment
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -12,44 +15,50 @@ namespace BoardMgmt.Infrastructure.Persistence
     {
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
+        // -------- Core / Meetings --------
         public DbSet<Meeting> Meetings => Set<Meeting>();
         public DbSet<AgendaItem> AgendaItems => Set<AgendaItem>();
         public DbSet<Document> Documents => Set<Document>();
-        public DbSet<Vote> Votes => Set<Vote>();
-        public DbSet<MeetingAttendee> MeetingAttendees => Set<MeetingAttendee>();
         public DbSet<Folder> Folders => Set<Folder>();
+        public DbSet<MeetingAttendee> MeetingAttendees => Set<MeetingAttendee>();
 
+        // -------- Voting --------
+        public DbSet<Vote> Votes => Set<Vote>();
         public DbSet<VotePoll> VotePolls => Set<VotePoll>();
         public DbSet<VoteOption> VoteOptions => Set<VoteOption>();
         public DbSet<VoteBallot> VoteBallots => Set<VoteBallot>();
         public DbSet<VoteEligibleUser> VoteEligibleUsers => Set<VoteEligibleUser>();
 
+        // -------- Permissions / Departments --------
         public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
         public DbSet<DocumentRoleAccess> DocumentRoleAccess => Set<DocumentRoleAccess>();
         public DbSet<Department> Departments => Set<Department>();
 
+        // -------- Messaging (internal mail) --------
         public DbSet<Message> Messages => Set<Message>();
-        public DbSet<AppUser> AppUser => Set<AppUser>();
         public DbSet<MessageRecipient> MessageRecipients => Set<MessageRecipient>();
         public DbSet<MessageAttachment> MessageAttachments => Set<MessageAttachment>();
 
+        // -------- Chat (new) --------
+        public DbSet<Conversation> Conversations => Set<Conversation>();
+        public DbSet<ConversationMember> ConversationMembers => Set<ConversationMember>();
+        public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
+        public DbSet<ChatAttachment> ChatAttachments => Set<ChatAttachment>();
+        public DbSet<ChatReaction> ChatReactions => Set<ChatReaction>();
 
         public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
             => base.SaveChangesAsync(cancellationToken);
-
-
 
         protected override void OnModelCreating(ModelBuilder b)
         {
             base.OnModelCreating(b);
 
-
-            // ------- Meetings (unchanged) -------
+            // ---------- Meetings ----------
             b.Entity<Meeting>(e =>
             {
                 e.Property(m => m.Title).HasMaxLength(200).IsRequired();
                 e.Property(m => m.Location).HasMaxLength(200).IsRequired();
-               
+
                 e.HasMany(m => m.AgendaItems).WithOne().HasForeignKey(ai => ai.MeetingId).OnDelete(DeleteBehavior.Cascade);
                 e.HasMany(m => m.Documents).WithOne().HasForeignKey(d => d.MeetingId).OnDelete(DeleteBehavior.Cascade);
                 e.HasMany(m => m.Attendees).WithOne(a => a.Meeting).HasForeignKey(a => a.MeetingId).OnDelete(DeleteBehavior.Cascade);
@@ -57,33 +66,6 @@ namespace BoardMgmt.Infrastructure.Persistence
                 e.HasIndex(m => new { m.ScheduledAt, m.Status });
             });
 
-            //b.Entity<MeetingAttendee>(e =>
-            //{
-            //    e.Property(a => a.Name).HasMaxLength(200).IsRequired();
-            //    e.Property(a => a.Role).HasMaxLength(100);
-            //    e.Property(a => a.IsRequired).HasDefaultValue(true);
-            //    e.Property(a => a.IsConfirmed).HasDefaultValue(false);
-            //    e.Property(a => a.Email).HasMaxLength(320);
-
-            //    e.HasIndex(a => a.MeetingId);
-            //    e.Property(a => a.UserId).HasMaxLength(450);   // nvarchar(450)
-            //                                                   // lookups
-            //    e.HasIndex(a => a.MeetingId);
-            //    e.HasIndex(a => a.UserId);
-
-            //    // 👇 prevent duplicate (MeetingId, UserId) attendees, but allow multiple external attendees (UserId = NULL)
-            //    e.HasIndex(x => new { x.MeetingId, x.UserId })
-            //     .IsUnique()
-            //     .HasFilter("[UserId] IS NOT NULL"); // SQL Server filter; for PostgreSQL use "WHERE ""UserId"" IS NOT NULL"
-
-            //    e.HasOne<AppUser>()
-            //     .WithMany()
-            //     .HasForeignKey(a => a.UserId)
-            //     .HasPrincipalKey(u => u.Id)
-            //     .OnDelete(DeleteBehavior.NoAction);
-            //});
-
-            // BoardMgmt.Infrastructure/Persistence/AppDbContext.cs (excerpt)
             b.Entity<MeetingAttendee>(e =>
             {
                 e.HasKey(a => a.Id);
@@ -101,8 +83,6 @@ namespace BoardMgmt.Infrastructure.Persistence
                 e.Property(x => x.RowVersion)
                     .IsRowVersion()
                     .IsConcurrencyToken();
-
-
 
                 e.HasOne(x => x.Meeting)
                     .WithMany(m => m.Attendees)
@@ -136,14 +116,12 @@ namespace BoardMgmt.Infrastructure.Persistence
                 e.Property(x => x.FolderSlug).HasMaxLength(80).HasDefaultValue("root");
                 e.Property(x => x.ContentType).HasMaxLength(200);
 
-                
-
                 e.HasIndex(x => x.FolderSlug);
                 e.HasIndex(x => x.MeetingId);
                 e.HasIndex(x => x.UploadedAt);
             });
 
-            // ------- Voting (unchanged) -------
+            // ---------- Voting ----------
             b.Entity<VotePoll>(e =>
             {
                 e.HasKey(x => x.Id);
@@ -184,10 +162,11 @@ namespace BoardMgmt.Infrastructure.Persistence
                 e.HasKey(x => x.Id);
                 e.Property(x => x.UserId).HasMaxLength(450).IsRequired();
                 e.HasIndex(x => new { x.VoteId, x.UserId }).IsUnique();
+
                 e.HasOne(x => x.Vote).WithMany(v => v.EligibleUsers).HasForeignKey(x => x.VoteId).OnDelete(DeleteBehavior.Cascade);
             });
 
-            // ------- RolePermission (SINGLE mapping) -------
+            // ---------- RolePermission / DocumentRoleAccess ----------
             b.Entity<RolePermission>(e =>
             {
                 e.ToTable("RolePermissions");
@@ -200,28 +179,25 @@ namespace BoardMgmt.Infrastructure.Persistence
                 e.HasIndex(x => new { x.RoleId, x.Module }).IsUnique();
 
                 e.HasOne<IdentityRole>()
-                 .WithMany()
-                 .HasForeignKey(x => x.RoleId)
-                 .OnDelete(DeleteBehavior.Cascade);
+                    .WithMany()
+                    .HasForeignKey(x => x.RoleId)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
 
             b.Entity<DocumentRoleAccess>(e =>
             {
                 e.HasKey(x => new { x.DocumentId, x.RoleId });
-                e.HasIndex(x => x.RoleId); // ✅ helpful for visibility queries
+                e.HasIndex(x => x.RoleId);
 
                 e.HasOne(x => x.Document)
                     .WithMany(d => d.RoleAccesses)
                     .HasForeignKey(x => x.DocumentId)
                     .OnDelete(DeleteBehavior.Cascade);
-
-                // RoleId references AspNetRoles.Id (string), but we keep it as plain string FK
-                // If you want FK constraint to AspNetRoles, you can add it, but it's optional:
+                // Optional FK to AspNetRoles:
                 // e.HasOne<IdentityRole>().WithMany().HasForeignKey(x => x.RoleId).OnDelete(DeleteBehavior.Cascade);
             });
 
-
-            // Department config
+            // ---------- Departments / AppUser ----------
             b.Entity<Department>(cfg =>
             {
                 cfg.ToTable("Departments");
@@ -240,35 +216,22 @@ namespace BoardMgmt.Infrastructure.Persistence
                    .OnDelete(DeleteBehavior.SetNull);
             });
 
-
-            // ------- Messaging (new) -------
+            // ---------- Messaging (internal mail) ----------
             b.Entity<Message>(e =>
             {
                 e.HasKey(x => x.Id);
 
-                e.Property(x => x.Subject)
-                    .HasMaxLength(300)
-                    .IsRequired();
+                e.Property(x => x.Subject).HasMaxLength(300).IsRequired();
+                e.Property(x => x.Body).IsRequired();
 
-                e.Property(x => x.Body)
-                    .IsRequired();
-
-                e.Property(x => x.Priority)
-                    .HasConversion<string>()
-                    .HasMaxLength(16);
-
-                e.Property(x => x.Status)
-                    .HasConversion<string>()
-                    .HasMaxLength(16);
+                e.Property(x => x.Priority).HasConversion<string>().HasMaxLength(16);
+                e.Property(x => x.Status).HasConversion<string>().HasMaxLength(16);
 
                 e.Property(x => x.ReadReceiptRequested);
                 e.Property(x => x.IsConfidential);
 
-                e.Property(x => x.CreatedAtUtc)
-                    .IsRequired();
-
-                e.Property(x => x.UpdatedAtUtc)
-                    .IsRequired();
+                e.Property(x => x.CreatedAtUtc).IsRequired();
+                e.Property(x => x.UpdatedAtUtc).IsRequired();
 
                 e.HasMany(x => x.Recipients)
                     .WithOne()
@@ -284,21 +247,124 @@ namespace BoardMgmt.Infrastructure.Persistence
             b.Entity<MessageRecipient>(e =>
             {
                 e.HasKey(x => x.Id);
-
                 e.Property(x => x.UserId).HasMaxLength(450);
                 e.Property(x => x.IsRead).HasDefaultValue(false);
+
                 e.HasIndex(x => new { x.MessageId, x.UserId }).IsUnique();
             });
 
             b.Entity<MessageAttachment>(e =>
             {
                 e.HasKey(x => x.Id);
-
                 e.Property(x => x.FileName).HasMaxLength(255).IsRequired();
                 e.Property(x => x.ContentType).HasMaxLength(128).IsRequired();
                 e.Property(x => x.StoragePath).HasMaxLength(1024).IsRequired();
             });
 
+            // ---------- Chat (new) ----------
+            b.Entity<Conversation>(e =>
+            {
+                e.ToTable("Chat_Conversations");
+                e.HasKey(x => x.Id);
+
+                e.Property(x => x.Name).HasMaxLength(120);
+
+                e.HasMany(x => x.Members)
+                    .WithOne(x => x.Conversation)
+                    .HasForeignKey(x => x.ConversationId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                e.HasMany(x => x.Messages)
+                    .WithOne() // or .WithOne(m => m.Conversation) if you have the nav
+                    .HasForeignKey(x => x.ConversationId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            b.Entity<ConversationMember>(e =>
+            {
+                e.ToTable("Chat_ConversationMembers");
+                e.HasKey(x => x.Id);
+
+                e.HasIndex(x => new { x.ConversationId, x.UserId }).IsUnique();
+                e.Property(x => x.UserId).HasMaxLength(450).IsRequired();
+
+                e.HasOne<AppUser>()
+                    .WithMany()
+                    .HasForeignKey(x => x.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            
+
+            
+
+            b.Entity<ChatMessage>(e =>
+            {
+                e.ToTable("Chat_Messages");
+                e.HasKey(x => x.Id);
+
+                e.HasIndex(x => new { x.ConversationId, x.CreatedAtUtc });
+                e.HasIndex(x => x.ThreadRootId);
+
+                e.Property(x => x.ConversationId).IsRequired();
+                e.Property(x => x.CreatedAtUtc).IsRequired();
+                e.Property(x => x.SenderId).HasMaxLength(450).IsRequired();
+
+                // Threading (self-FK), optional
+                e.HasOne<ChatMessage>()
+                    .WithMany()
+                    .HasForeignKey(x => x.ThreadRootId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                // Sender
+                e.HasOne<AppUser>()
+                    .WithMany()
+                    .HasForeignKey(x => x.SenderId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+           
+
+            b.Entity<ChatAttachment>(e =>
+            {
+                e.ToTable("Chat_Attachments");
+                e.HasKey(x => x.Id);
+
+                e.HasIndex(x => x.MessageId);
+
+                e.Property(x => x.MessageId).IsRequired();
+                e.Property(x => x.FileName).HasMaxLength(255).IsRequired();
+                e.Property(x => x.ContentType).HasMaxLength(128);
+                e.Property(x => x.StoragePath).HasMaxLength(1024);
+
+                e.HasOne<ChatMessage>()
+                    .WithMany() // or .WithMany(m => m.Attachments)
+                    .HasForeignKey(x => x.MessageId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            b.Entity<ChatReaction>(e =>
+            {
+                e.ToTable("Chat_Reactions");
+                e.HasKey(x => x.Id);
+
+                e.HasIndex(x => new { x.MessageId, x.UserId, x.Emoji }).IsUnique();
+
+                e.Property(x => x.MessageId).IsRequired();
+                e.Property(x => x.UserId).HasMaxLength(450).IsRequired();
+                e.Property(x => x.Emoji).HasMaxLength(64).IsRequired();
+
+                e.HasOne<ChatMessage>()
+                    .WithMany() // or .WithMany(m => m.Reactions)
+                    .HasForeignKey(x => x.MessageId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                // FK to AppUser (string) — now compatible
+                e.HasOne<AppUser>()
+                    .WithMany()
+                    .HasForeignKey(x => x.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
         }
     }
 }
