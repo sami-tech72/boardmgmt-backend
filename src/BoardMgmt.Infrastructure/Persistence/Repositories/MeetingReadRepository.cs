@@ -37,4 +37,28 @@ public class MeetingReadRepository : IMeetingReadRepository
 
         return data;
     }
+
+    public async Task<(int total, IReadOnlyList<MeetingItemDto> items)> GetUpcomingPagedAsync(int page, int pageSize, CancellationToken ct)
+    {
+        var nowUtc = DateTime.UtcNow;
+
+        var baseQuery = _db.Set<Meeting>()
+            .Where(m => m.Status == MeetingStatus.Scheduled && m.ScheduledAt.UtcDateTime >= nowUtc);
+
+        var total = await baseQuery.CountAsync(ct);
+
+        var items = await baseQuery
+            .OrderBy(m => m.ScheduledAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(m => new MeetingItemDto(
+                m.Id,
+                m.Title,
+                m.Location,
+                m.ScheduledAt.UtcDateTime,
+                "Upcoming"))
+            .ToListAsync(ct);
+
+        return (total, items);
+    }
 }
