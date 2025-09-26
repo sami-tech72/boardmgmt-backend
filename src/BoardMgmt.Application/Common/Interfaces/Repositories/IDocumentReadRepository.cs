@@ -6,4 +6,8 @@ public interface IDocumentReadRepository
 {
     Task<int> CountActiveAsync(CancellationToken ct);
     Task<IReadOnlyList<DashboardDocumentDto>> GetRecentAsync(int take, CancellationToken ct);
+
+
+    // NEW: detail list for active documents
+    Task<(int total, IReadOnlyList<DocumentItemDto> items)> GetActivePagedAsync(int page, int pageSize, CancellationToken ct);
 }

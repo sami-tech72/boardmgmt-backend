@@ -58,4 +58,17 @@ public class DashboardController : ControllerBase
         var dto = await _mediator.Send(new GetRecentActivityQuery(take), ct);
         return this.OkApi(dto);
     }
+
+    // GET /api/dashboard/stats/detail?kind=meetings|documents|votes|messages&page=1&pageSize=10
+    [HttpGet("stats/detail")]
+    public async Task<IActionResult> GetStatsDetail([FromQuery] string kind, [FromQuery] int page = 1, [FromQuery] int pageSize = 10, CancellationToken ct = default)
+    {
+        // If you have auth, scope messages by user:
+        // var userId = User?.FindFirst("sub")?.Value is string s && Guid.TryParse(s, out var g) ? g : (Guid?)null;
+        Guid? userId = null;
+
+        var dto = await _mediator.Send(new GetStatsDetailQuery(kind, page, pageSize, userId), ct);
+        return this.OkApi(dto);
+    }
+
 }
