@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Authorization;
+﻿// Hubs/ChatHub.cs
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 
 namespace BoardMgmt.WebApi.Hubs;
@@ -6,7 +7,12 @@ namespace BoardMgmt.WebApi.Hubs;
 [Authorize]
 public class ChatHub : Hub
 {
-    public Task JoinUser(string userId) => Groups.AddToGroupAsync(Context.ConnectionId, $"user:{userId}");
-    public Task JoinConversation(Guid conversationId) => Groups.AddToGroupAsync(Context.ConnectionId, $"conv:{conversationId}");
-    public Task LeaveConversation(Guid conversationId) => Groups.RemoveFromGroupAsync(Context.ConnectionId, $"conv:{conversationId}");
+    public Task JoinUser(string userId)
+        => Groups.AddToGroupAsync(Context.ConnectionId, $"user:{userId}");
+
+    public Task JoinConversation(Guid conversationId)
+        => Groups.AddToGroupAsync(Context.ConnectionId, $"conv:{conversationId}");
+
+    public Task LeaveConversation(Guid conversationId)
+        => Groups.RemoveFromGroupAsync(Context.ConnectionId, $"conv:{conversationId}");
 }
