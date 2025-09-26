@@ -1,13 +1,13 @@
-﻿using MediatR;
+﻿// Controllers/ChatController.cs
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using BoardMgmt.Application.Chat;
-using BoardMgmt.Application.Chat.Handlers; // not strictly required if using MediatR only
 using BoardMgmt.Domain.Chat;
 using BoardMgmt.WebApi.Hubs;
 using Microsoft.AspNetCore.SignalR;
-using BoardMgmt.Application.Common.Interfaces; // Your ICurrentUser abstraction
+using BoardMgmt.Application.Common.Interfaces;
 
 namespace BoardMgmt.WebApi.Controllers;
 
@@ -19,9 +19,15 @@ public class ChatController : ControllerBase
     private readonly ISender _mediator;
     private readonly IHubContext<ChatHub> _hub;
     private readonly ICurrentUser _current;
+    private readonly DbContext _db;
 
-    public ChatController(ISender mediator, IHubContext<ChatHub> hub, ICurrentUser current)
-    { _mediator = mediator; _hub = hub; _current = current; }
+    public ChatController(ISender mediator, IHubContext<ChatHub> hub, ICurrentUser current, DbContext db)
+    {
+        _mediator = mediator;
+        _hub = hub;
+        _current = current;
+        _db = db;
+    }
 
     private string CurrentUserId => _current.UserId ?? throw new UnauthorizedAccessException("No user");
 
@@ -54,7 +60,9 @@ public class ChatController : ControllerBase
     [HttpPost("channels")]
     public async Task<ActionResult<object>> CreateChannel([FromBody] CreateChannelBody b)
     {
-        var memberIds = (b.MemberIds ?? Array.Empty<string>()).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().ToList();
+        var memberIds = (b.MemberIds ?? Array.Empty<string>())
+            .Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().ToList();
+
         if (!memberIds.Contains(CurrentUserId)) memberIds.Add(CurrentUserId);
 
         var id = await _mediator.Send(new CreateChannelCommand(CurrentUserId, b.Name, b.IsPrivate, memberIds));
@@ -80,7 +88,15 @@ public class ChatController : ControllerBase
     public async Task<ActionResult<object>> SendMessage(Guid id, [FromBody] CreateMessageBody body)
     {
         var msgId = await _mediator.Send(new SendChatMessageCommand(id, CurrentUserId, body.BodyHtml, body.ThreadRootId));
-        await _hub.Clients.Group($"conv:{id}").SendAsync("MessageCreated", new { id = msgId, conversationId = id });
+
+        // include threadRootId for thread panes to live-update
+        await ChatHubEvents.MessageCreated(_hub, id, new
+        {
+            id = msgId,
+            conversationId = id,
+            threadRootId = body.ThreadRootId
+        });
+
         return Ok(new { id = msgId });
     }
 
@@ -90,16 +106,48 @@ public class ChatController : ControllerBase
     public async Task<ActionResult> Edit(Guid id, [FromBody] EditMessageBody body)
     {
         var ok = await _mediator.Send(new EditChatMessageCommand(id, CurrentUserId, body.BodyHtml));
-        if (ok) await _hub.Clients.All.SendAsync("MessageEdited", new { id });
-        return ok ? Ok() : NotFound();
+        if (!ok) return NotFound();
+
+        var msg = await _db.Set<ChatMessage>()
+            .AsNoTracking()
+            .Select(m => new { m.Id, m.ConversationId, m.ThreadRootId })
+            .FirstOrDefaultAsync(m => m.Id == id);
+
+        if (msg is not null)
+        {
+            await ChatHubEvents.MessageEdited(_hub, msg.ConversationId, new
+            {
+                id = msg.Id,
+                conversationId = msg.ConversationId,
+                threadRootId = msg.ThreadRootId
+            });
+        }
+
+        return Ok();
     }
 
     [HttpDelete("messages/{id:guid}")]
     public async Task<ActionResult> Delete(Guid id)
     {
         var ok = await _mediator.Send(new DeleteChatMessageCommand(id, CurrentUserId));
-        if (ok) await _hub.Clients.All.SendAsync("MessageDeleted", new { id });
-        return ok ? Ok() : NotFound();
+        if (!ok) return NotFound();
+
+        var msg = await _db.Set<ChatMessage>()
+            .AsNoTracking()
+            .Select(m => new { m.Id, m.ConversationId, m.ThreadRootId })
+            .FirstOrDefaultAsync(m => m.Id == id);
+
+        if (msg is not null)
+        {
+            await ChatHubEvents.MessageDeleted(_hub, msg.ConversationId, new
+            {
+                id = msg.Id,
+                conversationId = msg.ConversationId,
+                threadRootId = msg.ThreadRootId
+            });
+        }
+
+        return Ok();
     }
 
     // ===== Reactions =====
@@ -108,23 +156,55 @@ public class ChatController : ControllerBase
     public async Task<ActionResult> AddReaction(Guid id, [FromBody] string emoji)
     {
         var ok = await _mediator.Send(new AddReactionCommand(id, CurrentUserId, emoji));
-        if (ok) await _hub.Clients.All.SendAsync("ReactionUpdated", new { messageId = id });
-        return ok ? Ok() : NotFound();
+        if (!ok) return NotFound();
+
+        var msg = await _db.Set<ChatMessage>()
+            .AsNoTracking()
+            .Select(m => new { m.Id, m.ConversationId, m.ThreadRootId })
+            .FirstOrDefaultAsync(m => m.Id == id);
+
+        if (msg is not null)
+        {
+            await ChatHubEvents.ReactionUpdated(_hub, msg.ConversationId, new
+            {
+                messageId = msg.Id,
+                conversationId = msg.ConversationId,
+                threadRootId = msg.ThreadRootId
+            });
+        }
+
+        return Ok();
     }
 
     [HttpDelete("messages/{id:guid}/reactions")]
     public async Task<ActionResult> RemoveReaction(Guid id, [FromBody] string emoji)
     {
         var ok = await _mediator.Send(new RemoveReactionCommand(id, CurrentUserId, emoji));
-        if (ok) await _hub.Clients.All.SendAsync("ReactionUpdated", new { messageId = id });
-        return ok ? Ok() : NotFound();
+        if (!ok) return NotFound();
+
+        var msg = await _db.Set<ChatMessage>()
+            .AsNoTracking()
+            .Select(m => new { m.Id, m.ConversationId, m.ThreadRootId })
+            .FirstOrDefaultAsync(m => m.Id == id);
+
+        if (msg is not null)
+        {
+            await ChatHubEvents.ReactionUpdated(_hub, msg.ConversationId, new
+            {
+                messageId = msg.Id,
+                conversationId = msg.ConversationId,
+                threadRootId = msg.ThreadRootId
+            });
+        }
+
+        return Ok();
     }
 
     // ===== Attachments =====
 
     [RequestSizeLimit(50_000_000)]
     [HttpPost("messages/{id:guid}/attachments")]
-    public async Task<ActionResult<IEnumerable<object>>> Upload(Guid id, [FromServices] DbContext db)
+    public async Task<ActionResult<IEnumerable<object>>> Upload(Guid id)
     {
         if (!Request.HasFormContentType || Request.Form.Files.Count == 0)
             return BadRequest(new { error = "No files uploaded" });
@@ -140,13 +220,15 @@ public class ChatController : ControllerBase
             toSave.Add((f.FileName, f.ContentType ?? "application/octet-stream", f.Length, path));
         }
 
-        var added = await _mediator.Send(new AddChatAttachmentsCommand(id, toSave));
-        var atts = await db.Set<ChatAttachment>()
+        var _ = await _mediator.Send(new AddChatAttachmentsCommand(id, toSave));
+
+        var atts = await _db.Set<ChatAttachment>()
             .Where(a => a.MessageId == id)
             .Select(a => new { a.Id, a.FileName, a.ContentType, a.FileSize })
             .ToListAsync();
 
-        return Ok(atts.Select(a => new {
+        return Ok(atts.Select(a => new
+        {
             attachmentId = a.Id,
             fileName = a.FileName,
             contentType = a.ContentType,
@@ -155,10 +237,13 @@ public class ChatController : ControllerBase
     }
 
     [HttpGet("messages/{messageId:guid}/attachments/{attachmentId:guid}")]
-    public async Task<IActionResult> Download(Guid messageId, Guid attachmentId, [FromServices] DbContext db)
+    public async Task<IActionResult> Download(Guid messageId, Guid attachmentId)
     {
-        var att = await db.Set<ChatAttachment>().FirstOrDefaultAsync(a => a.Id == attachmentId && a.MessageId == messageId);
+        var att = await _db.Set<ChatAttachment>()
+            .FirstOrDefaultAsync(a => a.Id == attachmentId && a.MessageId == messageId);
+
         if (att is null) return NotFound();
+
         var stream = System.IO.File.OpenRead(att.StoragePath);
         return File(stream, att.ContentType, att.FileName);
     }
@@ -168,7 +253,7 @@ public class ChatController : ControllerBase
     [HttpPost("conversations/{id:guid}/typing")]
     public async Task<ActionResult> Typing(Guid id, [FromBody] bool isTyping)
     {
-        await _hub.Clients.Group($"conv:{id}").SendAsync("Typing", new { conversationId = id, userId = CurrentUserId, isTyping });
+        await ChatHubEvents.Typing(_hub, id, Guid.Parse(CurrentUserId), isTyping);
         return Ok();
     }
 
@@ -176,15 +261,16 @@ public class ChatController : ControllerBase
     public Task<IReadOnlyList<ChatMessageDto>> Search([FromQuery] string term, [FromQuery] int take = 50)
         => _mediator.Send(new SearchMessagesQuery(CurrentUserId, term, take));
 
-
     // ===== Direct Messages =====
+
     public record CreateDirectBody(IReadOnlyList<string> MemberIds);
 
     [HttpPost("directs")]
     public async Task<ActionResult<object>> CreateDirect([FromBody] CreateDirectBody b)
     {
-        var ids = (b.MemberIds ?? Array.Empty<string>()).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().ToList();
-        // handler ensures creator is included and min size == 2
+        var ids = (b.MemberIds ?? Array.Empty<string>())
+            .Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().ToList();
+
         var id = await _mediator.Send(new CreateDirectConversationCommand(CurrentUserId, ids));
         return Ok(new { id });
     }
@@ -192,11 +278,7 @@ public class ChatController : ControllerBase
     [HttpPost("direct/{otherUserId}")]
     public async Task<ActionResult<object>> StartDirect(string otherUserId)
     {
-        // MediatR command you should already have; or implement similarly:
-        // Creates or returns existing 1:1 Direct conversation between CurrentUserId and otherUserId
         var id = await _mediator.Send(new CreateOrGetDirectConversationCommand(CurrentUserId, otherUserId));
         return Ok(new { id });
     }
-
-
 }
