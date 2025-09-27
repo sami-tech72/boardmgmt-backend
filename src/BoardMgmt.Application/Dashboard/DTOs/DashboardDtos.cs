@@ -4,7 +4,7 @@ public record DashboardStatsDto(
     int UpcomingMeetings,
     int ActiveDocuments,
     int PendingVotes,
-    int UnreadMessages);
+    int ActiveUsers);
 
 public record DashboardMeetingDto(
     Guid Id,
@@ -59,3 +59,11 @@ public record PagedResultDto<T>(
     int Page,
     int PageSize,
     IReadOnlyList<T> Items);
+
+
+public record ActiveUserItemDto(
+    string Id,
+    string DisplayName,
+    string? Email,
+    DateTimeOffset? LastSeenUtc
+);

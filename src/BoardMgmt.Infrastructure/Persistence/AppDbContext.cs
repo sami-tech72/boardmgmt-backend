@@ -4,7 +4,6 @@ using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Domain.Chat;
 using BoardMgmt.Domain.Entities;
 using BoardMgmt.Domain.Identity;          // AppUser
-using BoardMgmt.Domain.Messages;         // Message, MessageRecipient, MessageAttachment
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -34,10 +33,7 @@ namespace BoardMgmt.Infrastructure.Persistence
         public DbSet<DocumentRoleAccess> DocumentRoleAccess => Set<DocumentRoleAccess>();
         public DbSet<Department> Departments => Set<Department>();
 
-        // -------- Messaging (internal mail) --------
-        public DbSet<Message> Messages => Set<Message>();
-        public DbSet<MessageRecipient> MessageRecipients => Set<MessageRecipient>();
-        public DbSet<MessageAttachment> MessageAttachments => Set<MessageAttachment>();
+       
 
         // -------- Chat (new) --------
         public DbSet<Conversation> Conversations => Set<Conversation>();
@@ -216,51 +212,7 @@ namespace BoardMgmt.Infrastructure.Persistence
                    .OnDelete(DeleteBehavior.SetNull);
             });
 
-            // ---------- Messaging (internal mail) ----------
-            b.Entity<Message>(e =>
-            {
-                e.HasKey(x => x.Id);
-
-                e.Property(x => x.Subject).HasMaxLength(300).IsRequired();
-                e.Property(x => x.Body).IsRequired();
-
-                e.Property(x => x.Priority).HasConversion<string>().HasMaxLength(16);
-                e.Property(x => x.Status).HasConversion<string>().HasMaxLength(16);
-
-                e.Property(x => x.ReadReceiptRequested);
-                e.Property(x => x.IsConfidential);
-
-                e.Property(x => x.CreatedAtUtc).IsRequired();
-                e.Property(x => x.UpdatedAtUtc).IsRequired();
-
-                e.HasMany(x => x.Recipients)
-                    .WithOne()
-                    .HasForeignKey(r => r.MessageId)
-                    .OnDelete(DeleteBehavior.Cascade);
-
-                e.HasMany(x => x.Attachments)
-                    .WithOne()
-                    .HasForeignKey(a => a.MessageId)
-                    .OnDelete(DeleteBehavior.Cascade);
-            });
-
-            b.Entity<MessageRecipient>(e =>
-            {
-                e.HasKey(x => x.Id);
-                e.Property(x => x.UserId).HasMaxLength(450);
-                e.Property(x => x.IsRead).HasDefaultValue(false);
-
-                e.HasIndex(x => new { x.MessageId, x.UserId }).IsUnique();
-            });
-
-            b.Entity<MessageAttachment>(e =>
-            {
-                e.HasKey(x => x.Id);
-                e.Property(x => x.FileName).HasMaxLength(255).IsRequired();
-                e.Property(x => x.ContentType).HasMaxLength(128).IsRequired();
-                e.Property(x => x.StoragePath).HasMaxLength(1024).IsRequired();
-            });
-
+          
             // ---------- Chat (new) ----------
             b.Entity<Conversation>(e =>
             {

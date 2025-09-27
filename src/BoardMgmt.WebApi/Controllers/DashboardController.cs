@@ -71,4 +71,13 @@ public class DashboardController : ControllerBase
         return this.OkApi(dto);
     }
 
+    // WebApi/Controllers/DashboardController.cs (add inside the class)
+    [HttpGet("users/active-count")]
+    public async Task<IActionResult> GetActiveUserCount(CancellationToken ct)
+    {
+        var total = await _mediator.Send(new GetActiveUserCountQuery(), ct);
+        return this.OkApi(total);
+    }
+
+
 }
