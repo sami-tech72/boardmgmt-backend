@@ -116,9 +116,8 @@ namespace BoardMgmt.Infrastructure
             services.AddScoped<IMeetingReadRepository, MeetingReadRepository>();
             services.AddScoped<IDocumentReadRepository, DocumentReadRepository>();
             services.AddScoped<IVoteReadRepository, VoteReadRepository>();
-            services.AddScoped<IMessageReadRepository, MessageReadRepository>();
             services.AddScoped<IActivityReadRepository, ActivityReadRepository>();
-
+            services.AddScoped<IUserReadRepository, UserReadRepository>();
 
             return services;
         }

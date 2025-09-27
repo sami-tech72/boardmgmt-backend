@@ -16,18 +16,18 @@ public sealed class GetStatsDetailQueryHandler : IRequestHandler<GetStatsDetailQ
     private readonly IMeetingReadRepository _meetings;
     private readonly IDocumentReadRepository _docs;
     private readonly IVoteReadRepository _votes;
-    private readonly IMessageReadRepository _messages;
+    private readonly IUserReadRepository _users;
 
     public GetStatsDetailQueryHandler(
         IMeetingReadRepository meetings,
         IDocumentReadRepository docs,
         IVoteReadRepository votes,
-        IMessageReadRepository messages)
+        IUserReadRepository users)
     {
         _meetings = meetings;
         _docs = docs;
         _votes = votes;
-        _messages = messages;
+        _users = users;
     }
 
     public async Task<object> Handle(GetStatsDetailQuery request, CancellationToken ct)
@@ -52,11 +52,12 @@ public sealed class GetStatsDetailQueryHandler : IRequestHandler<GetStatsDetailQ
                     var (total, items) = await _votes.GetPendingPagedAsync(page, pageSize, ct);
                     return new PagedResultDto<VoteItemDto>(total, page, pageSize, items);
                 }
-            case "messages":
+            case "users":
                 {
-                    var (total, items) = await _messages.GetUnreadPagedAsync(request.UserId, page, pageSize, ct);
-                    return new PagedResultDto<UnreadMessageItemDto>(total, page, pageSize, items);
+                    var (total, items) = await _users.GetActivePagedAsync(page, pageSize, ct);
+                    return new PagedResultDto<ActiveUserItemDto>(total, page, pageSize, items);
                 }
+
         }
 
         // default empty

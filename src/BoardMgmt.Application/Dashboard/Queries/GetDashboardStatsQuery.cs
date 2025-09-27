@@ -18,18 +18,18 @@ public sealed class GetDashboardStatsQueryHandler
     private readonly IMeetingReadRepository _meetings;
     private readonly IDocumentReadRepository _docs;
     private readonly IVoteReadRepository _votes;
-    private readonly IMessageReadRepository _messages;
+    private readonly IUserReadRepository _users;
 
     public GetDashboardStatsQueryHandler(
         IMeetingReadRepository meetings,
         IDocumentReadRepository docs,
         IVoteReadRepository votes,
-        IMessageReadRepository messages)
+        IUserReadRepository users)
     {
         _meetings = meetings;
         _docs = docs;
         _votes = votes;
-        _messages = messages;
+        _users = users;
     }
 
     public async Task<DashboardStatsDto> Handle(GetDashboardStatsQuery request, CancellationToken ct)
@@ -40,13 +40,14 @@ public sealed class GetDashboardStatsQueryHandler
         var upcoming = await _meetings.CountUpcomingAsync(now, ct);
         var activeDocs = await _docs.CountActiveAsync(ct);
         var pendingVotes = await _votes.CountPendingAsync(ct);
-        var unread = await _messages.CountUnreadAsync(request.UserId, ct);
+        var activeUsers = await _users.CountActiveAsync(ct);
+         
 
         return new DashboardStatsDto(
             upcoming,
             activeDocs,
             pendingVotes,
-            unread
+            activeUsers
         );
     }
 }
