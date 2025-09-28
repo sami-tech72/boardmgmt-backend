@@ -44,7 +44,7 @@ namespace BoardMgmt.Application.Folders.Queries.GetFolders
             // 4) Materialize folders first (EF part)
             var folderEntities = await _db.Folders
                 .AsNoTracking()
-                .OrderByDescending(f => f.CreatedAt)
+                .OrderBy(f => f.Id)
                 .ToListAsync(ct);
 
             // 5) Map to DTOs in memory (TryGetValue is now fine)
@@ -56,9 +56,7 @@ namespace BoardMgmt.Application.Folders.Queries.GetFolders
                 })
                 .ToList();
 
-            // 6) Add implicit Root
-            _ = counts.TryGetValue("root", out var rootCount);
-            folders.Add(new FolderDto(Guid.Empty, "Root", "root", rootCount));
+
 
             return folders;
         }

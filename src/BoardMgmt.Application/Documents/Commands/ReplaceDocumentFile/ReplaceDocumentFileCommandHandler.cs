@@ -1,5 +1,4 @@
-﻿// Application/Documents/Commands/ReplaceDocumentFile/ReplaceDocumentFileCommandHandler.cs
-using BoardMgmt.Application.Common.Interfaces;
+﻿using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Application.Documents.DTOs;
 using BoardMgmt.Domain.Identity;
 using MediatR;
@@ -20,23 +19,26 @@ public class ReplaceDocumentFileCommandHandler(
         var doc = await db.Documents.FirstOrDefaultAsync(x => x.Id == request.Id, ct);
         if (doc is null) throw new KeyNotFoundException("Document not found.");
 
-        // Decide the user-facing display name:
-        // - use the one sent in the command if provided
-        // - otherwise keep existing doc.OriginalName
-        var displayName = string.IsNullOrWhiteSpace(request.OriginalName)
+        var requestedName = string.IsNullOrWhiteSpace(request.OriginalName)
             ? doc.OriginalName
             : request.OriginalName.Trim();
 
-        // Save new binary (you can use displayName for the stored file name if desired)
-        var (savedName, url) = await storage.SaveAsync(request.Content, displayName, request.ContentType, ct);
+        var newExt = Path.GetExtension(requestedName);
+        if (string.IsNullOrEmpty(newExt))
+        {
+            var oldExt = Path.GetExtension(doc.OriginalName);
+            if (!string.IsNullOrEmpty(oldExt))
+                requestedName += oldExt;
+        }
 
-        // Persist fields
-        doc.OriginalName = displayName;     // <-- Respect the display name from the request
-        doc.FileName = savedName;       // physical/storage name
+        var (savedName, url) = await storage.SaveAsync(request.Content, requestedName, request.ContentType, ct);
+
+        doc.OriginalName = Path.GetFileName(requestedName);
+        doc.FileName = savedName;
         doc.Url = url;
-        doc.ContentType = request.ContentType;
+        doc.ContentType = string.IsNullOrWhiteSpace(request.ContentType) ? doc.ContentType : request.ContentType;
         doc.SizeBytes = request.SizeBytes;
-        doc.Version += 1;               // bump version for new binary
+        doc.Version += 1;
 
         await db.SaveChangesAsync(ct);
 

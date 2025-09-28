@@ -1,14 +1,16 @@
-﻿using BoardMgmt.Application.Common.Interfaces;
+﻿// BoardMgmt.Application/Votes/Commands/SubmitBallotCommand.cs
+using BoardMgmt.Application.Common.Interfaces;
+using BoardMgmt.Application.Votes.DTOs;
+using BoardMgmt.Application.Votes.Queries;
 using BoardMgmt.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
+public sealed record SubmitBallotCommand(Guid VoteId, VoteChoice? Choice, Guid? OptionId)
+    : IRequest<VoteSummaryDto>;
 
-namespace BoardMgmt.Application.Votes.Commands;
-
-public sealed record SubmitBallotCommand(Guid VoteId, VoteChoice? Choice, Guid? OptionId) : IRequest;
-
-public sealed class SubmitBallotCommandHandler : IRequestHandler<SubmitBallotCommand>
+public sealed class SubmitBallotCommandHandler
+    : IRequestHandler<SubmitBallotCommand, VoteSummaryDto>
 {
     private readonly IAppDbContext _db;
     private readonly ICurrentUser _user;
@@ -16,20 +18,22 @@ public sealed class SubmitBallotCommandHandler : IRequestHandler<SubmitBallotCom
     public SubmitBallotCommandHandler(IAppDbContext db, ICurrentUser user)
     { _db = db; _user = user; }
 
-    public async Task Handle(SubmitBallotCommand r, CancellationToken ct)
+    public async Task<VoteSummaryDto> Handle(SubmitBallotCommand r, CancellationToken ct)
     {
         if (!_user.IsAuthenticated) throw new UnauthorizedAccessException();
 
         var v = await _db.VotePolls
             .Include(x => x.Options)
+            .Include(x => x.Ballots) // needed to find/update the user's ballot + recompute results
             .Include(x => x.EligibleUsers)
             .Include(x => x.Meeting)!.ThenInclude(m => m.Attendees)
-            .FirstOrDefaultAsync(x => x.Id == r.VoteId, ct);
+            .FirstOrDefaultAsync(x => x.Id == r.VoteId, ct)
+            ?? throw new KeyNotFoundException("Vote not found.");
 
-        if (v is null) throw new KeyNotFoundException("Vote not found.");
-        if (!v.IsOpen(DateTimeOffset.UtcNow)) throw new InvalidOperationException("Voting closed.");
+        if (!v.IsOpen(DateTimeOffset.UtcNow))
+            throw new InvalidOperationException("Voting closed.");
 
-        // Eligibility check
+        // Eligibility
         var eligible = v.Eligibility switch
         {
             VoteEligibility.Public => true,
@@ -39,7 +43,7 @@ public sealed class SubmitBallotCommandHandler : IRequestHandler<SubmitBallotCom
         };
         if (!eligible) throw new UnauthorizedAccessException("Not eligible to vote.");
 
-        // Validate payload
+        // Validate payload for the poll type
         if (v.Type == VoteType.MultipleChoice)
         {
             if (r.OptionId is null || !v.Options.Any(o => o.Id == r.OptionId.Value))
@@ -52,18 +56,28 @@ public sealed class SubmitBallotCommandHandler : IRequestHandler<SubmitBallotCom
                 throw new ArgumentException("Abstain not allowed.");
         }
 
-        // Upsert user's ballot
-        var existing = await _db.VoteBallots.FirstOrDefaultAsync(b => b.VoteId == v.Id && b.UserId == _user.UserId, ct);
-        if (existing is null)
+        // ✅ Upsert the user's ballot (create if none, otherwise UPDATE to allow re-voting)
+        var ballot = v.Ballots.FirstOrDefault(b => b.UserId == _user.UserId);
+        if (ballot is null)
         {
-            existing = new VoteBallot { VoteId = v.Id, UserId = _user.UserId! };
-            _db.VoteBallots.Add(existing);
+            ballot = new VoteBallot { VoteId = v.Id, UserId = _user.UserId! };
+            _db.VoteBallots.Add(ballot);
         }
 
-        existing.Choice = (v.Type == VoteType.MultipleChoice) ? null : r.Choice;
-        existing.OptionId = (v.Type == VoteType.MultipleChoice) ? r.OptionId : null;
-        existing.VotedAt = DateTimeOffset.UtcNow;
+        ballot.Choice = (v.Type == VoteType.MultipleChoice) ? null : r.Choice;
+        ballot.OptionId = (v.Type == VoteType.MultipleChoice) ? r.OptionId : null;
+        ballot.VotedAt = DateTimeOffset.UtcNow;
 
         await _db.SaveChangesAsync(ct);
+
+        // Reload light for fresh counts & user's current selection
+        var refreshed = await _db.VotePolls
+            .AsNoTracking()
+            .Include(x => x.Options)
+            .Include(x => x.Ballots)
+            .FirstAsync(x => x.Id == v.Id, ct);
+
+        // Returns VoteSummaryDto with results + alreadyVoted + myChoice/myOptionId
+        return GetActiveVotesQueryHandler.MapSummary(refreshed, _user);
     }
 }

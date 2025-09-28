@@ -81,7 +81,11 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                     ScheduledAt = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
                     EndAt = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: true),
                     Location = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
-                    Status = table.Column<int>(type: "int", nullable: false)
+                    Status = table.Column<int>(type: "int", nullable: false),
+                    ExternalCalendar = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
+                    ExternalCalendarMailbox = table.Column<string>(type: "nvarchar(320)", maxLength: 320, nullable: true),
+                    ExternalEventId = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: true),
+                    OnlineJoinUrl = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: true)
                 },
                 constraints: table =>
                 {

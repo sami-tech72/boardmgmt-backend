@@ -16,5 +16,6 @@ public record MeetingDto(
     int AttendeesCount,
     
     IReadOnlyList<AgendaItemDto> AgendaItems,
-     IReadOnlyList<AttendeeDto> Attendees
+     IReadOnlyList<AttendeeDto> Attendees,
+    string? JoinUrl // ← NEW
 );

@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace BoardMgmt.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20250927055949_InitialCreate")]
+    [Migration("20250927082042_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -465,10 +465,26 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("EndAt")
                         .HasColumnType("datetimeoffset");
 
+                    b.Property<string>("ExternalCalendar")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<string>("ExternalCalendarMailbox")
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<string>("ExternalEventId")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
                     b.Property<string>("Location")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("OnlineJoinUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
 
                     b.Property<DateTimeOffset>("ScheduledAt")
                         .HasColumnType("datetimeoffset");

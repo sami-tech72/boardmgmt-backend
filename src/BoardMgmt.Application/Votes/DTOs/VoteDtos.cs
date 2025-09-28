@@ -20,7 +20,10 @@ public sealed record VoteSummaryDto(
     DateTimeOffset Deadline,
     bool IsOpen,
     VoteEligibility Eligibility,
-    VoteResultsDto Results
+    VoteResultsDto Results,
+    bool AlreadyVoted,                  // <- existing
+    VoteChoice? MyChoice,               // <- NEW (YN/AR)
+    Guid? MyOptionId                    // <- NEW (Multiple choice)
 );
 
 // New: per-user vote row (populate only when not Anonymous and caller authorized)

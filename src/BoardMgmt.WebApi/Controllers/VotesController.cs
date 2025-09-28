@@ -96,11 +96,12 @@ public class VotesController : ControllerBase
 
     public sealed record SubmitDto(VoteChoice? Choice, Guid? OptionId);
 
+    // BoardMgmt.WebApi/Controllers/VotesController.cs
     [HttpPost("{id:guid}/ballots")]
     [Authorize]
-    public async Task<IActionResult> Submit(Guid id, [FromBody] SubmitDto body)
+    public async Task<ActionResult<VoteSummaryDto>> Submit(Guid id, [FromBody] SubmitDto body)
     {
-        await _mediator.Send(new SubmitBallotCommand(id, body.Choice, body.OptionId));
-        return NoContent();
+        var summary = await _mediator.Send(new SubmitBallotCommand(id, body.Choice, body.OptionId));
+        return Ok(summary);
     }
 }

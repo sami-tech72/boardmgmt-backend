@@ -33,6 +33,7 @@ public sealed class GetRecentVotesQueryHandler
             .Take(50)
             .ToListAsync(ct);
 
-        return items.Select(GetActiveVotesQueryHandler.MapSummary).ToList();
+        // IMPORTANT: use a lambda so there is no MapSummary overload ambiguity
+        return items.Select(v => GetActiveVotesQueryHandler.MapSummary(v, _user)).ToList();
     }
 }

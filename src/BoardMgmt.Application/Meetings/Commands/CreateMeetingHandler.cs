@@ -1,4 +1,5 @@
-﻿using BoardMgmt.Application.Common.Interfaces;
+﻿using BoardMgmt.Application.Calendars;
+using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -9,11 +10,13 @@ public class CreateMeetingHandler : IRequestHandler<CreateMeetingCommand, Guid>
 {
     private readonly DbContext _db;
     private readonly IIdentityUserReader _users;
+    private readonly ICalendarService _calendar;
 
-    public CreateMeetingHandler(DbContext db, IIdentityUserReader users)
+    public CreateMeetingHandler(DbContext db, IIdentityUserReader users, ICalendarService calendar)
     {
         _db = db;
         _users = users;
+        _calendar = calendar;
     }
 
     public async Task<Guid> Handle(CreateMeetingCommand request, CancellationToken ct)
@@ -26,13 +29,14 @@ public class CreateMeetingHandler : IRequestHandler<CreateMeetingCommand, Guid>
             ScheduledAt = request.ScheduledAt,
             EndAt = request.EndAt,
             Location = string.IsNullOrWhiteSpace(request.Location) ? "TBD" : request.Location.Trim(),
-            Status = MeetingStatus.Scheduled
+            Status = MeetingStatus.Scheduled,
+            ExternalCalendar = "Microsoft365" // informational; no infra dependency
         };
 
+        // Attach attendees (same as before)
         if (request.attendeeUserIds is { Count: > 0 })
         {
             var users = await _users.GetByIdsAsync(request.attendeeUserIds, ct);
-
             foreach (var u in users)
             {
                 var name = string.IsNullOrWhiteSpace(u.DisplayName) ? (u.Email ?? "Unknown") : u.DisplayName!;
@@ -53,7 +57,6 @@ public class CreateMeetingHandler : IRequestHandler<CreateMeetingCommand, Guid>
                 var full = raw.Trim();
                 string name = full;
                 string? role = null;
-
                 var open = full.IndexOf('(');
                 var close = full.IndexOf(')');
                 if (open > 0 && close > open)
@@ -71,6 +74,11 @@ public class CreateMeetingHandler : IRequestHandler<CreateMeetingCommand, Guid>
                 });
             }
         }
+
+        // Create the Graph event via the calendar abstraction
+        var (eventId, joinUrl) = await _calendar.CreateEventAsync(entity, ct);
+        entity.ExternalEventId = eventId;
+        entity.OnlineJoinUrl = joinUrl;
 
         _db.Set<Meeting>().Add(entity);
         await _db.SaveChangesAsync(ct);

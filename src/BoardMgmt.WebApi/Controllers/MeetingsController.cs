@@ -120,4 +120,7 @@ public class MeetingsController : ControllerBase
         var list = await _mediator.Send(new GetMeetingsSelectListQuery(), ct);
         return this.OkApi(list);
     }
+
+
+
 }

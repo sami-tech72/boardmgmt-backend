@@ -1,7 +1,9 @@
-﻿using BoardMgmt.Application;
+﻿using Azure.Identity;
+using BoardMgmt.Application;
 using BoardMgmt.Application.Common.Interfaces; // IFileStorage
 using BoardMgmt.Domain.Identity;
 using BoardMgmt.Infrastructure;
+using BoardMgmt.Infrastructure.Graph;
 using BoardMgmt.Infrastructure.Persistence;
 using BoardMgmt.Infrastructure.Persistence.Seed;
 using BoardMgmt.WebApi.Auth;
@@ -13,11 +15,16 @@ using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection.Extensions; // for RemoveAll
 using Microsoft.Extensions.Logging;
+using Microsoft.Graph;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Serilog;
 using System.Reflection;
 using System.Text;
+
+
+using BoardMgmt.Application.Calendars;
+using BoardMgmt.Infrastructure.Calendars;
 
 var builder = WebApplication.CreateBuilder(args);
 var config = builder.Configuration;
@@ -34,17 +41,17 @@ builder.Services.AddInfrastructure(config);
 builder.Services.AddApplication();
 
 // ---- File storage provider selection ----
-builder.Services.RemoveAll<IFileStorage>(); // remove default if Infrastructure registered one
-var uploadsProvider = builder.Configuration["Uploads:Provider"] ?? "Local";
+//builder.Services.RemoveAll<IFileStorage>(); // remove default if Infrastructure registered one
+//var uploadsProvider = builder.Configuration["Uploads:Provider"] ?? "Local";
 
-if (uploadsProvider.Equals("Local", StringComparison.OrdinalIgnoreCase))
-{
-    builder.Services.AddSingleton<IFileStorage, BoardMgmt.Infrastructure.Storage.LocalFileStorage>();
-}
-else
-{
-    builder.Services.AddSingleton<IFileStorage, BoardMgmt.Infrastructure.Files.DiskFileStorage>();
-}
+//if (uploadsProvider.Equals("Local", StringComparison.OrdinalIgnoreCase))
+//{
+//    builder.Services.AddSingleton<IFileStorage, BoardMgmt.Infrastructure.Storage.LocalFileStorage>();
+//}
+//else
+//{
+//    builder.Services.AddSingleton<IFileStorage, BoardMgmt.Infrastructure.Files.DiskFileStorage>();
+//}
 
 // ---- JWT ----
 var issuer = config["Jwt:Issuer"] ?? "BoardMgmt";
@@ -116,6 +123,16 @@ AddModulePolicies("Messages", AppModule.Messages);
 
 builder.Services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
 
+builder.Services.Configure<GraphOptions>(builder.Configuration.GetSection("Graph"));
+
+builder.Services.AddSingleton<GraphServiceClient>(sp =>
+{
+    var cfg = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<GraphOptions>>().Value;
+    var cred = new ClientSecretCredential(cfg.TenantId, cfg.ClientId, cfg.ClientSecret);
+    return new GraphServiceClient(cred, new[] { "https://graph.microsoft.com/.default" });
+});
+
+builder.Services.AddScoped<ICalendarService, CalendarService>();
 // ---- MVC + filters ----
 builder.Services
     .AddControllers(o => o.Filters.Add<InvalidModelStateFilter>())

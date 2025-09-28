@@ -4,6 +4,7 @@ using MediatR;
 using System;
 using System.Collections.Generic;
 
+
 namespace BoardMgmt.Application.Meetings.Commands
 {
     public sealed record UpdateMeetingCommand(

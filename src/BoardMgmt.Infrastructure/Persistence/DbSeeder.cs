@@ -108,6 +108,36 @@ public static class DbSeeder
             }
         }
 
+
+        // 5) Ensure Root folder (idempotent)
+        var rootId = Guid.Parse("00000000-0000-0000-0000-000000000001"); // stable seed Guid
+        var root = await db.Folders
+            .AsNoTracking()
+            .FirstOrDefaultAsync(f => f.Slug == "root");
+
+        if (root is null)
+        {
+            db.Folders.Add(new Folder
+            {
+                Id = rootId,
+                Name = "Root",
+                Slug = "root",
+                CreatedAt = DateTime.UtcNow
+            });
+
+            logger.LogInformation("Seeded Root folder (Slug='root').");
+        }
+        else
+        {
+            // Optional: keep name consistent
+            var tracked = await db.Folders.FirstAsync(f => f.Id == root.Id);
+            if (!string.Equals(tracked.Name, "Root", StringComparison.Ordinal))
+            {
+                tracked.Name = "Root";
+                logger.LogInformation("Updated Root folder name to 'Root'.");
+            }
+        }
+
         await db.SaveChangesAsync();
 
         logger.LogInformation(

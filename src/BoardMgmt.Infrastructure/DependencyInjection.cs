@@ -110,8 +110,11 @@ namespace BoardMgmt.Infrastructure
                 (IRolePermissionStore)sp.GetRequiredService<IPermissionService>());
 
             // File storage
+            //services.AddSingleton<IFileStorage, LocalFileStorage>();
+            //services.AddScoped<IFileStorage, DiskFileStorage>();
+
+            // SINGLE storage provider
             services.AddSingleton<IFileStorage, LocalFileStorage>();
-            services.AddScoped<IFileStorage, DiskFileStorage>();
 
             services.AddScoped<IMeetingReadRepository, MeetingReadRepository>();
             services.AddScoped<IDocumentReadRepository, DocumentReadRepository>();

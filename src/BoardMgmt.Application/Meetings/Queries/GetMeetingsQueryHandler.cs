@@ -47,7 +47,8 @@ public class GetMeetingsQueryHandler : IRequestHandler<GetMeetingsQuery, IReadOn
                             ? Convert.ToBase64String(a.RowVersion)
                             : string.Empty
                     ))
-                 .ToList()
+                 .ToList(),
+               m.OnlineJoinUrl
             ))
             .ToListAsync(ct);
     }

@@ -8,4 +8,7 @@ public sealed record AttendeeDto(
     string? Role,
     string? UserId, // <-- identity user id (nullable for external/non-user attendees)
     string RowVersionBase64
+
+
+
 );

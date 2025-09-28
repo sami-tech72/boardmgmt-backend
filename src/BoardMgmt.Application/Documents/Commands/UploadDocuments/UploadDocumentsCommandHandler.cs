@@ -3,7 +3,6 @@ using BoardMgmt.Application.Documents.DTOs;
 using BoardMgmt.Domain.Entities;
 using BoardMgmt.Domain.Identity;
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 
 namespace BoardMgmt.Application.Documents.Commands.UploadDocuments;
 
@@ -11,7 +10,7 @@ public class UploadDocumentsCommandHandler(
     IAppDbContext db,
     IFileStorage storage,
     IPermissionService perms,
-    IIdentityUserReader users // to infer default RoleIds if none are sent
+    IIdentityUserReader users
 ) : IRequestHandler<UploadDocumentsCommand, IReadOnlyList<DocumentDto>>
 {
     public async Task<IReadOnlyList<DocumentDto>> Handle(UploadDocumentsCommand request, CancellationToken ct)
@@ -20,10 +19,9 @@ public class UploadDocumentsCommandHandler(
 
         var folder = string.IsNullOrWhiteSpace(request.FolderSlug) ? "root" : request.FolderSlug.Trim();
 
-        // If client didn't send RoleIds, default to the uploader's current roles
         var roleIds = request.RoleIds is { Count: > 0 }
             ? request.RoleIds.Distinct().ToList()
-            : (await users.GetCurrentUserRoleIdsAsync(ct)).ToList(); // implement GetCurrentUserRoleIdsAsync
+            : (await users.GetCurrentUserRoleIdsAsync(ct)).ToList();
 
         if (roleIds.Count == 0)
             throw new InvalidOperationException("No roles provided and current user has no roles.");
@@ -47,7 +45,6 @@ public class UploadDocumentsCommandHandler(
                 UploadedAt = DateTimeOffset.UtcNow
             };
 
-            // attach role access rows
             foreach (var rid in roleIds)
                 doc.RoleAccesses.Add(new DocumentRoleAccess { RoleId = rid, Document = doc });
 

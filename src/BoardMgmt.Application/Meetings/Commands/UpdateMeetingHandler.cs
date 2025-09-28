@@ -8,6 +8,7 @@ using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using BoardMgmt.Application.Calendars;
 
 namespace BoardMgmt.Application.Meetings.Commands
 {
@@ -15,11 +16,13 @@ namespace BoardMgmt.Application.Meetings.Commands
     {
         private readonly DbContext _db;
         private readonly IIdentityUserReader _users;
+        private readonly ICalendarService _calendar;
 
-        public UpdateMeetingHandler(DbContext db, IIdentityUserReader users)
+        public UpdateMeetingHandler(DbContext db, IIdentityUserReader users, ICalendarService calendar)
         {
             _db = db;
             _users = users;
+            _calendar = calendar;
         }
 
         public async Task<bool> Handle(UpdateMeetingCommand request, CancellationToken ct)
@@ -40,7 +43,19 @@ namespace BoardMgmt.Application.Meetings.Commands
             meeting.Location = string.IsNullOrWhiteSpace(request.Location) ? "TBD" : request.Location.Trim();
 
             await SyncAttendeesAsync(meeting, request, ct);
-
+            if (string.IsNullOrWhiteSpace(meeting.ExternalEventId))
+            {
+                var created = await _calendar.CreateEventAsync(meeting, ct);
+                meeting.ExternalCalendar = "Microsoft365";
+                meeting.ExternalEventId = created.eventId;
+                meeting.OnlineJoinUrl = created.joinUrl;
+            }
+            else
+            {
+                var updated = await _calendar.UpdateEventAsync(meeting, ct);
+                if (updated.ok)
+                    meeting.OnlineJoinUrl = updated.joinUrl ?? meeting.OnlineJoinUrl;
+            }
             await _db.SaveChangesAsync(ct);
             return true;
         }

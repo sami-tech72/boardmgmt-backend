@@ -43,7 +43,8 @@ public sealed class GetMeetingByIdQueryHandler : IRequestHandler<GetMeetingByIdQ
                             ? Convert.ToBase64String(a.RowVersion)
                             : string.Empty
                     ))
-                 .ToList()
+                 .ToList(),
+               m.OnlineJoinUrl
             ))
             .FirstOrDefaultAsync(ct);
     }

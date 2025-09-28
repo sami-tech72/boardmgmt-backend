@@ -1,4 +1,5 @@
-﻿using BoardMgmt.Application.Common.Interfaces;
+﻿// BoardMgmt.Application/Votes/Queries/GetActiveVotesQuery.cs
+using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Application.Votes.DTOs;
 using BoardMgmt.Domain.Entities;
 using MediatR;
@@ -31,23 +32,18 @@ public sealed class GetActiveVotesQueryHandler
 
         q = FilterByEligibility(q, _user);
 
-        var items = await q
-            .OrderBy(v => v.Deadline)
-            .ToListAsync(ct);
-
-        return items.Select(MapSummary).ToList();
+        var items = await q.OrderBy(v => v.Deadline).ToListAsync(ct);
+        return items.Select(v => MapSummary(v, _user)).ToList();
     }
 
     internal static IQueryable<VotePoll> FilterByEligibility(IQueryable<VotePoll> q, ICurrentUser user)
     {
-        // Unauthenticated users only see Public polls
         if (user.IsAuthenticated is false)
             return q.Where(v => v.Eligibility == VoteEligibility.Public);
 
-        // Authenticated users:
         return q.Where(v =>
                v.Eligibility == VoteEligibility.Public
-            || v.CreatedByUserId == user.UserId // creator always sees their own poll
+            || v.CreatedByUserId == user.UserId
             || (v.Eligibility == VoteEligibility.SpecificUsers
                 && v.EligibleUsers.Any(e => e.UserId == user.UserId))
             || (v.Eligibility == VoteEligibility.MeetingAttendees
@@ -56,8 +52,16 @@ public sealed class GetActiveVotesQueryHandler
         );
     }
 
-    internal static VoteSummaryDto MapSummary(VotePoll v)
-        => new(
+    internal static VoteSummaryDto MapSummary(VotePoll v, ICurrentUser user)
+    {
+        var results = BuildResults(v);
+
+        // compute current user's ballot (if any)
+        var myBallot = user.IsAuthenticated
+            ? v.Ballots.FirstOrDefault(b => b.UserId == user.UserId)
+            : null;
+
+        return new VoteSummaryDto(
             v.Id,
             v.Title,
             v.Description,
@@ -65,8 +69,12 @@ public sealed class GetActiveVotesQueryHandler
             v.Deadline,
             v.IsOpen(DateTimeOffset.UtcNow),
             v.Eligibility,
-            BuildResults(v)
+            results,
+            myBallot != null,                         // AlreadyVoted
+            v.Type == VoteType.MultipleChoice ? null : myBallot?.Choice, // MyChoice
+            v.Type == VoteType.MultipleChoice ? myBallot?.OptionId : null // MyOptionId
         );
+    }
 
     internal static VoteResultsDto BuildResults(VotePoll v)
     {
