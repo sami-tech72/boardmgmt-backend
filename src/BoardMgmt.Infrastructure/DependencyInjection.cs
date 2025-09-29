@@ -1,9 +1,12 @@
 ﻿// File: src/BoardMgmt.Infrastructure/DependencyInjection.cs
+using Azure.Identity;
+using BoardMgmt.Application.Calendars;
 using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Application.Common.Interfaces.Repositories;
 using BoardMgmt.Domain.Entities;
 using BoardMgmt.Domain.Identity;
 using BoardMgmt.Infrastructure.Auth;
+using BoardMgmt.Infrastructure.Calendars;
 using BoardMgmt.Infrastructure.Files;
 using BoardMgmt.Infrastructure.Identity;
 using BoardMgmt.Infrastructure.Persistence;
@@ -16,6 +19,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Graph;
 using System;
 
 namespace BoardMgmt.Infrastructure
@@ -121,6 +125,47 @@ namespace BoardMgmt.Infrastructure
             services.AddScoped<IVoteReadRepository, VoteReadRepository>();
             services.AddScoped<IActivityReadRepository, ActivityReadRepository>();
             services.AddScoped<IUserReadRepository, UserReadRepository>();
+
+
+
+            return services;
+        }
+
+
+        public static IServiceCollection AddCalendarIntegrations(this IServiceCollection services, IConfiguration config)
+        {
+            // Options
+            services.Configure<GraphOptions>(config.GetSection("Graph"));
+            services.Configure<ZoomOptions>(config.GetSection("Zoom"));
+
+
+            // Graph client (app-only)
+            var graphOpts = config.GetSection("Graph").Get<GraphOptions>()!;
+            var credential = new ClientSecretCredential(graphOpts.TenantId, graphOpts.ClientId, graphOpts.ClientSecret);
+            var graphClient = new GraphServiceClient(credential);
+            services.AddSingleton(graphClient);
+
+
+            // Zoom HttpClient
+            services.AddHttpClient("Zoom", client =>
+            {
+                client.Timeout = TimeSpan.FromSeconds(30);
+                // BaseAddress optional; we send absolute URLs.
+            });
+
+
+            // Concrete services
+            services.AddSingleton<Microsoft365CalendarService>();
+            services.AddSingleton<ZoomCalendarService>();
+
+
+            // Selector registration (map provider keys to services)
+            services.AddSingleton<ICalendarServiceSelector>(sp => new CalendarServiceSelector(new[]
+            {
+                new KeyValuePair<string, ICalendarService>("Microsoft365", sp.GetRequiredService<Microsoft365CalendarService>()),
+                new KeyValuePair<string, ICalendarService>("Zoom", sp.GetRequiredService<ZoomCalendarService>())
+            }));
+
 
             return services;
         }

@@ -15,16 +15,11 @@ namespace BoardMgmt.Application.Meetings.Commands
         DateTimeOffset ScheduledAt,
         DateTimeOffset? EndAt,
         string Location,
-        List<string>? AttendeeUserIds,              // identity-backed mode (optional)
-        List<UpdateAttendeeDto>? AttendeesRich      // full rows with RowVersion
+        List<string>? AttendeeUserIds,
+        List<UpdateAttendeeDto>? AttendeesRich
     ) : IRequest<bool>;
 
     public sealed record UpdateAttendeeDto(
-        Guid Id,                 // Guid.Empty for new attendees
-        string? UserId,          // null for external/non-user
-        string Name,
-        string? Role,
-        string? Email,
-        string RowVersionBase64  // empty for new
+        Guid? Id, string Name, string? Email, string? Role, bool IsRequired, bool IsConfirmed, string RowVersionBase64
     );
 }

@@ -22,17 +22,20 @@ public class Meeting
     public ICollection<MeetingAttendee> Attendees { get; set; } = new List<MeetingAttendee>();
 
     public List<VotePoll> Votes { get; set; } = new();
-    // Calendar integration metadata
+    // Calendar/meeting integration metadata
     [MaxLength(256)]
-    public string? ExternalCalendar { get; set; } // e.g. "Microsoft365"
+    public string? ExternalCalendar { get; set; } // informational label (e.g. "Microsoft365" or "Zoom")
+
 
     [MaxLength(320)]
-    public string? ExternalCalendarMailbox { get; set; } // e.g. board@yourco.com
+    public string? ExternalCalendarMailbox { get; set; } // used for M365 host mailbox (e.g. board@yourco.com)
+
 
     [MaxLength(200)]
-    public string? ExternalEventId { get; set; } // Graph event id
+    public string? ExternalEventId { get; set; } // Graph event id or Zoom meeting id
+
 
     [MaxLength(1000)]
-    public string? OnlineJoinUrl { get; set; } // Teams join link
+    public string? OnlineJoinUrl { get; set; } // Teams or Zoom join link
 
 }

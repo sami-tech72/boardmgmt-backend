@@ -1,26 +1,36 @@
-﻿using BoardMgmt.Application.Calendars;
+﻿// Application/Meetings/Commands/CreateMeetingHandler.cs
+using BoardMgmt.Application.Calendars;
 using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Domain.Entities;
+using BoardMgmt.Domain.Calendars;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
+
 namespace BoardMgmt.Application.Meetings.Commands;
+
 
 public class CreateMeetingHandler : IRequestHandler<CreateMeetingCommand, Guid>
 {
     private readonly DbContext _db;
     private readonly IIdentityUserReader _users;
-    private readonly ICalendarService _calendar;
+    private readonly ICalendarServiceSelector _calSelector;
 
-    public CreateMeetingHandler(DbContext db, IIdentityUserReader users, ICalendarService calendar)
+
+    public CreateMeetingHandler(DbContext db, IIdentityUserReader users, ICalendarServiceSelector calSelector)
     {
         _db = db;
         _users = users;
-        _calendar = calendar;
+        _calSelector = calSelector;
     }
+
 
     public async Task<Guid> Handle(CreateMeetingCommand request, CancellationToken ct)
     {
+        if (!CalendarProviders.IsSupported(request.Provider))
+            throw new ArgumentOutOfRangeException(nameof(request.Provider), $"Unknown calendar provider: {request.Provider}");
+
+
         var entity = new Meeting
         {
             Title = request.Title.Trim(),
@@ -30,13 +40,15 @@ public class CreateMeetingHandler : IRequestHandler<CreateMeetingCommand, Guid>
             EndAt = request.EndAt,
             Location = string.IsNullOrWhiteSpace(request.Location) ? "TBD" : request.Location.Trim(),
             Status = MeetingStatus.Scheduled,
-            ExternalCalendar = "Microsoft365" // informational; no infra dependency
+            ExternalCalendar = request.Provider, // "Microsoft365" or "Zoom"
+            ExternalCalendarMailbox = request.HostIdentity // M365 mailbox or Zoom host email (optional)
         };
 
+
         // Attach attendees (same as before)
-        if (request.attendeeUserIds is { Count: > 0 })
+        if (request.AttendeeUserIds is { Count: > 0 })
         {
-            var users = await _users.GetByIdsAsync(request.attendeeUserIds, ct);
+            var users = await _users.GetByIdsAsync(request.AttendeeUserIds, ct);
             foreach (var u in users)
             {
                 var name = string.IsNullOrWhiteSpace(u.DisplayName) ? (u.Email ?? "Unknown") : u.DisplayName!;
@@ -55,30 +67,20 @@ public class CreateMeetingHandler : IRequestHandler<CreateMeetingCommand, Guid>
             foreach (var raw in request.Attendees.Where(s => !string.IsNullOrWhiteSpace(s)))
             {
                 var full = raw.Trim();
-                string name = full;
-                string? role = null;
-                var open = full.IndexOf('(');
-                var close = full.IndexOf(')');
-                if (open > 0 && close > open)
-                {
-                    name = full[..open].Trim();
-                    role = full[(open + 1)..close].Trim();
-                }
-
-                entity.Attendees.Add(new MeetingAttendee
-                {
-                    Name = name,
-                    Role = role,
-                    IsRequired = true,
-                    IsConfirmed = false
-                });
+                string name = full; string? role = null;
+                var open = full.IndexOf('('); var close = full.IndexOf(')');
+                if (open > 0 && close > open) { name = full[..open].Trim(); role = full[(open + 1)..close].Trim(); }
+                entity.Attendees.Add(new MeetingAttendee { Name = name, Role = role, IsRequired = true, IsConfirmed = false });
             }
         }
 
-        // Create the Graph event via the calendar abstraction
-        var (eventId, joinUrl) = await _calendar.CreateEventAsync(entity, ct);
+
+        // Create in chosen provider
+        var svc = _calSelector.For(request.Provider);
+        var (eventId, joinUrl) = await svc.CreateEventAsync(entity, ct);
         entity.ExternalEventId = eventId;
         entity.OnlineJoinUrl = joinUrl;
+
 
         _db.Set<Meeting>().Add(entity);
         await _db.SaveChangesAsync(ct);

@@ -123,16 +123,8 @@ AddModulePolicies("Messages", AppModule.Messages);
 
 builder.Services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
 
-builder.Services.Configure<GraphOptions>(builder.Configuration.GetSection("Graph"));
 
-builder.Services.AddSingleton<GraphServiceClient>(sp =>
-{
-    var cfg = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<GraphOptions>>().Value;
-    var cred = new ClientSecretCredential(cfg.TenantId, cfg.ClientId, cfg.ClientSecret);
-    return new GraphServiceClient(cred, new[] { "https://graph.microsoft.com/.default" });
-});
-
-builder.Services.AddScoped<ICalendarService, CalendarService>();
+builder.Services.AddCalendarIntegrations(builder.Configuration);
 // ---- MVC + filters ----
 builder.Services
     .AddControllers(o => o.Filters.Add<InvalidModelStateFilter>())

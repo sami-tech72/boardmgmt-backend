@@ -48,7 +48,9 @@ public class MeetingsController : ControllerBase
         DateTimeOffset? EndAt,
         string Location,
         List<string>? AttendeeUserIds,
-        List<string>? Attendees = null
+        List<string>? Attendees = null,
+        string Provider = "Zoom", // NEW: default to Zoom
+        string? HostIdentity = null // NEW: mailbox (M365) or host email (Zoom)
     );
 
     [HttpPost]
@@ -56,16 +58,9 @@ public class MeetingsController : ControllerBase
     public async Task<IActionResult> Create([FromBody] CreateMeetingDto dto)
     {
         var id = await _mediator.Send(new CreateMeetingCommand(
-            dto.Title,
-            dto.Description,
-            dto.Type,
-            dto.ScheduledAt,
-            dto.EndAt,
-            dto.Location,
-            attendeeUserIds: dto.AttendeeUserIds,
-            Attendees: dto.Attendees
+        dto.Title, dto.Description, dto.Type, dto.ScheduledAt, dto.EndAt, dto.Location,
+        dto.AttendeeUserIds, dto.Attendees, dto.Provider, dto.HostIdentity
         ));
-
         return this.CreatedApi(nameof(GetById), new { id }, new { id }, "Meeting created");
     }
 
