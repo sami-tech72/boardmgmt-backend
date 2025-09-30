@@ -48,7 +48,8 @@ public class GetMeetingsQueryHandler : IRequestHandler<GetMeetingsQuery, IReadOn
                             : string.Empty
                     ))
                  .ToList(),
-               m.OnlineJoinUrl
+               m.OnlineJoinUrl,
+               "Zoom"
             ))
             .ToListAsync(ct);
     }

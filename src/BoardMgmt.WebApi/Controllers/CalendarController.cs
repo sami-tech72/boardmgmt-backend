@@ -1,61 +1,86 @@
-﻿// Backend/src/BoardMgmt.Api/Controllers/CalendarController.cs
+﻿using BoardMgmt.Application.Calendars;
+using BoardMgmt.Application.Calendars.Queries;
+using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using BoardMgmt.Application.Calendars;
-using BoardMgmt.Domain.Entities;
+
+namespace BoardMgmt.WebApi.Controllers;
 
 [ApiController]
-[Route("api/calendar")]
+[Route("api/[controller]")]
 public sealed class CalendarController : ControllerBase
 {
-    private readonly ICalendarService _svc;
-    public CalendarController(ICalendarService svc) => _svc = svc;
+    private readonly IMediator _mediator;
+    private readonly ICalendarServiceSelector _selector; // keep if you also call external providers
 
-    // POST /api/calendar/events
-    [HttpPost("events")]
-    public async Task<IActionResult> Create([FromBody] CreateMeetingRequest req, CancellationToken ct)
+    public CalendarController(IMediator mediator, ICalendarServiceSelector selector)
     {
-        var meeting = new Meeting
+        _mediator = mediator;
+        _selector = selector;
+    }
+
+    // GET /api/calendar/range?start=2025-09-01T00:00:00Z&end=2025-09-30T23:59:59Z&provider=Zoom|Microsoft365|All
+    [HttpGet("range")]
+    [Authorize]
+    public async Task<ActionResult<IReadOnlyList<CalendarEventDto>>> GetRange(
+        [FromQuery] DateTimeOffset? start,
+        [FromQuery] DateTimeOffset? end,
+        [FromQuery] string? provider = "All",
+        CancellationToken ct = default)
+    {
+        var s = start ?? DateTimeOffset.UtcNow.AddDays(-7);
+        var e = end ?? DateTimeOffset.UtcNow.AddDays(30);
+
+        var list = new List<CalendarEventDto>();
+        var warnings = new List<string>();
+
+        async Task Add(string key)
         {
-            Title = req.Title,
-            Description = req.Description,
-            ScheduledAt = req.StartsAtUtc,                 // UTC in request
-            EndAt = req.EndsAtUtc,
-            Location = string.IsNullOrWhiteSpace(req.Location) ? "TBD" : req.Location,
-            Attendees = req.Attendees.Select(a => new MeetingAttendee
+            try
             {
-                Name = a.Name ?? a.Email,
-                Email = a.Email,
-                IsRequired = a.IsRequired
-            }).ToList()
-        };
+                var svc = _selector.For(key);
+                var part = await svc.ListRangeAsync(s, e, ct);
+                list.AddRange(part);
+            }
+            catch (Exception ex)
+            {
+                // Don’t block the other provider; return a warning header
+                warnings.Add($"{key}: {ex.Message}");
+            }
+        }
 
-        var eventId = await _svc.CreateEventAsync(meeting, ct);
-        return Ok(new { id = eventId });
+        if (string.Equals(provider, "Zoom", StringComparison.OrdinalIgnoreCase))
+        {
+            await Add("Zoom");
+        }
+        else if (string.Equals(provider, "Microsoft365", StringComparison.OrdinalIgnoreCase))
+        {
+            await Add("Microsoft365");
+        }
+        else // All
+        {
+            await Task.WhenAll(Add("Microsoft365"), Add("Zoom"));
+        }
+
+        if (warnings.Count > 0)
+            Response.Headers.Append("X-Warnings", string.Join(" | ", warnings));
+
+        return Ok(list.OrderBy(x => x.StartUtc).ToList());
     }
 
-    // GET /api/calendar/upcoming?take=10
-    [HttpGet("upcoming")]
-    public async Task<IActionResult> Upcoming([FromQuery] int take = 10, CancellationToken ct = default)
-        => Ok(await _svc.ListUpcomingAsync(take, ct));
-
-    // DELETE /api/calendar/events/{id}
-    [HttpDelete("events/{id}")]
-    public async Task<IActionResult> Delete(string id, CancellationToken ct)
+    [HttpGet("range-db")]
+    [Authorize]
+    public async Task<IReadOnlyList<CalendarEventDto>> GetRangeFromDb(
+        [FromQuery] DateTimeOffset? start,
+        [FromQuery] DateTimeOffset? end,
+        CancellationToken ct = default)
     {
-        await _svc.CancelEventAsync(id, ct);
-        return NoContent();
+        var s = start ?? DateTimeOffset.UtcNow.AddDays(-7);
+        var e = end ?? DateTimeOffset.UtcNow.AddDays(30);
+
+        // Guard: if somehow start >= end, swap or expand
+        if (s >= e) e = s.AddDays(1);
+
+        return await _mediator.Send(new GetCalendarRangeFromDbQuery(s, e), ct);
     }
-
-
-
 }
-
-public sealed record CreateMeetingRequest(
-    string Title,
-    string? Description,
-    DateTimeOffset StartsAtUtc,
-    DateTimeOffset? EndsAtUtc,
-    string? Location,
-    List<CreateMeetingAttendee> Attendees);
-
-public sealed record CreateMeetingAttendee(string Email, string? Name, bool IsRequired);

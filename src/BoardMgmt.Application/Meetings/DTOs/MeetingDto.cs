@@ -17,5 +17,6 @@ public record MeetingDto(
     
     IReadOnlyList<AgendaItemDto> AgendaItems,
      IReadOnlyList<AttendeeDto> Attendees,
-    string? JoinUrl // ← NEW
+    string? JoinUrl, // ← NEW
+     string? Provider
 );

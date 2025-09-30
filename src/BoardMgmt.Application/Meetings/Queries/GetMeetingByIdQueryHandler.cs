@@ -44,7 +44,8 @@ public sealed class GetMeetingByIdQueryHandler : IRequestHandler<GetMeetingByIdQ
                             : string.Empty
                     ))
                  .ToList(),
-               m.OnlineJoinUrl
+               m.OnlineJoinUrl,
+               "Zoom"
             ))
             .FirstOrDefaultAsync(ct);
     }
