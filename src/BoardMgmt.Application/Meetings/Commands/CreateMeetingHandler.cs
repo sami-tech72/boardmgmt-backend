@@ -28,7 +28,7 @@ public class CreateMeetingHandler : IRequestHandler<CreateMeetingCommand, Guid>
     public async Task<Guid> Handle(CreateMeetingCommand request, CancellationToken ct)
     {
         if (!CalendarProviders.IsSupported(request.Provider))
-            throw new ArgumentOutOfRangeException(nameof(request.Provider), $"Unknown calendar provider: {request.Provider}");
+            throw new ArgumentOutOfRangeException("provider", $"Unknown calendar provider: {request.Provider}");
 
 
         var entity = new Meeting

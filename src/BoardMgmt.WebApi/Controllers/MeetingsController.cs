@@ -120,6 +120,15 @@ public class MeetingsController : ControllerBase
         return this.OkApi(list);
     }
 
+    // MeetingsController.cs
+    // MeetingsController.cs
+    [HttpDelete("{id:guid}")]
+    [Authorize(Policy = "Meetings.Delete")]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+    {
+        var ok = await _mediator.Send(new DeleteMeetingCommand(id), ct);
+        return ok ? NoContent() : NotFound();
+    }
 
 
 }

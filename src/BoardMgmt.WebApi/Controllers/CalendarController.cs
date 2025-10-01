@@ -1,4 +1,5 @@
 ﻿using BoardMgmt.Application.Calendars;
+using BoardMgmt.Application.Calendars.Commands;
 using BoardMgmt.Application.Calendars.Queries;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -83,4 +84,26 @@ public sealed class CalendarController : ControllerBase
 
         return await _mediator.Send(new GetCalendarRangeFromDbQuery(s, e), ct);
     }
+
+
+
+    [HttpPut("move/{id:guid}")]
+    [Authorize]
+    public async Task<IActionResult> Move(Guid id, [FromBody] MoveCalendarEventDto body, CancellationToken ct)
+    {
+        if (body is null) return BadRequest("Body required.");
+
+        if (body.EndUtc.HasValue && body.EndUtc.Value <= body.StartUtc)
+            return BadRequest("EndUtc must be after StartUtc.");
+
+        var ok = await _mediator.Send(new MoveCalendarEventCommand(
+            id,
+            body.StartUtc,
+            body.EndUtc
+        ), ct);
+
+        return ok ? NoContent() : NotFound();
+    }
+
+    public sealed record MoveCalendarEventDto(DateTimeOffset StartUtc, DateTimeOffset? EndUtc);
 }
