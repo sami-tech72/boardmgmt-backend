@@ -42,6 +42,10 @@ namespace BoardMgmt.Infrastructure.Persistence
         public DbSet<ChatAttachment> ChatAttachments => Set<ChatAttachment>();
         public DbSet<ChatReaction> ChatReactions => Set<ChatReaction>();
 
+
+        public DbSet<Transcript> Transcripts => Set<Transcript>();
+        public DbSet<TranscriptUtterance> TranscriptUtterances => Set<TranscriptUtterance>();
+
         public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
             => base.SaveChangesAsync(cancellationToken);
 
@@ -317,6 +321,37 @@ namespace BoardMgmt.Infrastructure.Persistence
                     .HasForeignKey(x => x.UserId)
                     .OnDelete(DeleteBehavior.Cascade);
             });
+
+
+            b.Entity<Transcript>(e =>
+            {
+                e.ToTable("Transcripts");
+                e.HasKey(x => x.Id);
+                e.Property(x => x.Provider).HasMaxLength(64).IsRequired();
+                e.Property(x => x.ProviderTranscriptId).HasMaxLength(256).IsRequired();
+                e.HasIndex(x => new { x.MeetingId, x.Provider }).IsUnique();
+
+                e.HasOne(x => x.Meeting)
+                 .WithMany() // or .WithOne()? We are not adding collection on Meeting to keep your entity light
+                 .HasForeignKey(x => x.MeetingId)
+                 .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            b.Entity<TranscriptUtterance>(e =>
+            {
+                e.ToTable("TranscriptUtterances");
+                e.HasKey(x => x.Id);
+                e.Property(x => x.Text).HasMaxLength(4000).IsRequired();
+                e.Property(x => x.SpeakerName).HasMaxLength(256);
+                e.Property(x => x.SpeakerEmail).HasMaxLength(320);
+                e.HasIndex(x => new { x.TranscriptId, x.Start });
+
+                e.HasOne(x => x.Transcript)
+                 .WithMany(t => t.Utterances)
+                 .HasForeignKey(x => x.TranscriptId)
+                 .OnDelete(DeleteBehavior.Cascade);
+            });
+
         }
     }
 }

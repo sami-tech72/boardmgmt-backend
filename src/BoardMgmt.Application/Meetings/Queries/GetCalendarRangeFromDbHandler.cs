@@ -1,5 +1,6 @@
 ﻿// Application/Calendars/Queries/GetCalendarRangeFromDbHandler.cs
 using BoardMgmt.Application.Calendars;
+using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -10,20 +11,42 @@ public sealed class GetCalendarRangeFromDbHandler
   : IRequestHandler<GetCalendarRangeFromDbQuery, IReadOnlyList<CalendarEventDto>>
 {
     private readonly DbContext _db;
-    public GetCalendarRangeFromDbHandler(DbContext db) => _db = db;
+    private readonly ICurrentUser _current;
+
+    public GetCalendarRangeFromDbHandler(DbContext db, ICurrentUser current)
+    {
+        _db = db;
+        _current = current;
+    }
 
     public async Task<IReadOnlyList<CalendarEventDto>> Handle(GetCalendarRangeFromDbQuery request, CancellationToken ct)
     {
-        // Helper inlined so EF can translate:
-        // computedEnd = m.EndAt ?? m.ScheduledAt.AddHours(1)
+        // If not signed in, return empty (or throw, depending on your policy)
+        if (!_current.IsAuthenticated)
+            return Array.Empty<CalendarEventDto>();
 
-        return await _db.Set<Meeting>()
+        var userId = _current.UserId;                 // Identity user id (string)
+        var emailLower = _current.Email?.Trim().ToLower(); // EF-translatable compare
+
+        // Base overlap filter:
+        // Overlap if (End > rangeStart) AND (Start < rangeEnd)
+        IQueryable<Meeting> query = _db.Set<Meeting>()
             .AsNoTracking()
             .Where(m =>
-                // Overlap: (End > rangeStart) AND (Start < rangeEnd)
                 (m.EndAt ?? m.ScheduledAt.AddHours(1)) > request.StartUtc &&
-                m.ScheduledAt < request.EndUtc)
-            // Order BEFORE projecting to DTO so SQL orders by a scalar column
+                m.ScheduledAt < request.EndUtc
+            );
+
+        
+        query = query.Where(m =>
+            m.Attendees.Any(a =>
+                (!string.IsNullOrEmpty(a.UserId) && a.UserId == userId) ||
+                (!string.IsNullOrEmpty(a.Email) && emailLower != null && a.Email!.ToLower() == emailLower)
+            )
+        );
+        
+        // Order by scalar columns first (server-side), then project
+        return await query
             .OrderBy(m => m.ScheduledAt)
             .ThenBy(m => m.EndAt ?? m.ScheduledAt.AddHours(1))
             .Select(m => new CalendarEventDto(
@@ -32,7 +55,7 @@ public sealed class GetCalendarRangeFromDbHandler
                 m.ScheduledAt,
                 m.EndAt ?? m.ScheduledAt.AddHours(1),
                 m.OnlineJoinUrl,
-                // avoid IsNullOrWhiteSpace in SQL translation
+                // Avoid IsNullOrWhiteSpace to keep it SQL-translatable
                 (m.ExternalCalendar != null && m.ExternalCalendar != "") ? m.ExternalCalendar : null
             ))
             .ToListAsync(ct);

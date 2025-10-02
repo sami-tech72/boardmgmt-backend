@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace BoardMgmt.Infrastructure.Persistence.Migrations
+namespace BoardMgmt.Infrastructure.Migrations
 {
     /// <inheritdoc />
     public partial class InitialCreate : Migration
@@ -213,6 +213,27 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                     table.PrimaryKey("PK_Documents", x => x.Id);
                     table.ForeignKey(
                         name: "FK_Documents_Meetings_MeetingId",
+                        column: x => x.MeetingId,
+                        principalTable: "Meetings",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Transcripts",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    MeetingId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    Provider = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: false),
+                    ProviderTranscriptId = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: false),
+                    CreatedUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Transcripts", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Transcripts_Meetings_MeetingId",
                         column: x => x.MeetingId,
                         principalTable: "Meetings",
                         principalColumn: "Id",
@@ -472,6 +493,30 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                         name: "FK_DocumentRoleAccess_Documents_DocumentId",
                         column: x => x.DocumentId,
                         principalTable: "Documents",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "TranscriptUtterances",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    TranscriptId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    Start = table.Column<TimeSpan>(type: "time", nullable: false),
+                    End = table.Column<TimeSpan>(type: "time", nullable: false),
+                    Text = table.Column<string>(type: "nvarchar(4000)", maxLength: 4000, nullable: false),
+                    SpeakerName = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
+                    SpeakerEmail = table.Column<string>(type: "nvarchar(320)", maxLength: 320, nullable: true),
+                    UserId = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_TranscriptUtterances", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_TranscriptUtterances_Transcripts_TranscriptId",
+                        column: x => x.TranscriptId,
+                        principalTable: "Transcripts",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                 });
@@ -759,6 +804,17 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
+                name: "IX_Transcripts_MeetingId_Provider",
+                table: "Transcripts",
+                columns: new[] { "MeetingId", "Provider" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_TranscriptUtterances_TranscriptId_Start",
+                table: "TranscriptUtterances",
+                columns: new[] { "TranscriptId", "Start" });
+
+            migrationBuilder.CreateIndex(
                 name: "IX_VoteBallots_OptionId",
                 table: "VoteBallots",
                 column: "OptionId");
@@ -842,6 +898,9 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                 name: "RolePermissions");
 
             migrationBuilder.DropTable(
+                name: "TranscriptUtterances");
+
+            migrationBuilder.DropTable(
                 name: "VoteBallots");
 
             migrationBuilder.DropTable(
@@ -858,6 +917,9 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
 
             migrationBuilder.DropTable(
                 name: "AspNetRoles");
+
+            migrationBuilder.DropTable(
+                name: "Transcripts");
 
             migrationBuilder.DropTable(
                 name: "VoteOptions");

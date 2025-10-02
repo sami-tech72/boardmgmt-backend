@@ -4,16 +4,19 @@ using BoardMgmt.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
 
-namespace BoardMgmt.Infrastructure.Persistence.Migrations
+namespace BoardMgmt.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251002095153_InitialCreate")]
+    partial class InitialCreate
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -555,6 +558,74 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                     b.ToTable("MeetingAttendees");
                 });
 
+            modelBuilder.Entity("BoardMgmt.Domain.Entities.Transcript", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("MeetingId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("ProviderTranscriptId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MeetingId", "Provider")
+                        .IsUnique();
+
+                    b.ToTable("Transcripts", (string)null);
+                });
+
+            modelBuilder.Entity("BoardMgmt.Domain.Entities.TranscriptUtterance", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<TimeSpan>("End")
+                        .HasColumnType("time");
+
+                    b.Property<string>("SpeakerEmail")
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<string>("SpeakerName")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<TimeSpan>("Start")
+                        .HasColumnType("time");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
+
+                    b.Property<Guid>("TranscriptId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("UserId")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TranscriptId", "Start");
+
+                    b.ToTable("TranscriptUtterances", (string)null);
+                });
+
             modelBuilder.Entity("BoardMgmt.Domain.Entities.Vote", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1013,6 +1084,28 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                     b.Navigation("Meeting");
                 });
 
+            modelBuilder.Entity("BoardMgmt.Domain.Entities.Transcript", b =>
+                {
+                    b.HasOne("BoardMgmt.Domain.Entities.Meeting", "Meeting")
+                        .WithMany()
+                        .HasForeignKey("MeetingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Meeting");
+                });
+
+            modelBuilder.Entity("BoardMgmt.Domain.Entities.TranscriptUtterance", b =>
+                {
+                    b.HasOne("BoardMgmt.Domain.Entities.Transcript", "Transcript")
+                        .WithMany("Utterances")
+                        .HasForeignKey("TranscriptId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Transcript");
+                });
+
             modelBuilder.Entity("BoardMgmt.Domain.Entities.Vote", b =>
                 {
                     b.HasOne("BoardMgmt.Domain.Entities.AgendaItem", null)
@@ -1177,6 +1270,11 @@ namespace BoardMgmt.Infrastructure.Persistence.Migrations
                     b.Navigation("Documents");
 
                     b.Navigation("Votes");
+                });
+
+            modelBuilder.Entity("BoardMgmt.Domain.Entities.Transcript", b =>
+                {
+                    b.Navigation("Utterances");
                 });
 
             modelBuilder.Entity("BoardMgmt.Domain.Entities.VotePoll", b =>

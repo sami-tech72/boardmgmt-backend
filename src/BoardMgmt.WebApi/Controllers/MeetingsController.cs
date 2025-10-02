@@ -131,4 +131,23 @@ public class MeetingsController : ControllerBase
     }
 
 
+    // POST /api/meetings/{id}/transcripts/ingest
+    [HttpPost("{id:guid}/transcripts/ingest")]
+    [Authorize(Policy = "Meetings.Update")] // or a dedicated policy like "Meetings.IngestTranscript"
+    public async Task<IActionResult> IngestTranscript(Guid id, CancellationToken ct)
+    {
+        var count = await _mediator.Send(new IngestTranscriptCommand(id), ct);
+        return this.OkApi(new { meetingId = id, utterances = count }, "Transcript ingested");
+    }
+
+    // GET /api/meetings/{id}/transcripts
+    [HttpGet("{id:guid}/transcripts")]
+    [Authorize] // adjust to your needs
+    public async Task<IActionResult> GetTranscript(Guid id, CancellationToken ct)
+    {
+        // We expose the latest transcript (by CreatedUtc) if multiple exist
+        var tr = await _mediator.Send(new GetTranscriptByMeetingIdQuery(id), ct);
+        return tr is null ? NotFound() : this.OkApi(tr);
+    }
+
 }

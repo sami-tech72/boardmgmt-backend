@@ -154,6 +154,14 @@ namespace BoardMgmt.Infrastructure
             });
 
 
+
+
+           
+
+            // Register token provider (scoped or singleton; scoped is fine)
+            services.AddScoped<IZoomTokenProvider, ZoomTokenProvider>();
+
+
             // Concrete services
             services.AddSingleton<Microsoft365CalendarService>();
             services.AddSingleton<ZoomCalendarService>();
