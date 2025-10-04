@@ -1,9 +1,14 @@
 ﻿using Azure.Identity;
 using BoardMgmt.Application;
+using BoardMgmt.Application.Calendars;
+using BoardMgmt.Application.Common.Email;
 using BoardMgmt.Application.Common.Interfaces; // IFileStorage
 using BoardMgmt.Domain.Identity;
 using BoardMgmt.Infrastructure;
+using BoardMgmt.Infrastructure.Calendars;
+using BoardMgmt.Infrastructure.Email;
 using BoardMgmt.Infrastructure.Graph;
+using BoardMgmt.Application.Common.Options;
 using BoardMgmt.Infrastructure.Persistence;
 using BoardMgmt.Infrastructure.Persistence.Seed;
 using BoardMgmt.WebApi.Auth;
@@ -21,10 +26,6 @@ using Microsoft.OpenApi.Models;
 using Serilog;
 using System.Reflection;
 using System.Text;
-
-
-using BoardMgmt.Application.Calendars;
-using BoardMgmt.Infrastructure.Calendars;
 
 var builder = WebApplication.CreateBuilder(args);
 var config = builder.Configuration;
@@ -97,6 +98,14 @@ builder.Services.AddSignalR();
 
 // ---- Authorization / policies ----
 builder.Services.AddAuthorization();
+
+
+// Bind options
+builder.Services.Configure<AppOptions>(builder.Configuration.GetSection("App"));
+builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection("Smtp"));
+
+// Use SMTP mailer
+builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
 
 var authz = builder.Services.AddAuthorizationBuilder();
 

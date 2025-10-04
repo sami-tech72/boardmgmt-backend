@@ -48,18 +48,15 @@ public sealed class ZoomCalendarService : ICalendarService
             {
                 host_video = true,
                 participant_video = false,
-                //waiting_room = true,
-                //join_before_host = false,
-                //approval_type = 2, // no registration required
-                //mute_upon_entry = true,
-                //auto_recording = "none"
 
-                waiting_room = false,          // <— turn off waiting room
-                join_before_host = true,       // <— allow join before the host arrives
-                approval_type = 2,             // no registration required
-                meeting_authentication = false,// <— no sign-in requirement
+                waiting_room = false,
+                join_before_host = true,
+                approval_type = 2,              // no registration required
+                meeting_authentication = false, // no sign-in requirement
                 mute_upon_entry = true,
-                auto_recording = "none"
+
+                // CHANGED: ensure cloud recording so transcripts can be generated
+                auto_recording = "cloud"
             }
         };
 
