@@ -10,54 +10,84 @@ public class MeetingReadRepository : IMeetingReadRepository
     private readonly DbContext _db;
     public MeetingReadRepository(DbContext db) => _db = db;
 
-    public Task<int> CountUpcomingAsync(DateTime utcNow, CancellationToken ct) =>
-        _db.Set<Meeting>()
-           .Where(m =>
-               m.Status == MeetingStatus.Scheduled &&
-               m.ScheduledAt >= DateTime.SpecifyKind(utcNow, DateTimeKind.Utc))
-           .CountAsync(ct);
+    public Task<int> CountUpcomingAsync(DateTime utcNow, CancellationToken ct)
+    {
+        // Convert incoming DateTime to a DateTimeOffset in UTC for SQL-side comparison
+        var nowOffset = utcNow.Kind == DateTimeKind.Utc
+            ? new DateTimeOffset(utcNow)
+            : new DateTimeOffset(utcNow.ToUniversalTime());
+
+        return _db.Set<Meeting>()
+            .Where(m =>
+                m.Status == MeetingStatus.Scheduled &&        // ✅ compare enum directly
+                m.ScheduledAt >= nowOffset)                   // ✅ use DateTimeOffset (no .UtcDateTime)
+            .CountAsync(ct);
+    }
 
     public async Task<IReadOnlyList<DashboardMeetingDto>> GetRecentAsync(int take, CancellationToken ct)
     {
-        var nowUtc = DateTime.UtcNow;
+        var nowOffset = DateTimeOffset.UtcNow;
 
-        var data = await _db.Set<Meeting>()
+        // First project raw columns EF can translate, then convert after materialization
+        var rows = await _db.Set<Meeting>()
             .OrderByDescending(m => m.ScheduledAt)
             .Take(take)
+            .Select(m => new
+            {
+                m.Id,
+                m.Title,
+                m.Location,
+                m.ScheduledAt,
+                m.Status
+            })
+            .ToListAsync(ct);
+
+        var data = rows
             .Select(m => new DashboardMeetingDto(
                 m.Id,
                 m.Title,
-                m.Location, // no Subtitle on entity; Location is a reasonable stand-in
-                m.ScheduledAt.UtcDateTime, // DateTimeOffset -> DateTime (UTC)
-                                           // Map "Scheduled" in the future to "Upcoming", otherwise use enum text
-                m.Status == MeetingStatus.Scheduled && m.ScheduledAt.UtcDateTime > nowUtc
+                m.Location,
+                m.ScheduledAt.UtcDateTime, // ✅ safe now (in memory)
+                (m.Status == MeetingStatus.Scheduled && m.ScheduledAt > nowOffset)
                     ? "Upcoming"
                     : m.Status.ToString()))
-            .ToListAsync(ct);
+            .ToList();
 
         return data;
     }
 
     public async Task<(int total, IReadOnlyList<MeetingItemDto> items)> GetUpcomingPagedAsync(int page, int pageSize, CancellationToken ct)
     {
-        var nowUtc = DateTime.UtcNow;
+        var nowOffset = DateTimeOffset.UtcNow;
 
         var baseQuery = _db.Set<Meeting>()
-            .Where(m => m.Status == MeetingStatus.Scheduled && m.ScheduledAt.UtcDateTime >= nowUtc);
+            .Where(m =>
+                m.Status == MeetingStatus.Scheduled &&        // ✅ no cast
+                m.ScheduledAt >= nowOffset);                  // ✅ no .UtcDateTime in WHERE
 
         var total = await baseQuery.CountAsync(ct);
 
-        var items = await baseQuery
+        var pageRows = await baseQuery
             .OrderBy(m => m.ScheduledAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
+            .Select(m => new
+            {
+                m.Id,
+                m.Title,
+                m.Location,
+                m.ScheduledAt
+            })
+            .ToListAsync(ct);
+
+        var items = pageRows
             .Select(m => new MeetingItemDto(
                 m.Id,
                 m.Title,
                 m.Location,
-                m.ScheduledAt.UtcDateTime,
+                m.ScheduledAt.UtcDateTime, // ✅ convert after materialization
                 "Upcoming"))
-            .ToListAsync(ct);
+            .ToList();
 
         return (total, items);
     }
