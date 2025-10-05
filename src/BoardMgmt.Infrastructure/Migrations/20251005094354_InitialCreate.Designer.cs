@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace BoardMgmt.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20251002095153_InitialCreate")]
+    [Migration("20251005094354_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -451,6 +451,55 @@ namespace BoardMgmt.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("Folders");
+                });
+
+            modelBuilder.Entity("BoardMgmt.Domain.Entities.GeneratedReport", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("EndDate")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("FileUrl")
+                        .HasMaxLength(1024)
+                        .HasColumnType("nvarchar(1024)");
+
+                    b.Property<string>("Format")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTimeOffset>("GeneratedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("GeneratedByUserId")
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("PeriodLabel")
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<DateTimeOffset?>("StartDate")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GeneratedAt");
+
+                    b.HasIndex("GeneratedByUserId");
+
+                    b.ToTable("GeneratedReports");
                 });
 
             modelBuilder.Entity("BoardMgmt.Domain.Entities.Meeting", b =>
@@ -1066,6 +1115,16 @@ namespace BoardMgmt.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Document");
+                });
+
+            modelBuilder.Entity("BoardMgmt.Domain.Entities.GeneratedReport", b =>
+                {
+                    b.HasOne("BoardMgmt.Domain.Entities.AppUser", "GeneratedByUser")
+                        .WithMany()
+                        .HasForeignKey("GeneratedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("GeneratedByUser");
                 });
 
             modelBuilder.Entity("BoardMgmt.Domain.Entities.MeetingAttendee", b =>

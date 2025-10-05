@@ -390,6 +390,32 @@ namespace BoardMgmt.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "GeneratedReports",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
+                    Name = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
+                    Type = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
+                    GeneratedAt = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
+                    GeneratedByUserId = table.Column<string>(type: "nvarchar(450)", nullable: true),
+                    FileUrl = table.Column<string>(type: "nvarchar(1024)", maxLength: 1024, nullable: true),
+                    Format = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
+                    PeriodLabel = table.Column<string>(type: "nvarchar(120)", maxLength: 120, nullable: true),
+                    StartDate = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: true),
+                    EndDate = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_GeneratedReports", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_GeneratedReports_AspNetUsers_GeneratedByUserId",
+                        column: x => x.GeneratedByUserId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "MeetingAttendees",
                 columns: table => new
                 {
@@ -783,6 +809,16 @@ namespace BoardMgmt.Infrastructure.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
+                name: "IX_GeneratedReports_GeneratedAt",
+                table: "GeneratedReports",
+                column: "GeneratedAt");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_GeneratedReports_GeneratedByUserId",
+                table: "GeneratedReports",
+                column: "GeneratedByUserId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_MeetingAttendees_MeetingId",
                 table: "MeetingAttendees",
                 column: "MeetingId");
@@ -890,6 +926,9 @@ namespace BoardMgmt.Infrastructure.Migrations
 
             migrationBuilder.DropTable(
                 name: "Folders");
+
+            migrationBuilder.DropTable(
+                name: "GeneratedReports");
 
             migrationBuilder.DropTable(
                 name: "MeetingAttendees");

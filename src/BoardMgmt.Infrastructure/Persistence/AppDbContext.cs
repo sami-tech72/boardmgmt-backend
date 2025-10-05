@@ -45,7 +45,7 @@ namespace BoardMgmt.Infrastructure.Persistence
 
         public DbSet<Transcript> Transcripts => Set<Transcript>();
         public DbSet<TranscriptUtterance> TranscriptUtterances => Set<TranscriptUtterance>();
-
+        public DbSet<GeneratedReport> GeneratedReports => Set<GeneratedReport>();
         public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
             => base.SaveChangesAsync(cancellationToken);
 
@@ -351,6 +351,19 @@ namespace BoardMgmt.Infrastructure.Persistence
                  .HasForeignKey(x => x.TranscriptId)
                  .OnDelete(DeleteBehavior.Cascade);
             });
+
+
+            // inside OnModelCreating(ModelBuilder b)
+            b.Entity<GeneratedReport>(e =>
+            {
+                e.HasIndex(x => x.GeneratedAt);
+                e.HasOne(x => x.GeneratedByUser)
+                    .WithMany()
+                    .HasForeignKey(x => x.GeneratedByUserId)
+                    .OnDelete(DeleteBehavior.SetNull);
+            });
+
+
 
         }
     }
