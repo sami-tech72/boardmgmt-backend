@@ -35,7 +35,12 @@ builder.Logging.ClearProviders();
 builder.Host.UseSerilog((ctx, lc) => lc
     .ReadFrom.Configuration(ctx.Configuration)
     .Enrich.FromLogContext()
+    // optional enrichers if you installed packages:
+    .Enrich.WithEnvironmentName()
+    .Enrich.WithMachineName()
+    .Enrich.WithThreadId()
 );
+
 
 // ---- DI: Infrastructure then Application ----
 builder.Services.AddInfrastructure(config);
