@@ -36,6 +36,7 @@ public class UpdateMeetingHandler : IRequestHandler<UpdateMeetingCommand, bool>
         entity.Location = string.IsNullOrWhiteSpace(request.Location) ? "TBD" : request.Location.Trim();
 
         // Attendees
+        List<Guid>? removedAttendeeIds = null;
         if (request.AttendeesRich is not null)
         {
             var existingById = entity.Attendees.ToDictionary(a => a.Id, a => a);
@@ -116,10 +117,16 @@ public class UpdateMeetingHandler : IRequestHandler<UpdateMeetingCommand, bool>
             var toRemove = entity.Attendees
                 .Where(a => originalIds.Contains(a.Id) && !keepIds.Contains(a.Id))
                 .ToList();
-            foreach (var r in toRemove)
+
+            if (toRemove.Count > 0)
             {
-                entity.Attendees.Remove(r);
-                _db.Set<MeetingAttendee>().Remove(r);
+                removedAttendeeIds = new List<Guid>(toRemove.Count);
+                foreach (var r in toRemove)
+                {
+                    entity.Attendees.Remove(r);
+                    removedAttendeeIds.Add(r.Id);
+                    _db.Entry(r).State = EntityState.Detached;
+                }
             }
         }
 
@@ -128,7 +135,29 @@ public class UpdateMeetingHandler : IRequestHandler<UpdateMeetingCommand, bool>
         var (_, joinUrl) = await svc.UpdateEventAsync(entity, ct);
         entity.OnlineJoinUrl = joinUrl;
 
-        await _db.SaveChangesAsync(ct);
+        if (removedAttendeeIds is { Count: > 0 })
+        {
+            if (_db.Database.CurrentTransaction is null)
+            {
+                await using var tx = await _db.Database.BeginTransactionAsync(ct);
+                await _db.SaveChangesAsync(ct);
+                await _db.Set<MeetingAttendee>()
+                    .Where(a => removedAttendeeIds.Contains(a.Id))
+                    .ExecuteDeleteAsync(ct);
+                await tx.CommitAsync(ct);
+            }
+            else
+            {
+                await _db.SaveChangesAsync(ct);
+                await _db.Set<MeetingAttendee>()
+                    .Where(a => removedAttendeeIds.Contains(a.Id))
+                    .ExecuteDeleteAsync(ct);
+            }
+        }
+        else
+        {
+            await _db.SaveChangesAsync(ct);
+        }
         return true;
     }
 }
