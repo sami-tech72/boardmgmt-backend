@@ -36,7 +36,6 @@ public class UpdateMeetingHandler : IRequestHandler<UpdateMeetingCommand, bool>
         entity.Location = string.IsNullOrWhiteSpace(request.Location) ? "TBD" : request.Location.Trim();
 
         // Attendees
-        List<Guid>? removedAttendeeIds = null;
         if (request.AttendeesRich is not null)
         {
             var existingById = entity.Attendees.ToDictionary(a => a.Id, a => a);
@@ -120,13 +119,12 @@ public class UpdateMeetingHandler : IRequestHandler<UpdateMeetingCommand, bool>
 
             if (toRemove.Count > 0)
             {
-                removedAttendeeIds = new List<Guid>(toRemove.Count);
                 foreach (var r in toRemove)
                 {
                     entity.Attendees.Remove(r);
-                    removedAttendeeIds.Add(r.Id);
-                    _db.Entry(r).State = EntityState.Detached;
                 }
+
+                _db.Set<MeetingAttendee>().RemoveRange(toRemove);
             }
         }
 
@@ -135,35 +133,7 @@ public class UpdateMeetingHandler : IRequestHandler<UpdateMeetingCommand, bool>
         var (_, joinUrl) = await svc.UpdateEventAsync(entity, ct);
         entity.OnlineJoinUrl = joinUrl;
 
-        if (removedAttendeeIds is { Count: > 0 })
-        {
-            if (_db.Database.CurrentTransaction is null)
-            {
-                await using var tx = await _db.Database.BeginTransactionAsync(ct);
-                await PersistAttendeesAsync(ct);
-                await tx.CommitAsync(ct);
-            }
-            else
-            {
-                await PersistAttendeesAsync(ct);
-            }
-        }
-        else
-        {
-            await _db.SaveChangesAsync(ct);
-        }
+        await _db.SaveChangesAsync(ct);
         return true;
-
-        async Task PersistAttendeesAsync(CancellationToken cancellationToken)
-        {
-            if (removedAttendeeIds is { Count: > 0 })
-            {
-                await _db.Set<MeetingAttendee>()
-                    .Where(a => removedAttendeeIds.Contains(a.Id))
-                    .ExecuteDeleteAsync(cancellationToken);
-            }
-
-            await _db.SaveChangesAsync(cancellationToken);
-        }
     }
 }
