@@ -24,10 +24,14 @@ public class VotePoll
     public Guid Id { get; set; } = Guid.NewGuid();
 
     // Scope
+    // Scope
     public Guid? MeetingId { get; set; }
-    public Guid? AgendaItemId { get; set; }
     public Meeting? Meeting { get; set; }
+
+    // FK to AgendaItem (optional)
+    public Guid? AgendaItemId { get; set; }
     public AgendaItem? AgendaItem { get; set; }
+
 
     // Definition
     [MaxLength(160)]

@@ -75,10 +75,7 @@ public class GetMeetingsQueryHandler : IRequestHandler<GetMeetingsQuery, IReadOn
                         a.Name,
                         a.Email,
                         a.Role,
-                        a.UserId,
-                        (a.RowVersion != null && a.RowVersion.Length > 0)
-                            ? System.Convert.ToBase64String(a.RowVersion)
-                            : string.Empty
+                        a.UserId
                     ))
                     .ToList(),
                 m.OnlineJoinUrl,

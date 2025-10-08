@@ -38,10 +38,7 @@ public sealed class GetMeetingByIdQueryHandler : IRequestHandler<GetMeetingByIdQ
                 a.Name,
                 a.Email,
                 a.Role,
-                a.UserId,
-                (a.RowVersion != null && a.RowVersion.Length > 0)
-                            ? Convert.ToBase64String(a.RowVersion)
-                            : string.Empty
+                a.UserId
                     ))
                  .ToList();
 

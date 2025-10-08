@@ -85,7 +85,8 @@ namespace BoardMgmt.Infrastructure.Migrations
                     ExternalCalendar = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
                     ExternalCalendarMailbox = table.Column<string>(type: "nvarchar(320)", maxLength: 320, nullable: true),
                     ExternalEventId = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: true),
-                    OnlineJoinUrl = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: true)
+                    OnlineJoinUrl = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: true),
+                    HostIdentity = table.Column<string>(type: "nvarchar(max)", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -426,8 +427,7 @@ namespace BoardMgmt.Infrastructure.Migrations
                     Role = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
                     Email = table.Column<string>(type: "nvarchar(320)", maxLength: 320, nullable: true),
                     IsRequired = table.Column<bool>(type: "bit", nullable: false, defaultValue: true),
-                    IsConfirmed = table.Column<bool>(type: "bit", nullable: false, defaultValue: false),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
+                    IsConfirmed = table.Column<bool>(type: "bit", nullable: false, defaultValue: false)
                 },
                 constraints: table =>
                 {
@@ -476,32 +476,6 @@ namespace BoardMgmt.Infrastructure.Migrations
                         column: x => x.MeetingId,
                         principalTable: "Meetings",
                         principalColumn: "Id");
-                });
-
-            migrationBuilder.CreateTable(
-                name: "Votes",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    MeetingId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    AgendaItemId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    Motion = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    UserId = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    Choice = table.Column<int>(type: "int", nullable: false),
-                    Yes = table.Column<int>(type: "int", nullable: false),
-                    No = table.Column<int>(type: "int", nullable: false),
-                    Abstain = table.Column<int>(type: "int", nullable: false),
-                    VotedAt = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Votes", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_Votes_AgendaItems_AgendaItemId",
-                        column: x => x.AgendaItemId,
-                        principalTable: "AgendaItems",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -887,11 +861,6 @@ namespace BoardMgmt.Infrastructure.Migrations
                 name: "IX_VotePolls_MeetingId",
                 table: "VotePolls",
                 column: "MeetingId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Votes_AgendaItemId",
-                table: "Votes",
-                column: "AgendaItemId");
         }
 
         /// <inheritdoc />
@@ -944,9 +913,6 @@ namespace BoardMgmt.Infrastructure.Migrations
 
             migrationBuilder.DropTable(
                 name: "VoteEligibleUsers");
-
-            migrationBuilder.DropTable(
-                name: "Votes");
 
             migrationBuilder.DropTable(
                 name: "Chat_Messages");

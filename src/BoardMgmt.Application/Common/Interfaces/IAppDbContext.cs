@@ -11,7 +11,6 @@ namespace BoardMgmt.Application.Common.Interfaces
         DbSet<Meeting> Meetings { get; }
         DbSet<AgendaItem> AgendaItems { get; }
         DbSet<Document> Documents { get; }
-        DbSet<Vote> Votes { get; }
         DbSet<MeetingAttendee> MeetingAttendees { get; }
         DbSet<Folder> Folders { get; }
 

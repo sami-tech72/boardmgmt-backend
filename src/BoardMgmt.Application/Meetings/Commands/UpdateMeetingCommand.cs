@@ -8,7 +8,7 @@ using System.Collections.Generic;
 namespace BoardMgmt.Application.Meetings.Commands
 {
     public sealed record UpdateMeetingCommand(
-        Guid Id,
+         Guid Id,
         string Title,
         string? Description,
         MeetingType? Type,
@@ -20,6 +20,11 @@ namespace BoardMgmt.Application.Meetings.Commands
     ) : IRequest<bool>;
 
     public sealed record UpdateAttendeeDto(
-        Guid? Id, string Name, string? Email, string? Role, bool IsRequired, bool IsConfirmed, string RowVersionBase64
+        Guid? Id,
+        string Name,
+        string? Email,
+        string? Role,
+        bool IsRequired,
+        bool IsConfirmed
     );
 }

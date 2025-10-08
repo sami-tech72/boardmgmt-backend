@@ -22,7 +22,7 @@ namespace BoardMgmt.Infrastructure.Persistence
         public DbSet<MeetingAttendee> MeetingAttendees => Set<MeetingAttendee>();
 
         // -------- Voting --------
-        public DbSet<Vote> Votes => Set<Vote>();
+        //public DbSet<Vote> Votes => Set<Vote>();
         public DbSet<VotePoll> VotePolls => Set<VotePoll>();
         public DbSet<VoteOption> VoteOptions => Set<VoteOption>();
         public DbSet<VoteBallot> VoteBallots => Set<VoteBallot>();
@@ -56,6 +56,7 @@ namespace BoardMgmt.Infrastructure.Persistence
             // ---------- Meetings ----------
             b.Entity<Meeting>(e =>
             {
+                e.HasKey(m => m.Id);
                 e.Property(m => m.Title).HasMaxLength(200).IsRequired();
                 e.Property(m => m.Location).HasMaxLength(200).IsRequired();
 
@@ -80,13 +81,9 @@ namespace BoardMgmt.Infrastructure.Persistence
                 e.HasIndex(a => a.MeetingId);
                 e.HasIndex(a => a.UserId);
 
-                e.Property(x => x.RowVersion)
-                    .IsRowVersion()
-                    .IsConcurrencyToken();
-
-                e.HasOne(x => x.Meeting)
+                e.HasOne(a => a.Meeting)
                     .WithMany(m => m.Attendees)
-                    .HasForeignKey(x => x.MeetingId)
+                    .HasForeignKey(a => a.MeetingId)
                     .OnDelete(DeleteBehavior.Cascade);
 
                 e.HasOne<AppUser>()
@@ -95,6 +92,7 @@ namespace BoardMgmt.Infrastructure.Persistence
                     .OnDelete(DeleteBehavior.SetNull)
                     .IsRequired(false);
             });
+
 
             b.Entity<AgendaItem>(e =>
             {
@@ -129,13 +127,25 @@ namespace BoardMgmt.Infrastructure.Persistence
                 e.Property(x => x.Description).HasMaxLength(2000);
                 e.Property(x => x.CreatedByUserId).HasMaxLength(450);
 
-                e.HasOne(x => x.Meeting).WithMany(m => m.Votes).HasForeignKey(x => x.MeetingId).OnDelete(DeleteBehavior.NoAction);
-                e.HasOne(x => x.AgendaItem).WithMany().HasForeignKey(x => x.AgendaItemId).OnDelete(DeleteBehavior.NoAction);
+                // FK to Meeting
+                e.HasOne(x => x.Meeting)
+                 .WithMany(m => m.Votes)
+                 .HasForeignKey(x => x.MeetingId)
+                 .OnDelete(DeleteBehavior.NoAction);
 
+                // FK to AgendaItem (optional) — corrected
+                e.HasOne(x => x.AgendaItem)
+                 .WithMany(a => a.VotePolls) // navigation collection added
+                 .HasForeignKey(x => x.AgendaItemId)
+                 .IsRequired(false)
+                 .OnDelete(DeleteBehavior.NoAction);
+
+                // Indexes
                 e.HasIndex(x => x.MeetingId);
                 e.HasIndex(x => x.AgendaItemId);
                 e.HasIndex(x => new { x.CreatedByUserId, x.CreatedAt });
             });
+
 
             b.Entity<VoteOption>(e =>
             {

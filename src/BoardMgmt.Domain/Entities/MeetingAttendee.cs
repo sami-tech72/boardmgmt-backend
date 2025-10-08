@@ -19,7 +19,5 @@ public class MeetingAttendee
     public bool IsConfirmed { get; set; } = false;
 
 
-    [Timestamp] // optimistic concurrency token
-    public byte[] RowVersion { get; set; } = Array.Empty<byte>();
 
 }

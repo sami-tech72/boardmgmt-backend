@@ -6,6 +6,5 @@ public record AttendeeDto(
     string Name,
     string? Email,
     string? Role,
-    string? UserId,
-    string RowVersionBase64
+    string? UserId
 );

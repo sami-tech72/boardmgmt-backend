@@ -588,12 +588,6 @@ namespace BoardMgmt.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
-                    b.Property<byte[]>("RowVersion")
-                        .IsConcurrencyToken()
-                        .IsRequired()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("rowversion");
-
                     b.Property<string>("UserId")
                         .HasMaxLength(450)
                         .HasColumnType("nvarchar(450)");
@@ -673,48 +667,6 @@ namespace BoardMgmt.Infrastructure.Migrations
                     b.HasIndex("TranscriptId", "Start");
 
                     b.ToTable("TranscriptUtterances", (string)null);
-                });
-
-            modelBuilder.Entity("BoardMgmt.Domain.Entities.Vote", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<int>("Abstain")
-                        .HasColumnType("int");
-
-                    b.Property<Guid>("AgendaItemId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<int>("Choice")
-                        .HasColumnType("int");
-
-                    b.Property<Guid>("MeetingId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("Motion")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("No")
-                        .HasColumnType("int");
-
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTimeOffset>("VotedAt")
-                        .HasColumnType("datetimeoffset");
-
-                    b.Property<int>("Yes")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AgendaItemId");
-
-                    b.ToTable("Votes");
                 });
 
             modelBuilder.Entity("BoardMgmt.Domain.Entities.VoteBallot", b =>
@@ -1165,15 +1117,6 @@ namespace BoardMgmt.Infrastructure.Migrations
                     b.Navigation("Transcript");
                 });
 
-            modelBuilder.Entity("BoardMgmt.Domain.Entities.Vote", b =>
-                {
-                    b.HasOne("BoardMgmt.Domain.Entities.AgendaItem", null)
-                        .WithMany("Votes")
-                        .HasForeignKey("AgendaItemId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("BoardMgmt.Domain.Entities.VoteBallot", b =>
                 {
                     b.HasOne("BoardMgmt.Domain.Entities.VoteOption", "Option")
@@ -1217,7 +1160,7 @@ namespace BoardMgmt.Infrastructure.Migrations
             modelBuilder.Entity("BoardMgmt.Domain.Entities.VotePoll", b =>
                 {
                     b.HasOne("BoardMgmt.Domain.Entities.AgendaItem", "AgendaItem")
-                        .WithMany()
+                        .WithMany("VotePolls")
                         .HasForeignKey("AgendaItemId")
                         .OnDelete(DeleteBehavior.NoAction);
 
@@ -1307,7 +1250,7 @@ namespace BoardMgmt.Infrastructure.Migrations
 
             modelBuilder.Entity("BoardMgmt.Domain.Entities.AgendaItem", b =>
                 {
-                    b.Navigation("Votes");
+                    b.Navigation("VotePolls");
                 });
 
             modelBuilder.Entity("BoardMgmt.Domain.Entities.Department", b =>

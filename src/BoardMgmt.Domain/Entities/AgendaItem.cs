@@ -9,7 +9,8 @@ public class AgendaItem
     public string? Description { get; set; }
     public int Order { get; set; }
 
-    public List<Vote> Votes { get; set; } = new();
+    public List<VotePoll> VotePolls { get; set; } = new(); // new collection
+
 
 
 
