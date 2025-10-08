@@ -12,41 +12,56 @@ public sealed class GetMeetingByIdQueryHandler : IRequestHandler<GetMeetingByIdQ
 
     public async Task<MeetingDto?> Handle(GetMeetingByIdQuery request, CancellationToken ct)
     {
-        return await _db.Set<Meeting>()
+        var meeting = await _db.Set<Meeting>()
             .AsNoTracking()
             .Include(m => m.AgendaItems)
             .Include(m => m.Attendees)
-            .Where(m => m.Id == request.Id)
-            .Select(m => new MeetingDto(
-                m.Id,
-                m.Title,
-                m.Description,
-                m.Type,
-                m.ScheduledAt,
-                m.EndAt,
-                m.Location,
-                m.Status,
-                m.Attendees.Count,
-                m.AgendaItems
-                    .OrderBy(ai => ai.Order)
-                    .Select(ai => new AgendaItemDto(ai.Id, ai.Title, ai.Description, ai.Order))
-                    .ToList(),
-               m.Attendees
-                 .OrderBy(a => a.Name)
-                 .Select(a => new AttendeeDto(
-                     a.Id,
-                     a.Name,
-                     a.Email,
-                     a.Role,
-                     a.UserId,
-                    (a.RowVersion != null && a.RowVersion.Length > 0)
+            .FirstOrDefaultAsync(m => m.Id == request.Id, ct);
+
+        if (meeting == null) return null;
+
+        DateTimeOffset scheduledAtUtc = meeting.ScheduledAt;
+        if (scheduledAtUtc.Offset != TimeSpan.Zero) scheduledAtUtc = scheduledAtUtc.ToUniversalTime();
+
+        DateTimeOffset? endAtUtc = meeting.EndAt;
+        if (endAtUtc.HasValue && endAtUtc.Value.Offset != TimeSpan.Zero) endAtUtc = endAtUtc.Value.ToUniversalTime();
+
+        var agendaItems = meeting.AgendaItems
+            .OrderBy(ai => ai.Order)
+            .Select(ai => new AgendaItemDto(ai.Id, ai.Title, ai.Description, ai.Order))
+            .ToList();
+
+        var attendees = meeting.Attendees
+            .OrderBy(a => a.Name)
+            .Select(a => new AttendeeDto(
+                a.Id,
+                a.Name,
+                a.Email,
+                a.Role,
+                a.UserId,
+                (a.RowVersion != null && a.RowVersion.Length > 0)
                             ? Convert.ToBase64String(a.RowVersion)
                             : string.Empty
                     ))
-                 .ToList(),
-               m.OnlineJoinUrl,
-               "Zoom"
-            ))
-            .FirstOrDefaultAsync(ct);
+                 .ToList();
+
+        var dto = new MeetingDto(
+             meeting.Id,
+             meeting.Title,
+             meeting.Description,
+             meeting.Type,
+             scheduledAtUtc,
+             endAtUtc,
+             meeting.Location,
+             meeting.Status,
+             meeting.Attendees.Count,
+             agendaItems,
+             attendees,
+             meeting.OnlineJoinUrl,
+             meeting.ExternalCalendar,
+             meeting.HostIdentity
+         );
+
+        return dto;
     }
 }

@@ -38,4 +38,6 @@ public class Meeting
     [MaxLength(1000)]
     public string? OnlineJoinUrl { get; set; } // Teams or Zoom join link
 
+    public string? HostIdentity { get; set; } // Add this
+
 }

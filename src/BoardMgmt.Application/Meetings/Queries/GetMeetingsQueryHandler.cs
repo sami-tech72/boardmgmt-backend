@@ -82,7 +82,8 @@ public class GetMeetingsQueryHandler : IRequestHandler<GetMeetingsQuery, IReadOn
                     ))
                     .ToList(),
                 m.OnlineJoinUrl,
-                m.ExternalCalendar ?? "Zoom" // use stored provider if present
+                m.ExternalCalendar ?? "Zoom", // use stored provider if present
+                m.HostIdentity
             ))
             .ToListAsync(ct);
     }

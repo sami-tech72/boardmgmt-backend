@@ -4,6 +4,8 @@ namespace BoardMgmt.Application.Meetings.DTOs;
 
 public record AgendaItemDto(Guid Id, string Title, string? Description, int Order);
 
+
+
 public record MeetingDto(
     Guid Id,
     string Title,
@@ -14,9 +16,9 @@ public record MeetingDto(
     string Location,
     MeetingStatus Status,
     int AttendeesCount,
-    
     IReadOnlyList<AgendaItemDto> AgendaItems,
-     IReadOnlyList<AttendeeDto> Attendees,
-    string? JoinUrl, // ← NEW
-     string? Provider
+    IReadOnlyList<AttendeeDto> Attendees,
+    string? JoinUrl,
+    string? Provider,
+    string? HostIdentity
 );
