@@ -133,7 +133,30 @@ public class UpdateMeetingHandler : IRequestHandler<UpdateMeetingCommand, bool>
         var (_, joinUrl) = await svc.UpdateEventAsync(entity, ct);
         entity.OnlineJoinUrl = joinUrl;
 
-        await _db.SaveChangesAsync(ct);
+        await SaveChangesHandlingRemovedAttendeesAsync(ct);
         return true;
+    }
+
+    private async Task SaveChangesHandlingRemovedAttendeesAsync(CancellationToken ct)
+    {
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            if (ex.Entries.All(e => e.Entity is MeetingAttendee && e.State == EntityState.Deleted))
+            {
+                foreach (var entry in ex.Entries)
+                {
+                    entry.State = EntityState.Detached;
+                }
+
+                await _db.SaveChangesAsync(ct);
+                return;
+            }
+
+            throw;
+        }
     }
 }
