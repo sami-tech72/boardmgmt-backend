@@ -1,18 +1,20 @@
-﻿namespace BoardMgmt.Domain.Entities;
+using System;
+using System.Collections.Generic;
+using BoardMgmt.Domain.Common;
 
-public class Document
+namespace BoardMgmt.Domain.Entities;
+
+public class Document : AuditableEntity
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 
-    // Nullable: can upload general docs not tied to a meeting
     public Guid? MeetingId { get; set; }
 
-    // Link to Folder via Slug (simple taxonomy)
     public string FolderSlug { get; set; } = "root";
 
-    public string FileName { get; set; } = string.Empty;     // stored file name
-    public string OriginalName { get; set; } = string.Empty; // user file name
-    public string Url { get; set; } = string.Empty;          // /uploads/... path (web)
+    public string FileName { get; set; } = string.Empty;
+    public string OriginalName { get; set; } = string.Empty;
+    public string Url { get; set; } = string.Empty;
     public string ContentType { get; set; } = "application/octet-stream";
     public long SizeBytes { get; set; }
     public int Version { get; set; } = 1;

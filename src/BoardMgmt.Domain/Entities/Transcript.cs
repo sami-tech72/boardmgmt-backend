@@ -1,8 +1,11 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System;
+using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using BoardMgmt.Domain.Common;
 
 namespace BoardMgmt.Domain.Entities;
 
-public class Transcript
+public class Transcript : AuditableEntity
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 
@@ -10,17 +13,17 @@ public class Transcript
     public Meeting Meeting { get; set; } = default!;
 
     [MaxLength(64)]
-    public string Provider { get; set; } = "";      // "Microsoft365" | "Zoom"
+    public string Provider { get; set; } = string.Empty;
 
     [MaxLength(256)]
-    public string ProviderTranscriptId { get; set; } = ""; // Teams transcriptId or Zoom file id
+    public string ProviderTranscriptId { get; set; } = string.Empty;
 
     public DateTimeOffset CreatedUtc { get; set; } = DateTimeOffset.UtcNow;
 
     public ICollection<TranscriptUtterance> Utterances { get; set; } = new List<TranscriptUtterance>();
 }
 
-public class TranscriptUtterance
+public class TranscriptUtterance : AuditableEntity
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 
@@ -31,7 +34,7 @@ public class TranscriptUtterance
     public TimeSpan End { get; set; }
 
     [MaxLength(4000)]
-    public string Text { get; set; } = "";
+    public string Text { get; set; } = string.Empty;
 
     [MaxLength(256)]
     public string? SpeakerName { get; set; }
@@ -39,6 +42,5 @@ public class TranscriptUtterance
     [MaxLength(320)]
     public string? SpeakerEmail { get; set; }
 
-    // link to Identity user if you can resolve
     public string? UserId { get; set; }
 }

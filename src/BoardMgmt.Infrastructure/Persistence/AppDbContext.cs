@@ -2,6 +2,7 @@
 using System.Threading.Tasks;
 using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Domain.Chat;
+using BoardMgmt.Domain.Common;
 using BoardMgmt.Domain.Entities;
 using BoardMgmt.Domain.Identity;          // AppUser
 using Microsoft.AspNetCore.Identity;
@@ -12,7 +13,13 @@ namespace BoardMgmt.Infrastructure.Persistence
 {
     public class AppDbContext : IdentityDbContext<AppUser>, IAppDbContext
     {
-        public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
+        private readonly ICurrentUser? _currentUser;
+
+        public AppDbContext(DbContextOptions<AppDbContext> options, ICurrentUser? currentUser = null)
+            : base(options)
+        {
+            _currentUser = currentUser;
+        }
 
         // -------- Core / Meetings --------
         public DbSet<Meeting> Meetings => Set<Meeting>();
@@ -47,7 +54,38 @@ namespace BoardMgmt.Infrastructure.Persistence
         public DbSet<TranscriptUtterance> TranscriptUtterances => Set<TranscriptUtterance>();
         public DbSet<GeneratedReport> GeneratedReports => Set<GeneratedReport>();
         public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
-            => base.SaveChangesAsync(cancellationToken);
+        {
+            ApplyAuditMetadata();
+            return base.SaveChangesAsync(cancellationToken);
+        }
+
+        private void ApplyAuditMetadata()
+        {
+            var now = DateTimeOffset.UtcNow;
+            var userId = _currentUser?.UserId;
+            foreach (var entry in ChangeTracker.Entries<AuditableEntity>())
+            {
+                if (entry.State == EntityState.Added)
+                {
+                    entry.Entity.CreatedAt = now;
+                    if (string.IsNullOrEmpty(entry.Entity.CreatedByUserId) && !string.IsNullOrEmpty(userId))
+                    {
+                        entry.Entity.CreatedByUserId = userId;
+                    }
+                }
+                else if (entry.State == EntityState.Modified)
+                {
+                    entry.Property(x => x.CreatedAt).IsModified = false;
+                    entry.Property(x => x.CreatedByUserId).IsModified = false;
+
+                    entry.Entity.UpdatedAt = now;
+                    if (!string.IsNullOrEmpty(userId))
+                    {
+                        entry.Entity.UpdatedByUserId = userId;
+                    }
+                }
+            }
+        }
 
         protected override void OnModelCreating(ModelBuilder b)
         {

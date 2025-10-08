@@ -1,8 +1,11 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System;
+using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using BoardMgmt.Domain.Common;
 
 namespace BoardMgmt.Domain.Chat;
 
-public class Conversation
+public class Conversation : AuditableEntity
 {
     public Guid Id { get; set; }
     public ConversationType Type { get; set; } = ConversationType.Channel;
@@ -16,7 +19,7 @@ public class Conversation
     public ICollection<ChatMessage> Messages { get; set; } = new List<ChatMessage>();
 }
 
-public class ConversationMember
+public class ConversationMember : AuditableEntity
 {
     public Guid Id { get; set; }
     public Guid ConversationId { get; set; }
@@ -28,13 +31,12 @@ public class ConversationMember
     public Conversation Conversation { get; set; } = null!;
 }
 
-public class ChatMessage
+public class ChatMessage : AuditableEntity
 {
     public Guid Id { get; set; }
     public Guid ConversationId { get; set; }
     public string SenderId { get; set; } = default!;
 
-    /// <summary>Null for root message; set to root message Id when it's a thread reply.</summary>
     public Guid? ThreadRootId { get; set; }
 
     public string BodyHtml { get; set; } = string.Empty;
@@ -47,7 +49,7 @@ public class ChatMessage
     public ICollection<ChatReaction> Reactions { get; set; } = new List<ChatReaction>();
 }
 
-public class ChatAttachment
+public class ChatAttachment : AuditableEntity
 {
     public Guid Id { get; set; }
     public Guid MessageId { get; set; }
@@ -57,14 +59,13 @@ public class ChatAttachment
     public string StoragePath { get; set; } = string.Empty;
 }
 
-public class ChatReaction
+public class ChatReaction : AuditableEntity
 {
     public Guid Id { get; set; }
     public Guid MessageId { get; set; }
-    // change Guid -> string
     public string UserId { get; set; } = default!;
 
     [MaxLength(32)]
-    public string Emoji { get; set; } = string.Empty; // unicode like "👍" or ":thumbsup:"
+    public string Emoji { get; set; } = string.Empty;
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
 }
