@@ -1,4 +1,5 @@
-﻿using BoardMgmt.Application.Calendars;
+using BoardMgmt.Application.Calendars;
+using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Domain.Calendars;
 using BoardMgmt.Domain.Entities;
 using MediatR;
@@ -9,11 +10,13 @@ namespace BoardMgmt.Application.Meetings.Commands;
 public class UpdateMeetingHandler : IRequestHandler<UpdateMeetingCommand, bool>
 {
     private readonly DbContext _db;
+    private readonly IIdentityUserReader _users;
     private readonly ICalendarServiceSelector _calSelector;
 
-    public UpdateMeetingHandler(DbContext db, ICalendarServiceSelector calSelector)
+    public UpdateMeetingHandler(DbContext db, IIdentityUserReader users, ICalendarServiceSelector calSelector)
     {
         _db = db;
+        _users = users;
         _calSelector = calSelector;
     }
 
@@ -38,13 +41,39 @@ public class UpdateMeetingHandler : IRequestHandler<UpdateMeetingCommand, bool>
             var existingById = entity.Attendees.ToDictionary(a => a.Id, a => a);
             var originalIds = existingById.Keys.ToHashSet();
 
+            var attendeeUserIds = request.AttendeesRich
+                .Select(a => a.UserId)
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Select(id => id!.Trim())
+                .Where(id => id.Length > 0)
+                .Distinct()
+                .ToList();
+
+            var usersById = attendeeUserIds.Count == 0
+                ? new Dictionary<string, AppUser>(StringComparer.OrdinalIgnoreCase)
+                : (await _users.GetByIdsAsync(attendeeUserIds, ct)).ToDictionary(u => u.Id, StringComparer.OrdinalIgnoreCase);
+
             foreach (var dto in request.AttendeesRich)
             {
+                var userKey = dto.UserId?.Trim();
+                var hasUser = userKey is not null && userKey.Length > 0 && usersById.TryGetValue(userKey, out var user);
+
                 if (dto.Id.HasValue && existingById.TryGetValue(dto.Id.Value, out var att))
                 {
                     // update existing
-                    att.Name = dto.Name;
-                    att.Email = dto.Email;
+                    att.UserId = dto.UserId;
+                    if (hasUser && user is not null)
+                    {
+                        att.Name = string.IsNullOrWhiteSpace(dto.Name)
+                            ? (!string.IsNullOrWhiteSpace(user.DisplayName) ? user.DisplayName! : user.Email ?? dto.Name)
+                            : dto.Name;
+                        att.Email = user.Email;
+                    }
+                    else
+                    {
+                        att.Name = dto.Name;
+                        att.Email = dto.Email;
+                    }
                     att.Role = dto.Role;
                     att.IsRequired = dto.IsRequired;
                     att.IsConfirmed = dto.IsConfirmed;
@@ -52,16 +81,30 @@ public class UpdateMeetingHandler : IRequestHandler<UpdateMeetingCommand, bool>
                 else
                 {
                     // add new
-                    entity.Attendees.Add(new MeetingAttendee
+                    var attendee = new MeetingAttendee
                     {
-                        Id = Guid.NewGuid(),
+                        Id = dto.Id ?? Guid.NewGuid(),
                         MeetingId = entity.Id,
-                        Name = dto.Name,
-                        Email = dto.Email,
+                        UserId = dto.UserId,
                         Role = dto.Role,
                         IsRequired = dto.IsRequired,
                         IsConfirmed = dto.IsConfirmed
-                    });
+                    };
+
+                    if (hasUser && user is not null)
+                    {
+                        attendee.Name = string.IsNullOrWhiteSpace(dto.Name)
+                            ? (!string.IsNullOrWhiteSpace(user.DisplayName) ? user.DisplayName! : user.Email ?? user.Id)
+                            : dto.Name;
+                        attendee.Email = user.Email;
+                    }
+                    else
+                    {
+                        attendee.Name = dto.Name;
+                        attendee.Email = dto.Email;
+                    }
+
+                    entity.Attendees.Add(attendee);
                 }
             }
 

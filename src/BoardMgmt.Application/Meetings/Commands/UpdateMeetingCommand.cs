@@ -22,6 +22,7 @@ namespace BoardMgmt.Application.Meetings.Commands
     public sealed record UpdateAttendeeDto(
         Guid? Id,
         string Name,
+        string? UserId,
         string? Email,
         string? Role,
         bool IsRequired,
