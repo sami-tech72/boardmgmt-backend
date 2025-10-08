@@ -36,6 +36,7 @@ public class UpdateMeetingHandler : IRequestHandler<UpdateMeetingCommand, bool>
         if (request.AttendeesRich is not null)
         {
             var existingById = entity.Attendees.ToDictionary(a => a.Id, a => a);
+            var originalIds = existingById.Keys.ToHashSet();
 
             foreach (var dto in request.AttendeesRich)
             {
@@ -66,7 +67,9 @@ public class UpdateMeetingHandler : IRequestHandler<UpdateMeetingCommand, bool>
 
             // remove those not present in incoming list (compare by existing ids only)
             var keepIds = request.AttendeesRich.Where(a => a.Id.HasValue).Select(a => a.Id!.Value).ToHashSet();
-            var toRemove = entity.Attendees.Where(a => !keepIds.Contains(a.Id)).ToList();
+            var toRemove = entity.Attendees
+                .Where(a => originalIds.Contains(a.Id) && !keepIds.Contains(a.Id))
+                .ToList();
             foreach (var r in toRemove)
             {
                 entity.Attendees.Remove(r);
