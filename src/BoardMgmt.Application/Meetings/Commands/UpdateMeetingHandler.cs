@@ -1,3 +1,4 @@
+using System.Linq;
 using BoardMgmt.Application.Calendars;
 using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Domain.Calendars;
@@ -145,18 +146,21 @@ public class UpdateMeetingHandler : IRequestHandler<UpdateMeetingCommand, bool>
         }
         catch (DbUpdateConcurrencyException ex)
         {
-            if (ex.Entries.All(e => e.Entity is MeetingAttendee && e.State == EntityState.Deleted))
-            {
-                foreach (var entry in ex.Entries)
-                {
-                    entry.State = EntityState.Detached;
-                }
+            var attendeeDeletes = ex.Entries
+                .Where(e => e.Entity is MeetingAttendee && e.State == EntityState.Deleted)
+                .ToList();
 
-                await _db.SaveChangesAsync(ct);
-                return;
+            if (attendeeDeletes.Count == 0)
+            {
+                throw;
             }
 
-            throw;
+            foreach (var entry in attendeeDeletes)
+            {
+                entry.State = EntityState.Detached;
+            }
+
+            await _db.SaveChangesAsync(ct);
         }
     }
 }
