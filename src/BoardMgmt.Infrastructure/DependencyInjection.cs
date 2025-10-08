@@ -107,6 +107,12 @@ namespace BoardMgmt.Infrastructure
             // Current user accessor
             services.AddHttpContextAccessor();
             services.AddScoped<ICurrentUser, CurrentUser>();
+            services.AddScoped<Func<ICurrentUser?>>(
+                sp =>
+                {
+                    var serviceProvider = sp;
+                    return () => serviceProvider.GetService<ICurrentUser>();
+                });
 
             // ONE PermissionService per scope, exposed via both interfaces
             services.AddScoped<IPermissionService, PermissionService>();
