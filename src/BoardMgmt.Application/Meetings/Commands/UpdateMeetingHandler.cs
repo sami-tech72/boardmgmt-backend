@@ -56,7 +56,10 @@ public class UpdateMeetingHandler : IRequestHandler<UpdateMeetingCommand, bool>
             foreach (var dto in request.AttendeesRich)
             {
                 var userKey = dto.UserId?.Trim();
-                var hasUser = userKey is not null && userKey.Length > 0 && usersById.TryGetValue(userKey, out var user);
+                AppUser? user = null;
+                var hasUser = userKey is not null
+                    && userKey.Length > 0
+                    && usersById.TryGetValue(userKey, out user);
 
                 if (dto.Id.HasValue && existingById.TryGetValue(dto.Id.Value, out var att))
                 {
