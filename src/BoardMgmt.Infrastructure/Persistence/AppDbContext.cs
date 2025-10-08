@@ -1,4 +1,5 @@
-﻿using System.Threading;
+﻿using System;
+using System.Threading;
 using System.Threading.Tasks;
 using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Domain.Chat;
@@ -13,12 +14,13 @@ namespace BoardMgmt.Infrastructure.Persistence
 {
     public class AppDbContext : IdentityDbContext<AppUser>, IAppDbContext
     {
-        private readonly ICurrentUser? _currentUser;
+        private readonly Func<ICurrentUser?>? _currentUserFactory;
+        private ICurrentUser? _currentUser;
 
-        public AppDbContext(DbContextOptions<AppDbContext> options, ICurrentUser? currentUser = null)
+        public AppDbContext(DbContextOptions<AppDbContext> options, Func<ICurrentUser?>? currentUserFactory = null)
             : base(options)
         {
-            _currentUser = currentUser;
+            _currentUserFactory = currentUserFactory;
         }
 
         // -------- Core / Meetings --------
@@ -62,7 +64,7 @@ namespace BoardMgmt.Infrastructure.Persistence
         private void ApplyAuditMetadata()
         {
             var now = DateTimeOffset.UtcNow;
-            var userId = _currentUser?.UserId;
+            var userId = GetCurrentUser()?.UserId;
             foreach (var entry in ChangeTracker.Entries<AuditableEntity>())
             {
                 if (entry.State == EntityState.Added)
@@ -85,6 +87,22 @@ namespace BoardMgmt.Infrastructure.Persistence
                     }
                 }
             }
+        }
+
+        private ICurrentUser? GetCurrentUser()
+        {
+            if (_currentUser is not null)
+            {
+                return _currentUser;
+            }
+
+            if (_currentUserFactory is null)
+            {
+                return null;
+            }
+
+            _currentUser = _currentUserFactory();
+            return _currentUser;
         }
 
         protected override void OnModelCreating(ModelBuilder b)
