@@ -122,7 +122,7 @@ public static class DbSeeder
                 Id = rootId,
                 Name = "Root",
                 Slug = "root",
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTimeOffset.UtcNow
             });
 
             logger.LogInformation("Seeded Root folder (Slug='root').");

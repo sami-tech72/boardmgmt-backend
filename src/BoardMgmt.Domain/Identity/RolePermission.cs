@@ -1,17 +1,16 @@
-﻿using BoardMgmt.Domain.Auth;
+using System;
+using BoardMgmt.Domain.Auth;
+using BoardMgmt.Domain.Common;
 
 namespace BoardMgmt.Domain.Identity;
 
-public class RolePermission
+public class RolePermission : AuditableEntity
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 
-    // FK to AspNetRoles.Id
     public string RoleId { get; set; } = default!;
 
-    // App area this permission applies to
     public AppModule Module { get; set; }
 
-    // Bit flags: Permission enum
     public Permission Allowed { get; set; }
 }

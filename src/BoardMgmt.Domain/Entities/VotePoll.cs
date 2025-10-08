@@ -1,4 +1,7 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System;
+using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using BoardMgmt.Domain.Common;
 
 namespace BoardMgmt.Domain.Entities;
 
@@ -16,24 +19,16 @@ public enum VoteEligibility
     SpecificUsers = 2
 }
 
-// NOTE: ✅ No VoteChoice enum here.
-//       Use the single enum defined in VoteChoice.cs.
-
-public class VotePoll
+public class VotePoll : AuditableEntity
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 
-    // Scope
-    // Scope
     public Guid? MeetingId { get; set; }
     public Meeting? Meeting { get; set; }
 
-    // FK to AgendaItem (optional)
     public Guid? AgendaItemId { get; set; }
     public AgendaItem? AgendaItem { get; set; }
 
-
-    // Definition
     [MaxLength(160)]
     public string Title { get; set; } = string.Empty;
 
@@ -44,17 +39,10 @@ public class VotePoll
     public bool AllowAbstain { get; set; } = true;
     public bool Anonymous { get; set; } = false;
 
-    // Window
-    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset Deadline { get; set; } = DateTimeOffset.UtcNow.AddDays(3);
 
-    // Eligibility
     public VoteEligibility Eligibility { get; set; } = VoteEligibility.MeetingAttendees;
 
-    // Creator
-    public string CreatedByUserId { get; set; } = string.Empty;
-
-    // Navigation
     public List<VoteOption> Options { get; set; } = new();
     public List<VoteBallot> Ballots { get; set; } = new();
     public List<VoteEligibleUser> EligibleUsers { get; set; } = new();
@@ -62,7 +50,7 @@ public class VotePoll
     public bool IsOpen(DateTimeOffset now) => now <= Deadline;
 }
 
-public class VoteOption
+public class VoteOption : AuditableEntity
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 
@@ -75,7 +63,7 @@ public class VoteOption
     public int Order { get; set; } = 0;
 }
 
-public class VoteBallot
+public class VoteBallot : AuditableEntity
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 
@@ -84,17 +72,15 @@ public class VoteBallot
 
     public string UserId { get; set; } = string.Empty;
 
-    // For Yes/No/Abstain ballots
     public VoteChoice? Choice { get; set; }
 
-    // For MultipleChoice ballots
     public Guid? OptionId { get; set; }
     public VoteOption? Option { get; set; }
 
     public DateTimeOffset VotedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 
-public class VoteEligibleUser
+public class VoteEligibleUser : AuditableEntity
 {
     public Guid Id { get; set; } = Guid.NewGuid();
 

@@ -70,7 +70,10 @@ public sealed class Microsoft365CalendarService : ICalendarService
             : m.ExternalCalendarMailbox;
 
         await _graph.Users[mailbox].Events[m.ExternalEventId]
-            .PatchAsync(patch, cancellationToken: ct);
+            .PatchAsync(
+                patch,
+                requestConfiguration => requestConfiguration.Headers.Add("If-Match", "*"),
+                cancellationToken: ct);
 
         var refreshed = await _graph.Users[mailbox].Events[m.ExternalEventId]
             .GetAsync(cancellationToken: ct);

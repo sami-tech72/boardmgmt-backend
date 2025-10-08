@@ -1,7 +1,10 @@
-﻿// backend/src/BoardMgmt.Domain/Entities/Department.cs
+using System;
+using System.Collections.Generic;
+using BoardMgmt.Domain.Common;
+
 namespace BoardMgmt.Domain.Entities;
 
-public class Department
+public class Department : AuditableEntity
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Name { get; set; } = string.Empty;
