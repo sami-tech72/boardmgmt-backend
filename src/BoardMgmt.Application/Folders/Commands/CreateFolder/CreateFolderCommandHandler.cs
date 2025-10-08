@@ -29,7 +29,7 @@ public sealed class CreateFolderCommandHandler : IRequestHandler<CreateFolderCom
         {
             Name = name,
             Slug = slug,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateTimeOffset.UtcNow
         };
 
         _db.Folders.Add(folder);
