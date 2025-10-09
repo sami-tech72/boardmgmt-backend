@@ -2,13 +2,14 @@
 using BoardMgmt.Application.Dashboard.DTOs;
 using BoardMgmt.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
+using BoardMgmt.Infrastructure.Persistence;
 
 namespace BoardMgmt.Infrastructure.Persistence.Repositories;
 
 public class VoteReadRepository : IVoteReadRepository
 {
-    private readonly DbContext _db;
-    public VoteReadRepository(DbContext db) => _db = db;
+    private readonly AppDbContext _db;
+    public VoteReadRepository(AppDbContext db) => _db = db;
 
     // "Pending" = polls whose window is still open (deadline in the future)
     public Task<int> CountPendingAsync(CancellationToken ct)
