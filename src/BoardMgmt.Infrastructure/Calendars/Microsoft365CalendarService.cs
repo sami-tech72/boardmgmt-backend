@@ -1,4 +1,5 @@
-﻿using System.Linq;
+﻿using System;
+using System.Linq;
 using Microsoft.Graph;
 using Microsoft.Graph.Models;
 using Microsoft.Extensions.Options;
@@ -33,18 +34,30 @@ public sealed class Microsoft365CalendarService : ICalendarService
             Attendees = m.Attendees.Select(a => new Attendee
             {
                 Type = a.IsRequired ? AttendeeType.Required : AttendeeType.Optional,
-                EmailAddress = new EmailAddress { Address = a.Email ?? string.Empty, Name = a.Name }
-            }).ToList()
+                EmailAddress = string.IsNullOrWhiteSpace(a.Email)
+                    ? null
+                    : new EmailAddress { Address = a.Email, Name = a.Name }
+            })
+            .Where(a => a.EmailAddress is not null)
+            .ToList()
         };
 
         var mailbox = string.IsNullOrWhiteSpace(m.ExternalCalendarMailbox)
             ? _opts.MailboxAddress
             : m.ExternalCalendarMailbox;
 
-        var created = await _graph.Users[mailbox].Events.PostAsync(ev, cancellationToken: ct);
-        var eventId = created?.Id ?? throw new InvalidOperationException("Graph didn't return Event Id.");
+        var created = await _graph.Users[mailbox].Events.PostAsync(ev, cancellationToken: ct)
+                      ?? throw new InvalidOperationException("Graph didn't return Event.");
+
+        var eventId = created.Id
+                      ?? throw new InvalidOperationException("Graph didn't return Event Id.");
 
         var joinUrl = await FetchJoinUrlAsync(mailbox, eventId, ct);
+        if (string.IsNullOrWhiteSpace(joinUrl))
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(400), ct);
+            joinUrl = await FetchJoinUrlAsync(mailbox, eventId, ct);
+        }
         return (eventId, joinUrl);
     }
 
@@ -63,8 +76,12 @@ public sealed class Microsoft365CalendarService : ICalendarService
             Attendees = m.Attendees.Select(a => new Attendee
             {
                 Type = a.IsRequired ? AttendeeType.Required : AttendeeType.Optional,
-                EmailAddress = new EmailAddress { Address = a.Email ?? string.Empty, Name = a.Name }
-            }).ToList()
+                EmailAddress = string.IsNullOrWhiteSpace(a.Email)
+                    ? null
+                    : new EmailAddress { Address = a.Email, Name = a.Name }
+            })
+            .Where(a => a.EmailAddress is not null)
+            .ToList()
         };
 
         var mailbox = string.IsNullOrWhiteSpace(m.ExternalCalendarMailbox)
@@ -97,8 +114,8 @@ public sealed class Microsoft365CalendarService : ICalendarService
             cfg.QueryParameters.EndDateTime = now.AddDays(30).ToString("o");
             cfg.QueryParameters.Top = take;
             cfg.QueryParameters.Orderby = new[] { "start/dateTime" };
-            cfg.QueryParameters.Select = new[] { "subject", "start", "end", "onlineMeeting" };
-            cfg.QueryParameters.Expand = new[] { "onlineMeeting" };
+            cfg.QueryParameters.Select = new[] { "id", "subject", "start", "end", "onlineMeeting" };
+            // no Expand
         }, ct);
 
         var list = resp?.Value ?? new List<Event>();
@@ -120,8 +137,8 @@ public sealed class Microsoft365CalendarService : ICalendarService
             cfg.QueryParameters.EndDateTime = endUtc.ToString("o");
             cfg.QueryParameters.Orderby = new[] { "start/dateTime" };
             cfg.QueryParameters.Top = 100;
-            cfg.QueryParameters.Select = new[] { "subject", "start", "end", "onlineMeeting" };
-            cfg.QueryParameters.Expand = new[] { "onlineMeeting" };
+            cfg.QueryParameters.Select = new[] { "id", "subject", "start", "end", "onlineMeeting" };
+            // no Expand
         }, ct);
 
         var list = resp?.Value ?? new List<Event>();
@@ -146,7 +163,6 @@ public sealed class Microsoft365CalendarService : ICalendarService
         var ev = await _graph.Users[mailbox].Events[eventId].GetAsync(cfg =>
         {
             cfg.QueryParameters.Select = new[] { "onlineMeeting" };
-            cfg.QueryParameters.Expand = new[] { "onlineMeeting" };
         }, ct);
 
         return ev?.OnlineMeeting?.JoinUrl;
