@@ -8,13 +8,14 @@ using BoardMgmt.Application.Common.Interfaces.Repositories;
 using BoardMgmt.Application.Dashboard.DTOs;
 using BoardMgmt.Domain.Entities;               // ✅ your AppUser
 using Microsoft.EntityFrameworkCore;
+using BoardMgmt.Infrastructure.Persistence;
 
 namespace BoardMgmt.Infrastructure.Persistence.Repositories;
 
 public class UserReadRepository : IUserReadRepository
 {
-    private readonly DbContext _db;
-    public UserReadRepository(DbContext db) => _db = db;
+    private readonly AppDbContext _db;
+    public UserReadRepository(AppDbContext db) => _db = db;
 
     public Task<int> CountActiveAsync(CancellationToken ct)
     {

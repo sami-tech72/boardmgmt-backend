@@ -1,14 +1,15 @@
 ﻿namespace BoardMgmt.Application.Chat.Handlers;
 
 using BoardMgmt.Application.Chat;
+using BoardMgmt.Application.Common.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using BoardMgmt.Domain.Chat;
 
 public sealed class SendChatMessageHandler : IRequestHandler<SendChatMessageCommand, Guid>
 {
-    private readonly DbContext _db;
-    public SendChatMessageHandler(DbContext db) => _db = db;
+    private readonly IAppDbContext _db;
+    public SendChatMessageHandler(IAppDbContext db) => _db = db;
 
     public async Task<Guid> Handle(SendChatMessageCommand req, CancellationToken ct)
     {

@@ -1,14 +1,15 @@
 ﻿namespace BoardMgmt.Application.Chat.Handlers;
 
 using BoardMgmt.Application.Chat;
+using BoardMgmt.Application.Common.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using BoardMgmt.Domain.Chat;
 
 public sealed class MarkConversationReadHandler : IRequestHandler<MarkConversationReadCommand, bool>
 {
-    private readonly DbContext _db;
-    public MarkConversationReadHandler(DbContext db) => _db = db;
+    private readonly IAppDbContext _db;
+    public MarkConversationReadHandler(IAppDbContext db) => _db = db;
 
     public async Task<bool> Handle(MarkConversationReadCommand req, CancellationToken ct)
     {

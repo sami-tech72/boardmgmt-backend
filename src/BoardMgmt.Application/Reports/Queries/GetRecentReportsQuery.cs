@@ -1,4 +1,5 @@
-﻿using BoardMgmt.Application.Reports.DTOs;
+using BoardMgmt.Application.Common.Interfaces;
+using BoardMgmt.Application.Reports.DTOs;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,8 +9,8 @@ public record GetRecentReportsQuery(int Take = 10) : IRequest<List<RecentReportD
 
 public sealed class GetRecentReportsHandler : IRequestHandler<GetRecentReportsQuery, List<RecentReportDto>>
 {
-    private readonly DbContext _db;
-    public GetRecentReportsHandler(DbContext db) => _db = db;
+    private readonly IAppDbContext _db;
+    public GetRecentReportsHandler(IAppDbContext db) => _db = db;
 
     public async Task<List<RecentReportDto>> Handle(GetRecentReportsQuery request, CancellationToken ct)
     {

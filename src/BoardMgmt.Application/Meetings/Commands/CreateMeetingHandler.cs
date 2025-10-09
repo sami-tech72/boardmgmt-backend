@@ -12,12 +12,12 @@ namespace BoardMgmt.Application.Meetings.Commands;
 
 public class CreateMeetingHandler : IRequestHandler<CreateMeetingCommand, Guid>
 {
-    private readonly DbContext _db;
+    private readonly IAppDbContext _db;
     private readonly IIdentityUserReader _users;
     private readonly ICalendarServiceSelector _calSelector;
 
 
-    public CreateMeetingHandler(DbContext db, IIdentityUserReader users, ICalendarServiceSelector calSelector)
+    public CreateMeetingHandler(IAppDbContext db, IIdentityUserReader users, ICalendarServiceSelector calSelector)
     {
         _db = db;
         _users = users;
@@ -28,7 +28,7 @@ public class CreateMeetingHandler : IRequestHandler<CreateMeetingCommand, Guid>
     public async Task<Guid> Handle(CreateMeetingCommand request, CancellationToken ct)
     {
         if (!CalendarProviders.IsSupported(request.Provider))
-            throw new ArgumentOutOfRangeException("provider", $"Unknown calendar provider: {request.Provider}");
+            throw new ArgumentOutOfRangeException(nameof(request.Provider), $"Unknown calendar provider: {request.Provider}");
 
 
         var entity = new Meeting
@@ -82,7 +82,7 @@ public class CreateMeetingHandler : IRequestHandler<CreateMeetingCommand, Guid>
         entity.OnlineJoinUrl = joinUrl;
 
 
-        _db.Set<Meeting>().Add(entity);
+        _db.Meetings.Add(entity);
         await _db.SaveChangesAsync(ct);
         return entity.Id;
     }

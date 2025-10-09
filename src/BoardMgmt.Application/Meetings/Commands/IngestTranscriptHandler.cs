@@ -1,12 +1,14 @@
 ﻿using System;
 using System.Linq;
 using System.Net.Http;
+using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using BoardMgmt.Application.Calendars;
+using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Application.Common.Email;
 using BoardMgmt.Application.Common.Options;
 using BoardMgmt.Application.Common.Parsing; // SimpleVtt
@@ -18,30 +20,21 @@ using Microsoft.Graph;
 
 namespace BoardMgmt.Application.Meetings.Commands
 {
-    public sealed class IngestTranscriptHandler : IRequestHandler<IngestTranscriptCommand, int>
+    public sealed class IngestTranscriptHandler(
+        IAppDbContext db,
+        GraphServiceClient graph,
+        IHttpClientFactory httpFactory,
+        IZoomTokenProvider zoomTokenProvider,
+        IEmailSender email,
+        IOptions<AppOptions> app)
+        : IRequestHandler<IngestTranscriptCommand, int>
     {
-        private readonly DbContext _db;
-        private readonly GraphServiceClient _graph;
-        private readonly IHttpClientFactory _httpFactory;
-        private readonly IZoomTokenProvider _zoomTokenProvider;
-        private readonly IEmailSender _email;
-        private readonly AppOptions _app;
-
-        public IngestTranscriptHandler(
-            DbContext db,
-            GraphServiceClient graph,
-            IHttpClientFactory httpFactory,
-            IZoomTokenProvider zoomTokenProvider,
-            IEmailSender email,
-            IOptions<AppOptions> app)
-        {
-            _db = db;
-            _graph = graph;
-            _httpFactory = httpFactory;
-            _zoomTokenProvider = zoomTokenProvider;
-            _email = email;
-            _app = app.Value ?? new AppOptions();
-        }
+        private readonly IAppDbContext _db = db;
+        private readonly GraphServiceClient _graph = graph;
+        private readonly IHttpClientFactory _httpFactory = httpFactory;
+        private readonly IZoomTokenProvider _zoomTokenProvider = zoomTokenProvider;
+        private readonly IEmailSender _email = email;
+        private readonly AppOptions _app = app.Value ?? new AppOptions();
 
         public async Task<int> Handle(IngestTranscriptCommand request, CancellationToken ct)
         {
@@ -79,9 +72,11 @@ namespace BoardMgmt.Application.Meetings.Commands
                 throw new InvalidOperationException(
                     "Meeting.ExternalCalendarMailbox is required for Teams transcript ingestion (set HostIdentity when creating the meeting).");
 
+            var onlineMeetingId = await ResolveTeamsOnlineMeetingIdAsync(mailbox!, meeting, ct);
+
             // List transcripts (ONLINE MEETING scope)
             var list = await _graph.Users[mailbox]
-                .OnlineMeetings[meeting.ExternalEventId]
+                .OnlineMeetings[onlineMeetingId]
                 .Transcripts
                 .GetAsync(cancellationToken: ct);
 
@@ -90,17 +85,44 @@ namespace BoardMgmt.Application.Meetings.Commands
 
             // Download VTT
             using var stream = await _graph.Users[mailbox]
-                .OnlineMeetings[meeting.ExternalEventId]
+                .OnlineMeetings[onlineMeetingId]
                 .Transcripts[tr.Id!]
                 .Content
-                .GetAsync(cancellationToken: ct);
+                .GetAsync(cancellationToken: ct)
+                ?? throw new InvalidOperationException("Teams transcript download returned no content stream.");
 
             using var reader = new System.IO.StreamReader(stream);
-            var vtt = await reader.ReadToEndAsync();
+            var vtt = await reader.ReadToEndAsync(ct);
             if (string.IsNullOrWhiteSpace(vtt))
                 throw new InvalidOperationException("Teams returned an empty transcript content.");
 
             return await SaveVtt(meeting, "Microsoft365", tr.Id!, vtt, ct);
+        }
+
+        private async Task<string> ResolveTeamsOnlineMeetingIdAsync(string mailbox, Meeting meeting, CancellationToken ct)
+        {
+            if (string.IsNullOrWhiteSpace(meeting.ExternalEventId))
+                throw new InvalidOperationException("Meeting.ExternalEventId not set.");
+
+            try
+            {
+                var graphEvent = await _graph.Users[mailbox]
+                    .Events[meeting.ExternalEventId]
+                    .GetAsync(cfg =>
+                    {
+                        cfg.QueryParameters.Select = new[] { "onlineMeeting" };
+                    }, ct);
+
+                var id = graphEvent?.OnlineMeeting?.ConferenceId;
+                if (!string.IsNullOrWhiteSpace(id))
+                    return id!;
+            }
+            catch (ServiceException ex) when (ex.ResponseStatusCode == (int)HttpStatusCode.NotFound)
+            {
+                throw new InvalidOperationException("Teams meeting not found when resolving online meeting id. Verify the mailbox and meeting id.", ex);
+            }
+
+            throw new InvalidOperationException("Teams meeting is missing an online meeting id. Ensure the event is a Teams meeting with transcription enabled.");
         }
 
         // --------------------------------------------------------------------
@@ -167,28 +189,40 @@ namespace BoardMgmt.Application.Meetings.Commands
         }
 
         // -------------------- Zoom helpers --------------------
-        private async Task<JsonDocument?> TryGetJson(HttpClient http, string token, string url, CancellationToken ct)
+        private static async Task<JsonDocument?> TryGetJson(HttpClient http, string token, string url, CancellationToken ct)
         {
             using var req = new HttpRequestMessage(HttpMethod.Get, url);
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
             using var resp = await http.SendAsync(req, ct);
             if (resp.IsSuccessStatusCode)
-                return JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct));
+            {
+                var json = await resp.Content.ReadAsStringAsync(ct);
+                if (string.IsNullOrWhiteSpace(json))
+                    return null;
+
+                return JsonDocument.Parse(json);
+            }
             if (resp.StatusCode == System.Net.HttpStatusCode.NotFound)
                 return null;
-            var body = await resp.Content.ReadAsStringAsync(ct);
+            var body = await resp.Content.ReadAsStringAsync(ct) ?? string.Empty;
             throw new HttpRequestException($"Zoom query failed ({(int)resp.StatusCode} {resp.ReasonPhrase}). Body: {SummarizeZoomError(body)}");
         }
 
-        private async Task<JsonDocument> GetJsonOrThrow(HttpClient http, string token, string url, CancellationToken ct, string? on404 = null)
+        private static async Task<JsonDocument> GetJsonOrThrow(HttpClient http, string token, string url, CancellationToken ct, string? on404 = null)
         {
             using var req = new HttpRequestMessage(HttpMethod.Get, url);
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
             using var resp = await http.SendAsync(req, ct);
             if (resp.IsSuccessStatusCode)
-                return JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct));
+            {
+                var json = await resp.Content.ReadAsStringAsync(ct);
+                if (string.IsNullOrWhiteSpace(json))
+                    throw new InvalidOperationException("Zoom returned an empty response body.");
 
-            var body = await resp.Content.ReadAsStringAsync(ct);
+                return JsonDocument.Parse(json);
+            }
+
+            var body = await resp.Content.ReadAsStringAsync(ct) ?? string.Empty;
             if (resp.StatusCode == System.Net.HttpStatusCode.NotFound && !string.IsNullOrWhiteSpace(on404))
                 throw new InvalidOperationException(on404);
             throw new HttpRequestException($"Zoom query failed ({(int)resp.StatusCode} {resp.ReasonPhrase}). Body: {SummarizeZoomError(body)}");
@@ -231,7 +265,7 @@ namespace BoardMgmt.Application.Meetings.Commands
         {
             try
             {
-                using var doc = JsonDocument.Parse(json);
+                using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json);
                 var root = doc.RootElement;
                 var code = root.TryGetProperty("code", out var c) ? c.ToString() : "";
                 var msg = root.TryGetProperty("message", out var m) ? m.GetString() ?? "" : "";
@@ -275,7 +309,7 @@ namespace BoardMgmt.Application.Meetings.Commands
             foreach (var cue in SimpleVtt.Parse(vtt))
                 tr.Utterances.Add(MapUtterance(meeting, tr, cue));
 
-            _db.Add(tr);
+            _db.Transcripts.Add(tr);
             await _db.SaveChangesAsync(ct);
             return tr.Utterances.Count;
         }
@@ -390,6 +424,7 @@ namespace BoardMgmt.Application.Meetings.Commands
             var recipients = meeting.Attendees
                 .Select(a => a.Email)
                 .Where(e => !string.IsNullOrWhiteSpace(e))
+                .Select(e => e!)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
 

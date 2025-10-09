@@ -1,14 +1,15 @@
 ﻿namespace BoardMgmt.Application.Chat.Handlers;
 
 using BoardMgmt.Application.Chat;
+using BoardMgmt.Application.Common.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using BoardMgmt.Domain.Chat;
 
 public sealed class AddReactionHandler : IRequestHandler<AddReactionCommand, bool>
 {
-    private readonly DbContext _db;
-    public AddReactionHandler(DbContext db) => _db = db;
+    private readonly IAppDbContext _db;
+    public AddReactionHandler(IAppDbContext db) => _db = db;
 
     public async Task<bool> Handle(AddReactionCommand req, CancellationToken ct)
     {
@@ -32,8 +33,8 @@ public sealed class AddReactionHandler : IRequestHandler<AddReactionCommand, boo
 
 public sealed class RemoveReactionHandler : IRequestHandler<RemoveReactionCommand, bool>
 {
-    private readonly DbContext _db;
-    public RemoveReactionHandler(DbContext db) => _db = db;
+    private readonly IAppDbContext _db;
+    public RemoveReactionHandler(IAppDbContext db) => _db = db;
 
     public async Task<bool> Handle(RemoveReactionCommand req, CancellationToken ct)
     {
@@ -41,7 +42,7 @@ public sealed class RemoveReactionHandler : IRequestHandler<RemoveReactionComman
             .FirstOrDefaultAsync(x => x.MessageId == req.MessageId && x.UserId == req.UserId && x.Emoji == req.Emoji, ct);
         if (r is null) return true;
 
-        _db.Remove(r);
+        _db.Set<ChatReaction>().Remove(r);
         await _db.SaveChangesAsync(ct);
         return true;
     }

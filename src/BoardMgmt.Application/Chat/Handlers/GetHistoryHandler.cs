@@ -1,6 +1,7 @@
 ﻿namespace BoardMgmt.Application.Chat.Handlers;
 
 using BoardMgmt.Application.Chat;
+using BoardMgmt.Application.Common.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using BoardMgmt.Domain.Chat;
@@ -8,8 +9,8 @@ using BoardMgmt.Domain.Entities;
 
 public sealed class GetHistoryHandler : IRequestHandler<GetHistoryQuery, PagedResult<ChatMessageDto>>
 {
-    private readonly DbContext _db;
-    public GetHistoryHandler(DbContext db) => _db = db;
+    private readonly IAppDbContext _db;
+    public GetHistoryHandler(IAppDbContext db) => _db = db;
 
     public async Task<PagedResult<ChatMessageDto>> Handle(GetHistoryQuery req, CancellationToken ct)
     {

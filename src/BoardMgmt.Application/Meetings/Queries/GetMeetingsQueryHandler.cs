@@ -13,10 +13,10 @@ namespace BoardMgmt.Application.Meetings.Queries;
 
 public class GetMeetingsQueryHandler : IRequestHandler<GetMeetingsQuery, IReadOnlyList<MeetingDto>>
 {
-    private readonly DbContext _db;
+    private readonly IAppDbContext _db;
     private readonly ICurrentUser _current;
 
-    public GetMeetingsQueryHandler(DbContext db, ICurrentUser current)
+    public GetMeetingsQueryHandler(IAppDbContext db, ICurrentUser current)
     {
         _db = db;
         _current = current;
