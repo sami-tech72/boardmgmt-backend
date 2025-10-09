@@ -1,4 +1,5 @@
-﻿using System.Linq;
+﻿using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -63,6 +64,7 @@ public sealed class Microsoft365CalendarService : ICalendarService
 
         // Refetch with $select=onlineMeeting (short retry for consistency)
         var fetched = await GetEventWithOnlineMeetingAsync(mailbox!, id, ct);
+        await EnsureTeamsMeetingDefaultsAsync(mailbox!, id, fetched, ct);
         var joinUrl = fetched?.OnlineMeeting?.JoinUrl;
 
         return (id, joinUrl);
@@ -104,6 +106,7 @@ public sealed class Microsoft365CalendarService : ICalendarService
             "PATCH /users/{mailbox}/events/{id}", ct);
 
         var refreshed = await GetEventWithOnlineMeetingAsync(mailbox!, m.ExternalEventId!, ct);
+        await EnsureTeamsMeetingDefaultsAsync(mailbox!, m.ExternalEventId!, refreshed, ct);
         return (true, refreshed?.OnlineMeeting?.JoinUrl);
     }
 
@@ -184,6 +187,7 @@ public sealed class Microsoft365CalendarService : ICalendarService
                 () => _graph.Users[mailbox].Events[eventId].GetAsync(cfg =>
                 {
                     cfg.QueryParameters.Select = new[] { "onlineMeeting" };
+                    cfg.QueryParameters.Expand = new[] { "onlineMeeting" };
                 }, ct),
                 "GET /users/{mailbox}/events/{id}?$select=onlineMeeting", ct);
 
@@ -193,6 +197,52 @@ public sealed class Microsoft365CalendarService : ICalendarService
             await Task.Delay(400, ct);
         }
         return fetched;
+    }
+
+    private async Task EnsureTeamsMeetingDefaultsAsync(string mailbox, string eventId, Event? graphEvent, CancellationToken ct)
+    {
+        try
+        {
+            var ev = graphEvent;
+            var onlineMeetingId = ev?.OnlineMeeting?.ConferenceId;
+
+            if (string.IsNullOrWhiteSpace(onlineMeetingId))
+            {
+                ev = await _graph.Users[mailbox]
+                    .Events[eventId]
+                    .GetAsync(cfg =>
+                    {
+                        cfg.QueryParameters.Select = new[] { "onlineMeeting" };
+                        cfg.QueryParameters.Expand = new[] { "onlineMeeting" };
+                    }, ct);
+
+                onlineMeetingId = ev?.OnlineMeeting?.ConferenceId;
+            }
+
+            if (string.IsNullOrWhiteSpace(onlineMeetingId))
+            {
+                _logger.LogWarning("Teams event {EventId} returned no online meeting id; unable to enforce recording/transcription defaults.", eventId);
+                return;
+            }
+
+            var patch = new OnlineMeeting
+            {
+                AdditionalData = new Dictionary<string, object?>
+                {
+                    ["allowRecording"] = true,
+                    ["recordAutomatically"] = true,
+                    ["isTranscriptionEnabled"] = true
+                }
+            };
+
+            await _graph.Users[mailbox]
+                .OnlineMeetings[onlineMeetingId]
+                .PatchAsync(patch, cancellationToken: ct);
+        }
+        catch (ApiException ex)
+        {
+            _logger.LogWarning(ex, "Failed to enforce Teams meeting defaults for event {EventId}.", eventId);
+        }
     }
 
     // RunGraph overload for functions returning a value (v5 ApiException)
