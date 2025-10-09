@@ -30,7 +30,7 @@ namespace BoardMgmt.Application.Meetings.Commands
                 await svc.CancelEventAsync(entity.ExternalEventId, ct); // ✅ correct method
             }
 
-            _db.Remove(entity);
+            _db.Set<Meeting>().Remove(entity);
             await _db.SaveChangesAsync(ct);
             return true;
         }

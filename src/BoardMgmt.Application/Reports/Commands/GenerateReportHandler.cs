@@ -68,7 +68,7 @@ public sealed class GenerateReportHandler : IRequestHandler<GenerateReportComman
             EndDate = end
         };
 
-        _db.Add(entity);
+        await _db.Set<GeneratedReport>().AddAsync(entity, ct);
         await _db.SaveChangesAsync(ct);
 
         return id;
