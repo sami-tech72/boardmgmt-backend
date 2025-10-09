@@ -2,13 +2,14 @@
 using BoardMgmt.Application.Dashboard.DTOs;
 using BoardMgmt.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
+using BoardMgmt.Infrastructure.Persistence;
 
 namespace BoardMgmt.Infrastructure.Persistence.Repositories;
 
 public class MeetingReadRepository : IMeetingReadRepository
 {
-    private readonly DbContext _db;
-    public MeetingReadRepository(DbContext db) => _db = db;
+    private readonly AppDbContext _db;
+    public MeetingReadRepository(AppDbContext db) => _db = db;
 
     public Task<int> CountUpcomingAsync(DateTime utcNow, CancellationToken ct)
     {
