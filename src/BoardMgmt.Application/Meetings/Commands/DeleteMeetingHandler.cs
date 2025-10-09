@@ -1,5 +1,6 @@
-﻿// Application/Meetings/Commands/DeleteMeetingHandler.cs
+// Application/Meetings/Commands/DeleteMeetingHandler.cs
 using BoardMgmt.Application.Calendars;
+using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -8,10 +9,10 @@ namespace BoardMgmt.Application.Meetings.Commands
 {
     public sealed class DeleteMeetingHandler : IRequestHandler<DeleteMeetingCommand, bool>
     {
-        private readonly DbContext _db;
+        private readonly IAppDbContext _db;
         private readonly ICalendarServiceSelector _calSelector;
 
-        public DeleteMeetingHandler(DbContext db, ICalendarServiceSelector calSelector)
+        public DeleteMeetingHandler(IAppDbContext db, ICalendarServiceSelector calSelector)
         {
             _db = db;
             _calSelector = calSelector;

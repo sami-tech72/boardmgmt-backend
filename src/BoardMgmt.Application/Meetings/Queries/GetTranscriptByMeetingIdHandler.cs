@@ -1,4 +1,5 @@
-﻿using BoardMgmt.Application.Meetings.DTOs;
+using BoardMgmt.Application.Common.Interfaces;
+using BoardMgmt.Application.Meetings.DTOs;
 using BoardMgmt.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -7,8 +8,8 @@ namespace BoardMgmt.Application.Meetings.Queries;
 
 public sealed class GetTranscriptByMeetingIdHandler : IRequestHandler<GetTranscriptByMeetingIdQuery, TranscriptDto?>
 {
-    private readonly DbContext _db;
-    public GetTranscriptByMeetingIdHandler(DbContext db) => _db = db;
+    private readonly IAppDbContext _db;
+    public GetTranscriptByMeetingIdHandler(IAppDbContext db) => _db = db;
 
     public async Task<TranscriptDto?> Handle(GetTranscriptByMeetingIdQuery request, CancellationToken ct)
     {

@@ -1,14 +1,15 @@
-﻿namespace BoardMgmt.Application.Chat.Handlers;
+namespace BoardMgmt.Application.Chat.Handlers;
 
 using BoardMgmt.Application.Chat;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using BoardMgmt.Domain.Chat;
+using BoardMgmt.Application.Common.Interfaces;
 
 public sealed class CreateChannelHandler : IRequestHandler<CreateChannelCommand, Guid>
 {
-    private readonly DbContext _db;
-    public CreateChannelHandler(DbContext db) => _db = db;
+    private readonly IAppDbContext _db;
+    public CreateChannelHandler(IAppDbContext db) => _db = db;
 
     public async Task<Guid> Handle(CreateChannelCommand req, CancellationToken ct)
     {

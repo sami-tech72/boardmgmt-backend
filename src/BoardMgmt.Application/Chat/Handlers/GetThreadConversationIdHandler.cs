@@ -1,14 +1,15 @@
-﻿namespace BoardMgmt.Application.Chat.Handlers;
+namespace BoardMgmt.Application.Chat.Handlers;
 
 using BoardMgmt.Application.Chat;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using BoardMgmt.Domain.Chat;
+using BoardMgmt.Application.Common.Interfaces;
 
 public sealed class GetThreadConversationIdHandler : IRequestHandler<GetThreadConversationIdQuery, Guid>
 {
-    private readonly DbContext _db;
-    public GetThreadConversationIdHandler(DbContext db) => _db = db;
+    private readonly IAppDbContext _db;
+    public GetThreadConversationIdHandler(IAppDbContext db) => _db = db;
 
     public async Task<Guid> Handle(GetThreadConversationIdQuery req, CancellationToken ct)
     {

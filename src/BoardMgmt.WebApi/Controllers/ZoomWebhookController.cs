@@ -1,10 +1,10 @@
-﻿// File: Controllers/ZoomWebhookController.cs
+// File: Controllers/ZoomWebhookController.cs
 using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
+using System.Text;
+using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Application.Meetings.Commands;
 using BoardMgmt.Domain.Entities;
-using BoardMgmt.Infrastructure.Persistence; // your DbContext namespace
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -19,14 +19,14 @@ namespace BoardMgmt.WebApi.Controllers
     public sealed class ZoomWebhookController : ControllerBase
     {
         private readonly IMediator _mediator;
-        private readonly AppDbContext _db;                 // <-- your concrete DbContext type
+        private readonly IAppDbContext _db;
         private readonly string _secretToken;
         private readonly ILogger<ZoomWebhookController> _logger;
         private readonly bool _disableSigValidation;
 
         public ZoomWebhookController(
             IMediator mediator,
-            AppDbContext db,
+            IAppDbContext db,
             IConfiguration config,
             ILogger<ZoomWebhookController> logger)
         {

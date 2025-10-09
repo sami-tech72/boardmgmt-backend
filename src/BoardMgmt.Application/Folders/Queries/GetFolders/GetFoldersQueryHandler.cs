@@ -1,4 +1,4 @@
-﻿// File: src/BoardMgmt.Application/Folders/Queries/GetFolders/GetFoldersQueryHandler.cs
+// File: src/BoardMgmt.Application/Folders/Queries/GetFolders/GetFoldersQueryHandler.cs
 using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Application.Folders.DTOs;
 using MediatR;

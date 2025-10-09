@@ -1,4 +1,4 @@
-﻿using BoardMgmt.Application.Common.Interfaces;
+using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Application.Votes.DTOs;
 using MediatR;
 using Microsoft.EntityFrameworkCore;

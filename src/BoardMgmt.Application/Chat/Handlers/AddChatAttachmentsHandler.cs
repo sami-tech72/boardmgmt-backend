@@ -1,14 +1,15 @@
-﻿namespace BoardMgmt.Application.Chat.Handlers;
+namespace BoardMgmt.Application.Chat.Handlers;
 
 using BoardMgmt.Application.Chat;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using BoardMgmt.Domain.Chat;
+using BoardMgmt.Application.Common.Interfaces;
 
 public sealed class AddChatAttachmentsHandler : IRequestHandler<AddChatAttachmentsCommand, int>
 {
-    private readonly DbContext _db;
-    public AddChatAttachmentsHandler(DbContext db) => _db = db;
+    private readonly IAppDbContext _db;
+    public AddChatAttachmentsHandler(IAppDbContext db) => _db = db;
 
     public async Task<int> Handle(AddChatAttachmentsCommand req, CancellationToken ct)
     {

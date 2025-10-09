@@ -1,8 +1,8 @@
-﻿// Application/Meetings/Commands/CreateMeetingHandler.cs
+// Application/Meetings/Commands/CreateMeetingHandler.cs
 using BoardMgmt.Application.Calendars;
 using BoardMgmt.Application.Common.Interfaces;
-using BoardMgmt.Domain.Entities;
 using BoardMgmt.Domain.Calendars;
+using BoardMgmt.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -12,12 +12,12 @@ namespace BoardMgmt.Application.Meetings.Commands;
 
 public class CreateMeetingHandler : IRequestHandler<CreateMeetingCommand, Guid>
 {
-    private readonly DbContext _db;
+    private readonly IAppDbContext _db;
     private readonly IIdentityUserReader _users;
     private readonly ICalendarServiceSelector _calSelector;
 
 
-    public CreateMeetingHandler(DbContext db, IIdentityUserReader users, ICalendarServiceSelector calSelector)
+    public CreateMeetingHandler(IAppDbContext db, IIdentityUserReader users, ICalendarServiceSelector calSelector)
     {
         _db = db;
         _users = users;

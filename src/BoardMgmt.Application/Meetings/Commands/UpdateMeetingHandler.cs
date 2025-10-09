@@ -10,11 +10,11 @@ namespace BoardMgmt.Application.Meetings.Commands;
 
 public class UpdateMeetingHandler : IRequestHandler<UpdateMeetingCommand, bool>
 {
-    private readonly DbContext _db;
+    private readonly IAppDbContext _db;
     private readonly IIdentityUserReader _users;
     private readonly ICalendarServiceSelector _calSelector;
 
-    public UpdateMeetingHandler(DbContext db, IIdentityUserReader users, ICalendarServiceSelector calSelector)
+    public UpdateMeetingHandler(IAppDbContext db, IIdentityUserReader users, ICalendarServiceSelector calSelector)
     {
         _db = db;
         _users = users;

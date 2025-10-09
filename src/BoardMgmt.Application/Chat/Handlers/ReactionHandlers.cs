@@ -1,14 +1,15 @@
-﻿namespace BoardMgmt.Application.Chat.Handlers;
+namespace BoardMgmt.Application.Chat.Handlers;
 
 using BoardMgmt.Application.Chat;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using BoardMgmt.Domain.Chat;
+using BoardMgmt.Application.Common.Interfaces;
 
 public sealed class AddReactionHandler : IRequestHandler<AddReactionCommand, bool>
 {
-    private readonly DbContext _db;
-    public AddReactionHandler(DbContext db) => _db = db;
+    private readonly IAppDbContext _db;
+    public AddReactionHandler(IAppDbContext db) => _db = db;
 
     public async Task<bool> Handle(AddReactionCommand req, CancellationToken ct)
     {
@@ -32,8 +33,8 @@ public sealed class AddReactionHandler : IRequestHandler<AddReactionCommand, boo
 
 public sealed class RemoveReactionHandler : IRequestHandler<RemoveReactionCommand, bool>
 {
-    private readonly DbContext _db;
-    public RemoveReactionHandler(DbContext db) => _db = db;
+    private readonly IAppDbContext _db;
+    public RemoveReactionHandler(IAppDbContext db) => _db = db;
 
     public async Task<bool> Handle(RemoveReactionCommand req, CancellationToken ct)
     {

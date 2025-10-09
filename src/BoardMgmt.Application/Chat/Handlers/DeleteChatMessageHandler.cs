@@ -1,14 +1,15 @@
-﻿namespace BoardMgmt.Application.Chat.Handlers;
+namespace BoardMgmt.Application.Chat.Handlers;
 
 using BoardMgmt.Application.Chat;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using BoardMgmt.Domain.Chat;
+using BoardMgmt.Application.Common.Interfaces;
 
 public sealed class DeleteChatMessageHandler : IRequestHandler<DeleteChatMessageCommand, bool>
 {
-    private readonly DbContext _db;
-    public DeleteChatMessageHandler(DbContext db) => _db = db;
+    private readonly IAppDbContext _db;
+    public DeleteChatMessageHandler(IAppDbContext db) => _db = db;
 
     public async Task<bool> Handle(DeleteChatMessageCommand req, CancellationToken ct)
     {

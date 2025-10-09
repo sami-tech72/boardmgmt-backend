@@ -1,16 +1,16 @@
-﻿using MediatR;
-using Microsoft.EntityFrameworkCore;
 using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Domain.Chat;
+using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace BoardMgmt.Application.Chat.Handlers;
 
 public sealed class CreateOrGetDirectConversationHandler
     : IRequestHandler<CreateOrGetDirectConversationCommand, Guid>
 {
-    private readonly DbContext _db;
+    private readonly IAppDbContext _db;
 
-    public CreateOrGetDirectConversationHandler(DbContext db) => _db = db;
+    public CreateOrGetDirectConversationHandler(IAppDbContext db) => _db = db;
 
     public async Task<Guid> Handle(CreateOrGetDirectConversationCommand request, CancellationToken ct)
     {

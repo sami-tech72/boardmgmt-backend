@@ -1,15 +1,16 @@
-﻿namespace BoardMgmt.Application.Chat.Handlers;
+namespace BoardMgmt.Application.Chat.Handlers;
 
 using BoardMgmt.Application.Chat;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using BoardMgmt.Domain.Chat;
 using BoardMgmt.Domain.Entities;
+using BoardMgmt.Application.Common.Interfaces;
 
 public sealed class GetConversationHandler : IRequestHandler<GetConversationQuery, ConversationDetailDto>
 {
-    private readonly DbContext _db;
-    public GetConversationHandler(DbContext db) => _db = db;
+    private readonly IAppDbContext _db;
+    public GetConversationHandler(IAppDbContext db) => _db = db;
 
     public async Task<ConversationDetailDto> Handle(GetConversationQuery req, CancellationToken ct)
     {

@@ -1,4 +1,4 @@
-﻿using BoardMgmt.Application.Common.Interfaces;
+using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Application.Meetings.DTOs;
 using MediatR;
 using Microsoft.EntityFrameworkCore;

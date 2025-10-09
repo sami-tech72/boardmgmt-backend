@@ -1,4 +1,5 @@
-﻿using System.Text;
+using System.Text;
+using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Domain.Entities;
 using MediatR;
 using Microsoft.AspNetCore.Http;
@@ -9,11 +10,11 @@ namespace BoardMgmt.Application.Reports.Commands;
 
 public sealed class GenerateReportHandler : IRequestHandler<GenerateReportCommand, Guid>
 {
-    private readonly DbContext _db;
+    private readonly IAppDbContext _db;
     private readonly IHostEnvironment _env;
     private readonly IHttpContextAccessor _http;
 
-    public GenerateReportHandler(DbContext db, IHostEnvironment env, IHttpContextAccessor http)
+    public GenerateReportHandler(IAppDbContext db, IHostEnvironment env, IHttpContextAccessor http)
     {
         _db = db; _env = env; _http = http;
     }

@@ -1,8 +1,9 @@
-﻿using BoardMgmt.Domain.Entities;
+using System.Threading.Tasks;
+using System.Threading;
+using BoardMgmt.Domain.Chat;
+using BoardMgmt.Domain.Entities;
 using BoardMgmt.Domain.Identity;
 using Microsoft.EntityFrameworkCore;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace BoardMgmt.Application.Common.Interfaces
 {
@@ -20,9 +21,22 @@ namespace BoardMgmt.Application.Common.Interfaces
         DbSet<VoteEligibleUser> VoteEligibleUsers { get; }
 
         DbSet<RolePermission> RolePermissions { get; }
+        DbSet<DocumentRoleAccess> DocumentRoleAccess { get; }
 
-        // NEW
         DbSet<Department> Departments { get; }
+        DbSet<Transcript> Transcripts { get; }
+        DbSet<TranscriptUtterance> TranscriptUtterances { get; }
+        DbSet<GeneratedReport> GeneratedReports { get; }
+
+        DbSet<Conversation> Conversations { get; }
+        DbSet<ConversationMember> ConversationMembers { get; }
+        DbSet<ChatMessage> ChatMessages { get; }
+        DbSet<ChatAttachment> ChatAttachments { get; }
+        DbSet<ChatReaction> ChatReactions { get; }
+
+        DbSet<AppUser> Users { get; }
+
+        DbSet<TEntity> Set<TEntity>() where TEntity : class;
 
         Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
     }

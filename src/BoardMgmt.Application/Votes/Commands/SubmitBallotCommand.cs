@@ -1,4 +1,4 @@
-﻿// BoardMgmt.Application/Votes/Commands/SubmitBallotCommand.cs
+// BoardMgmt.Application/Votes/Commands/SubmitBallotCommand.cs
 using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Application.Votes.DTOs;
 using BoardMgmt.Application.Votes.Queries;

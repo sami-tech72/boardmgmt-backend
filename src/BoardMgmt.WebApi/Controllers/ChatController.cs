@@ -1,13 +1,13 @@
-﻿// Controllers/ChatController.cs
+// Controllers/ChatController.cs
+using BoardMgmt.Application.Chat;
+using BoardMgmt.Application.Common.Interfaces;
+using BoardMgmt.Domain.Chat;
+using BoardMgmt.WebApi.Hubs;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using BoardMgmt.Application.Chat;
-using BoardMgmt.Domain.Chat;
-using BoardMgmt.WebApi.Hubs;
 using Microsoft.AspNetCore.SignalR;
-using BoardMgmt.Application.Common.Interfaces;
+using Microsoft.EntityFrameworkCore;
 
 namespace BoardMgmt.WebApi.Controllers;
 
@@ -19,9 +19,9 @@ public class ChatController : ControllerBase
     private readonly ISender _mediator;
     private readonly IHubContext<ChatHub> _hub;
     private readonly ICurrentUser _current;
-    private readonly DbContext _db;
+    private readonly IAppDbContext _db;
 
-    public ChatController(ISender mediator, IHubContext<ChatHub> hub, ICurrentUser current, DbContext db)
+    public ChatController(ISender mediator, IHubContext<ChatHub> hub, ICurrentUser current, IAppDbContext db)
     {
         _mediator = mediator;
         _hub = hub;

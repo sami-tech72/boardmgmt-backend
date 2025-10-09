@@ -101,9 +101,6 @@ namespace BoardMgmt.Infrastructure
             services.AddScoped<IJwtTokenService, JwtTokenService>();
             services.AddScoped<IIdentityUserReader, IdentityUserReader>();
 
-            // Some handlers may still take DbContext directly:
-            services.AddScoped<DbContext>(sp => sp.GetRequiredService<AppDbContext>());
-
             // Current user accessor
             services.AddHttpContextAccessor();
             services.AddScoped<ICurrentUser, CurrentUser>();

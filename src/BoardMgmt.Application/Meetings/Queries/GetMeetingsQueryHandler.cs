@@ -1,22 +1,22 @@
-﻿// Application/Meetings/Queries/GetMeetingsQueryHandler.cs
+// Application/Meetings/Queries/GetMeetingsQueryHandler.cs
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using System.Threading;
 using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Application.Meetings.DTOs;
 using BoardMgmt.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace BoardMgmt.Application.Meetings.Queries;
 
 public class GetMeetingsQueryHandler : IRequestHandler<GetMeetingsQuery, IReadOnlyList<MeetingDto>>
 {
-    private readonly DbContext _db;
+    private readonly IAppDbContext _db;
     private readonly ICurrentUser _current;
 
-    public GetMeetingsQueryHandler(DbContext db, ICurrentUser current)
+    public GetMeetingsQueryHandler(IAppDbContext db, ICurrentUser current)
     {
         _db = db;
         _current = current;

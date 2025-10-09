@@ -1,4 +1,5 @@
-﻿using BoardMgmt.Application.Meetings.DTOs;
+using BoardMgmt.Application.Common.Interfaces;
+using BoardMgmt.Application.Meetings.DTOs;
 using BoardMgmt.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -7,8 +8,8 @@ namespace BoardMgmt.Application.Meetings.Queries;
 
 public sealed class GetMeetingByIdQueryHandler : IRequestHandler<GetMeetingByIdQuery, MeetingDto?>
 {
-    private readonly DbContext _db;
-    public GetMeetingByIdQueryHandler(DbContext db) => _db = db;
+    private readonly IAppDbContext _db;
+    public GetMeetingByIdQueryHandler(IAppDbContext db) => _db = db;
 
     public async Task<MeetingDto?> Handle(GetMeetingByIdQuery request, CancellationToken ct)
     {

@@ -1,4 +1,4 @@
-﻿using BoardMgmt.Application.Common.Interfaces;
+using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Application.Common.Utilities;
 using BoardMgmt.Application.Folders.DTOs;
 using BoardMgmt.Domain.Entities;

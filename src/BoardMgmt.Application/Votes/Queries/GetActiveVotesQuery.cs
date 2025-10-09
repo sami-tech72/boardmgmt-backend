@@ -1,4 +1,4 @@
-﻿// BoardMgmt.Application/Votes/Queries/GetActiveVotesQuery.cs
+// BoardMgmt.Application/Votes/Queries/GetActiveVotesQuery.cs
 using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Application.Votes.DTOs;
 using BoardMgmt.Domain.Entities;
