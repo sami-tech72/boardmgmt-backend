@@ -220,7 +220,7 @@ public class ChatController : ControllerBase
             toSave.Add((f.FileName, f.ContentType ?? "application/octet-stream", f.Length, path));
         }
 
-        var _ = await _mediator.Send(new AddChatAttachmentsCommand(id, toSave));
+        _ = await _mediator.Send(new AddChatAttachmentsCommand(id, toSave));
 
         var atts = await _db.Set<ChatAttachment>()
             .Where(a => a.MessageId == id)
