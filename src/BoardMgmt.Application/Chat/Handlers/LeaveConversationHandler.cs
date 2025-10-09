@@ -17,7 +17,7 @@ public sealed class LeaveConversationHandler : IRequestHandler<LeaveConversation
             .FirstOrDefaultAsync(m => m.ConversationId == req.ConversationId && m.UserId == req.UserId, ct);
         if (member is null) return false;
 
-        _db.Remove(member);
+        _db.Set<ConversationMember>().Remove(member);
         await _db.SaveChangesAsync(ct);
         return true;
     }

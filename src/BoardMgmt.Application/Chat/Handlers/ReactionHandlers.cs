@@ -42,7 +42,7 @@ public sealed class RemoveReactionHandler : IRequestHandler<RemoveReactionComman
             .FirstOrDefaultAsync(x => x.MessageId == req.MessageId && x.UserId == req.UserId && x.Emoji == req.Emoji, ct);
         if (r is null) return true;
 
-        _db.Remove(r);
+        _db.Set<ChatReaction>().Remove(r);
         await _db.SaveChangesAsync(ct);
         return true;
     }
