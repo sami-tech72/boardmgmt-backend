@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Linq;
 using System.Net.Http;
+using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -71,9 +72,11 @@ namespace BoardMgmt.Application.Meetings.Commands
                 throw new InvalidOperationException(
                     "Meeting.ExternalCalendarMailbox is required for Teams transcript ingestion (set HostIdentity when creating the meeting).");
 
+            var onlineMeetingId = await ResolveTeamsOnlineMeetingIdAsync(mailbox!, meeting, ct);
+
             // List transcripts (ONLINE MEETING scope)
             var list = await _graph.Users[mailbox]
-                .OnlineMeetings[meeting.ExternalEventId]
+                .OnlineMeetings[onlineMeetingId]
                 .Transcripts
                 .GetAsync(cancellationToken: ct);
 
@@ -82,7 +85,7 @@ namespace BoardMgmt.Application.Meetings.Commands
 
             // Download VTT
             using var stream = await _graph.Users[mailbox]
-                .OnlineMeetings[meeting.ExternalEventId]
+                .OnlineMeetings[onlineMeetingId]
                 .Transcripts[tr.Id!]
                 .Content
                 .GetAsync(cancellationToken: ct)
@@ -94,6 +97,33 @@ namespace BoardMgmt.Application.Meetings.Commands
                 throw new InvalidOperationException("Teams returned an empty transcript content.");
 
             return await SaveVtt(meeting, "Microsoft365", tr.Id!, vtt, ct);
+        }
+
+        private async Task<string> ResolveTeamsOnlineMeetingIdAsync(string mailbox, Meeting meeting, CancellationToken ct)
+        {
+            if (string.IsNullOrWhiteSpace(meeting.ExternalEventId))
+                throw new InvalidOperationException("Meeting.ExternalEventId not set.");
+
+            try
+            {
+                var onlineMeeting = await _graph.Users[mailbox]
+                    .Events[meeting.ExternalEventId]
+                    .OnlineMeeting
+                    .GetAsync(cfg =>
+                    {
+                        cfg.QueryParameters.Select = new[] { "id" };
+                    }, ct);
+
+                var id = onlineMeeting?.Id;
+                if (!string.IsNullOrWhiteSpace(id))
+                    return id!;
+            }
+            catch (ServiceException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+            {
+                throw new InvalidOperationException("Teams meeting not found when resolving online meeting id. Verify the mailbox and meeting id.", ex);
+            }
+
+            throw new InvalidOperationException("Teams meeting is missing an online meeting id. Ensure the event is a Teams meeting with transcription enabled.");
         }
 
         // --------------------------------------------------------------------
