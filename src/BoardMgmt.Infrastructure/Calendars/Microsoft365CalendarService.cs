@@ -1,6 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
-using System.Text;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.Graph;
@@ -62,10 +62,10 @@ public sealed class Microsoft365CalendarService : ICalendarService
 
         var id = created?.Id ?? throw new InvalidOperationException("Graph didn't return Event Id.");
 
-        // Refetch with $select/$expand=onlineMeeting (short retry for consistency)
+        // Refetch with $select=onlineMeeting,onlineMeetingUrl (short retry for consistency)
         var fetched = await GetEventWithOnlineMeetingAsync(mailbox!, id, ct);
         await EnsureTeamsMeetingDefaultsAsync(mailbox!, id, fetched, ct);
-        var joinUrl = fetched?.OnlineMeeting?.JoinUrl;
+        var joinUrl = ExtractJoinUrl(fetched);
 
         return (id, joinUrl);
     }
@@ -107,7 +107,7 @@ public sealed class Microsoft365CalendarService : ICalendarService
 
         var refreshed = await GetEventWithOnlineMeetingAsync(mailbox!, m.ExternalEventId!, ct);
         await EnsureTeamsMeetingDefaultsAsync(mailbox!, m.ExternalEventId!, refreshed, ct);
-        return (true, refreshed?.OnlineMeeting?.JoinUrl);
+        return (true, ExtractJoinUrl(refreshed));
     }
 
     public async Task CancelEventAsync(string eventId, CancellationToken ct = default)
@@ -130,10 +130,9 @@ public sealed class Microsoft365CalendarService : ICalendarService
                 cfg.QueryParameters.EndDateTime = now.AddDays(30).ToString("o");
                 cfg.QueryParameters.Top = take;
                 cfg.QueryParameters.Orderby = new[] { "start/dateTime" };
-                cfg.QueryParameters.Select = new[] { "id", "subject", "start", "end", "onlineMeeting" };
-                cfg.QueryParameters.Expand = new[] { "onlineMeeting" };
+                cfg.QueryParameters.Select = new[] { "id", "subject", "start", "end", "onlineMeeting", "onlineMeetingUrl" };
             }, ct),
-            "GET /users/{mailbox}/calendarView?$select=onlineMeeting", ct);
+            "GET /users/{mailbox}/calendarView?$select=onlineMeeting,onlineMeetingUrl", ct);
 
         var list = resp?.Value ?? new List<Event>();
         return list.Select(e => new CalendarEventDto(
@@ -141,7 +140,7 @@ public sealed class Microsoft365CalendarService : ICalendarService
             e.Subject ?? "(no subject)",
             ParseUtc(e.Start),
             ParseUtc(e.End),
-            e.OnlineMeeting?.JoinUrl,
+            ExtractJoinUrl(e),
             "Microsoft365"
         )).ToList();
     }
@@ -155,10 +154,9 @@ public sealed class Microsoft365CalendarService : ICalendarService
                 cfg.QueryParameters.EndDateTime = endUtc.ToString("o");
                 cfg.QueryParameters.Orderby = new[] { "start/dateTime" };
                 cfg.QueryParameters.Top = 100;
-                cfg.QueryParameters.Select = new[] { "id", "subject", "start", "end", "onlineMeeting" };
-                cfg.QueryParameters.Expand = new[] { "onlineMeeting" };
+                cfg.QueryParameters.Select = new[] { "id", "subject", "start", "end", "onlineMeeting", "onlineMeetingUrl" };
             }, ct),
-            "GET /users/{mailbox}/calendarView?$select=onlineMeeting", ct);
+            "GET /users/{mailbox}/calendarView?$select=onlineMeeting,onlineMeetingUrl", ct);
 
         var list = resp?.Value ?? new List<Event>();
         return list.Select(e => new CalendarEventDto(
@@ -166,7 +164,7 @@ public sealed class Microsoft365CalendarService : ICalendarService
             e.Subject ?? "(no subject)",
             ParseUtc(e.Start),
             ParseUtc(e.End),
-            e.OnlineMeeting?.JoinUrl,
+            ExtractJoinUrl(e),
             "Microsoft365"
         )).ToList();
     }
@@ -179,7 +177,7 @@ public sealed class Microsoft365CalendarService : ICalendarService
         return DateTimeOffset.Parse(z.DateTime, null, System.Globalization.DateTimeStyles.RoundtripKind);
     }
 
-    /// Refetch an event selecting only onlineMeeting; tiny retry for eventual consistency.
+    /// Refetch an event selecting Teams meeting metadata; tiny retry for eventual consistency.
     private async Task<Event?> GetEventWithOnlineMeetingAsync(string mailbox, string eventId, CancellationToken ct)
     {
         Event? fetched = null;
@@ -188,17 +186,83 @@ public sealed class Microsoft365CalendarService : ICalendarService
             fetched = await RunGraph<Event?>(
                 () => _graph.Users[mailbox].Events[eventId].GetAsync(cfg =>
                 {
-                    cfg.QueryParameters.Select = new[] { "onlineMeeting" };
-                    cfg.QueryParameters.Expand = new[] { "onlineMeeting" };
+                    cfg.QueryParameters.Select = new[] { "onlineMeeting", "onlineMeetingUrl" };
                 }, ct),
-                "GET /users/{mailbox}/events/{id}?$select=onlineMeeting&$expand=onlineMeeting", ct);
+                "GET /users/{mailbox}/events/{id}?$select=onlineMeeting,onlineMeetingUrl", ct);
 
-            if (!string.IsNullOrEmpty(fetched?.OnlineMeeting?.JoinUrl))
+            if (!string.IsNullOrEmpty(ExtractJoinUrl(fetched)))
                 return fetched;
 
             await Task.Delay(400, ct);
         }
         return fetched;
+    }
+
+    private static string? ExtractJoinUrl(Event? ev)
+    {
+        if (!string.IsNullOrWhiteSpace(ev?.OnlineMeeting?.JoinUrl))
+            return ev!.OnlineMeeting!.JoinUrl;
+
+        if (!string.IsNullOrWhiteSpace(ev?.OnlineMeetingUrl))
+            return ev!.OnlineMeetingUrl;
+
+        if (TryGetString(ev?.AdditionalData, "onlineMeetingUrl", out var fromRoot))
+            return fromRoot;
+
+        if (TryGetNestedString(ev?.AdditionalData, "onlineMeeting", "joinUrl", out var fromNested))
+            return fromNested;
+
+        return null;
+    }
+
+    private static bool TryGetNestedString(IDictionary<string, object?>? data, string key, string nestedKey, out string? value)
+    {
+        value = null;
+        if (data is null || !data.TryGetValue(key, out var nested) || nested is null)
+            return false;
+
+        switch (nested)
+        {
+            case IDictionary<string, object?> dict:
+                return TryGetString(dict, nestedKey, out value);
+            case JsonElement element when element.ValueKind == JsonValueKind.Object:
+                if (element.TryGetProperty(nestedKey, out var nestedEl) && nestedEl.ValueKind == JsonValueKind.String)
+                {
+                    var str = nestedEl.GetString();
+                    if (!string.IsNullOrWhiteSpace(str))
+                    {
+                        value = str;
+                        return true;
+                    }
+                }
+                break;
+        }
+
+        return false;
+    }
+
+    private static bool TryGetString(IDictionary<string, object?>? data, string key, out string? value)
+    {
+        value = null;
+        if (data is null || !data.TryGetValue(key, out var raw) || raw is null)
+            return false;
+
+        switch (raw)
+        {
+            case string str when !string.IsNullOrWhiteSpace(str):
+                value = str;
+                return true;
+            case JsonElement el when el.ValueKind == JsonValueKind.String:
+                var strVal = el.GetString();
+                if (!string.IsNullOrWhiteSpace(strVal))
+                {
+                    value = strVal;
+                    return true;
+                }
+                break;
+        }
+
+        return false;
     }
 
     private async Task EnsureTeamsMeetingDefaultsAsync(string mailbox, string eventId, Event? graphEvent, CancellationToken ct)
@@ -214,8 +278,7 @@ public sealed class Microsoft365CalendarService : ICalendarService
                     .Events[eventId]
                     .GetAsync(cfg =>
                     {
-                        cfg.QueryParameters.Select = new[] { "onlineMeeting" };
-                        cfg.QueryParameters.Expand = new[] { "onlineMeeting" };
+                        cfg.QueryParameters.Select = new[] { "onlineMeeting", "onlineMeetingUrl" };
                     }, ct);
 
                 onlineMeetingId = ev?.OnlineMeeting?.ConferenceId;
