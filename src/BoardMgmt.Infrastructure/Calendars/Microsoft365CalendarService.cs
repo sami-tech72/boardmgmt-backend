@@ -62,7 +62,7 @@ public sealed class Microsoft365CalendarService : ICalendarService
 
         var id = created?.Id ?? throw new InvalidOperationException("Graph didn't return Event Id.");
 
-        // Refetch with $select=onlineMeeting (short retry for consistency)
+        // Refetch with $select/$expand=onlineMeeting (short retry for consistency)
         var fetched = await GetEventWithOnlineMeetingAsync(mailbox!, id, ct);
         await EnsureTeamsMeetingDefaultsAsync(mailbox!, id, fetched, ct);
         var joinUrl = fetched?.OnlineMeeting?.JoinUrl;
@@ -131,6 +131,7 @@ public sealed class Microsoft365CalendarService : ICalendarService
                 cfg.QueryParameters.Top = take;
                 cfg.QueryParameters.Orderby = new[] { "start/dateTime" };
                 cfg.QueryParameters.Select = new[] { "id", "subject", "start", "end", "onlineMeeting" };
+                cfg.QueryParameters.Expand = new[] { "onlineMeeting" };
             }, ct),
             "GET /users/{mailbox}/calendarView?$select=onlineMeeting", ct);
 
@@ -155,6 +156,7 @@ public sealed class Microsoft365CalendarService : ICalendarService
                 cfg.QueryParameters.Orderby = new[] { "start/dateTime" };
                 cfg.QueryParameters.Top = 100;
                 cfg.QueryParameters.Select = new[] { "id", "subject", "start", "end", "onlineMeeting" };
+                cfg.QueryParameters.Expand = new[] { "onlineMeeting" };
             }, ct),
             "GET /users/{mailbox}/calendarView?$select=onlineMeeting", ct);
 
@@ -187,8 +189,9 @@ public sealed class Microsoft365CalendarService : ICalendarService
                 () => _graph.Users[mailbox].Events[eventId].GetAsync(cfg =>
                 {
                     cfg.QueryParameters.Select = new[] { "onlineMeeting" };
+                    cfg.QueryParameters.Expand = new[] { "onlineMeeting" };
                 }, ct),
-                "GET /users/{mailbox}/events/{id}?$select=onlineMeeting", ct);
+                "GET /users/{mailbox}/events/{id}?$select=onlineMeeting&$expand=onlineMeeting", ct);
 
             if (!string.IsNullOrEmpty(fetched?.OnlineMeeting?.JoinUrl))
                 return fetched;
@@ -212,6 +215,7 @@ public sealed class Microsoft365CalendarService : ICalendarService
                     .GetAsync(cfg =>
                     {
                         cfg.QueryParameters.Select = new[] { "onlineMeeting" };
+                        cfg.QueryParameters.Expand = new[] { "onlineMeeting" };
                     }, ct);
 
                 onlineMeetingId = ev?.OnlineMeeting?.ConferenceId;
