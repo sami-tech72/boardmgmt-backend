@@ -1,17 +1,23 @@
-﻿using BoardMgmt.Application.Common.Interfaces;
+using System.Linq;
+using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Application.Departments.DTOs;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
+namespace BoardMgmt.Application.Departments.Queries;
+
 public sealed record GetDepartmentsQuery(string? Q = null, bool? ActiveOnly = null)
   : IRequest<IReadOnlyList<DepartmentDto>>;
 
-public sealed class GetDepartmentsHandler(IAppDbContext db)
-  : IRequestHandler<GetDepartmentsQuery, IReadOnlyList<DepartmentDto>>
+public sealed class GetDepartmentsHandler : IRequestHandler<GetDepartmentsQuery, IReadOnlyList<DepartmentDto>>
 {
+    private readonly IAppDbContext _db;
+
+    public GetDepartmentsHandler(IAppDbContext db) => _db = db;
+
     public async Task<IReadOnlyList<DepartmentDto>> Handle(GetDepartmentsQuery request, CancellationToken ct)
     {
-        var q = db.Departments.AsNoTracking();
+        var q = _db.Departments.AsNoTracking();
 
         if (!string.IsNullOrWhiteSpace(request.Q))
         {

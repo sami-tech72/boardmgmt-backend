@@ -1,7 +1,8 @@
 // File: Controllers/ZoomWebhookController.cs
+using System.IO;
 using System.Security.Cryptography;
-using System.Text.Json;
 using System.Text;
+using System.Text.Json;
 using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Application.Meetings.Commands;
 using BoardMgmt.Domain.Entities;
@@ -47,7 +48,8 @@ namespace BoardMgmt.WebApi.Controllers
         {
             try
             {
-                using var reader = new StreamReader(Request.Body, Encoding.UTF8, false, 1024, leaveOpen: true);
+                var requestBody = Request.Body ?? Stream.Null;
+                using var reader = new StreamReader(requestBody, Encoding.UTF8, detectEncodingFromByteOrderMarks: false, bufferSize: 1024, leaveOpen: true);
                 var body = await reader.ReadToEndAsync(ct);
 
                 _logger.LogInformation(

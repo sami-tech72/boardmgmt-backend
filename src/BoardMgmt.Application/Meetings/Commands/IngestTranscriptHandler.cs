@@ -391,7 +391,7 @@ namespace BoardMgmt.Application.Meetings.Commands
             var vttBytes = BuildVttFromUtterances(transcript);
             var attachment = ("transcript.vtt", "text/vtt", vttBytes);
 
-            var recipients = meeting.Attendees
+            List<string> recipients = meeting.Attendees
                 .Select(a => a.Email)
                 .Where(e => !string.IsNullOrWhiteSpace(e))
                 .Select(e => e!.Trim())
