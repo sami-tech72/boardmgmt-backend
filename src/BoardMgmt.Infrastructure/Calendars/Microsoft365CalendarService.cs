@@ -187,7 +187,6 @@ public sealed class Microsoft365CalendarService : ICalendarService
                 () => _graph.Users[mailbox].Events[eventId].GetAsync(cfg =>
                 {
                     cfg.QueryParameters.Select = new[] { "onlineMeeting" };
-                    cfg.QueryParameters.Expand = new[] { "onlineMeeting" };
                 }, ct),
                 "GET /users/{mailbox}/events/{id}?$select=onlineMeeting", ct);
 
@@ -213,7 +212,6 @@ public sealed class Microsoft365CalendarService : ICalendarService
                     .GetAsync(cfg =>
                     {
                         cfg.QueryParameters.Select = new[] { "onlineMeeting" };
-                        cfg.QueryParameters.Expand = new[] { "onlineMeeting" };
                     }, ct);
 
                 onlineMeetingId = ev?.OnlineMeeting?.ConferenceId;
