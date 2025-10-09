@@ -1,4 +1,5 @@
 using BoardMgmt.Application;
+using BoardMgmt.Domain.Identity;
 using BoardMgmt.Infrastructure;
 using BoardMgmt.WebApi.Auth;
 using BoardMgmt.WebApi.Common.Http;

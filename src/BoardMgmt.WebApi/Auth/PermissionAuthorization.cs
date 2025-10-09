@@ -16,15 +16,17 @@ namespace BoardMgmt.WebApi.Auth
     public sealed class PermissionAuthorizationHandler(IPermissionService perms)
         : AuthorizationHandler<PermissionRequirement>
     {
+
         private const string ClaimType = "permission"; // we store "permission" claims
 
         protected override async Task HandleRequirementAsync(
             AuthorizationHandlerContext context,
             PermissionRequirement requirement)
         {
+            var hasModuleInt = int.TryParse(requirement.ModuleId, out var moduleInt);
             // ---- 1) Try fast path from claims on the principal (JWT / user claims)
             // Format: type="permission", value = "<moduleInt>:<maskInt>"
-            if (int.TryParse(requirement.ModuleId, out var moduleInt))
+            if (hasModuleInt)
             {
                 var claim = context.User.FindAll(ClaimType)
                     .Select(c => c.Value)
@@ -51,10 +53,13 @@ namespace BoardMgmt.WebApi.Auth
             }
 
             // ---- 2) Authoritative check from DB (always reflects latest changes)
-            var module = (AppModule)moduleInt;
-            if (await perms.HasMineAsync(module, requirement.Needed, CancellationToken.None))
+            if (hasModuleInt)
             {
-                context.Succeed(requirement);
+                var module = (AppModule)moduleInt;
+                if (await perms.HasMineAsync(module, requirement.Needed, CancellationToken.None))
+                {
+                    context.Succeed(requirement);
+                }
             }
         }
     }
