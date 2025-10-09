@@ -42,8 +42,10 @@ public sealed class Microsoft365CalendarService : ICalendarService
             : m.ExternalCalendarMailbox;
 
         var created = await _graph.Users[mailbox].Events.PostAsync(ev, cancellationToken: ct);
-        return (created?.Id ?? throw new InvalidOperationException("Graph didn't return Event Id."),
-                created?.OnlineMeeting?.JoinUrl);
+        var eventId = created?.Id ?? throw new InvalidOperationException("Graph didn't return Event Id.");
+
+        var joinUrl = await FetchJoinUrlAsync(mailbox, eventId, ct);
+        return (eventId, joinUrl);
     }
 
     public async Task<(bool ok, string? joinUrl)> UpdateEventAsync(Meeting m, CancellationToken ct = default)
@@ -75,10 +77,8 @@ public sealed class Microsoft365CalendarService : ICalendarService
                 requestConfiguration => requestConfiguration.Headers.Add("If-Match", "*"),
                 cancellationToken: ct);
 
-        var refreshed = await _graph.Users[mailbox].Events[m.ExternalEventId]
-            .GetAsync(cancellationToken: ct);
-
-        return (true, refreshed?.OnlineMeeting?.JoinUrl);
+        var joinUrl = await FetchJoinUrlAsync(mailbox, m.ExternalEventId, ct);
+        return (true, joinUrl);
     }
 
     public async Task CancelEventAsync(string eventId, CancellationToken ct = default)
@@ -97,6 +97,8 @@ public sealed class Microsoft365CalendarService : ICalendarService
             cfg.QueryParameters.EndDateTime = now.AddDays(30).ToString("o");
             cfg.QueryParameters.Top = take;
             cfg.QueryParameters.Orderby = new[] { "start/dateTime" };
+            cfg.QueryParameters.Select = new[] { "subject", "start", "end", "onlineMeeting" };
+            cfg.QueryParameters.Expand = new[] { "onlineMeeting" };
         }, ct);
 
         var list = resp?.Value ?? new List<Event>();
@@ -118,6 +120,8 @@ public sealed class Microsoft365CalendarService : ICalendarService
             cfg.QueryParameters.EndDateTime = endUtc.ToString("o");
             cfg.QueryParameters.Orderby = new[] { "start/dateTime" };
             cfg.QueryParameters.Top = 100;
+            cfg.QueryParameters.Select = new[] { "subject", "start", "end", "onlineMeeting" };
+            cfg.QueryParameters.Expand = new[] { "onlineMeeting" };
         }, ct);
 
         var list = resp?.Value ?? new List<Event>();
@@ -135,5 +139,16 @@ public sealed class Microsoft365CalendarService : ICalendarService
     {
         if (z?.DateTime is null) return DateTimeOffset.MinValue;
         return DateTimeOffset.Parse(z.DateTime, null, System.Globalization.DateTimeStyles.RoundtripKind);
+    }
+
+    private async Task<string?> FetchJoinUrlAsync(string mailbox, string eventId, CancellationToken ct)
+    {
+        var ev = await _graph.Users[mailbox].Events[eventId].GetAsync(cfg =>
+        {
+            cfg.QueryParameters.Select = new[] { "onlineMeeting" };
+            cfg.QueryParameters.Expand = new[] { "onlineMeeting" };
+        }, ct);
+
+        return ev?.OnlineMeeting?.JoinUrl;
     }
 }
