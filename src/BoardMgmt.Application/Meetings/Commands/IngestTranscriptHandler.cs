@@ -106,19 +106,18 @@ namespace BoardMgmt.Application.Meetings.Commands
 
             try
             {
-                var onlineMeeting = await _graph.Users[mailbox]
+                var graphEvent = await _graph.Users[mailbox]
                     .Events[meeting.ExternalEventId]
-                    .OnlineMeeting
                     .GetAsync(cfg =>
                     {
-                        cfg.QueryParameters.Select = new[] { "id" };
+                        cfg.QueryParameters.Select = new[] { "onlineMeeting" };
                     }, ct);
 
-                var id = onlineMeeting?.Id;
+                var id = graphEvent?.OnlineMeeting?.Id;
                 if (!string.IsNullOrWhiteSpace(id))
                     return id!;
             }
-            catch (ServiceException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+            catch (ServiceException ex) when (ex.ResponseStatusCode == (int)HttpStatusCode.NotFound)
             {
                 throw new InvalidOperationException("Teams meeting not found when resolving online meeting id. Verify the mailbox and meeting id.", ex);
             }
