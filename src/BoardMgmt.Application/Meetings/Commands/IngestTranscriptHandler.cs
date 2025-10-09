@@ -110,10 +110,10 @@ namespace BoardMgmt.Application.Meetings.Commands
                     .Events[meeting.ExternalEventId]
                     .GetAsync(cfg =>
                     {
-                        cfg.QueryParameters.Select = new[] { "onlineMeeting" };
+                        cfg.QueryParameters.Select = new[] { "onlineMeeting", "onlineMeetingId" };
                     }, ct);
 
-                var id = graphEvent?.OnlineMeeting?.Id;
+                var id = graphEvent?.OnlineMeetingId;
                 if (!string.IsNullOrWhiteSpace(id))
                     return id!;
             }
