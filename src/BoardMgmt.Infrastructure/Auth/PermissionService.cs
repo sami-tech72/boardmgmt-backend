@@ -61,21 +61,11 @@ namespace BoardMgmt.Infrastructure.Auth
                 .Select(rp => new { Module = (int)rp.Module, Allowed = (int)rp.Allowed })
                 .ToListAsync(ct);
 
-            var result = new Dictionary<int, int>();
-
-            foreach (var row in rows)
-            {
-                if (result.TryGetValue(row.Module, out var existing))
-                {
-                    result[row.Module] = existing | row.Allowed;
-                }
-                else
-                {
-                    result[row.Module] = row.Allowed;
-                }
-            }
-
-            return result;
+            return rows
+                .GroupBy(r => r.Module)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.Aggregate(0, (mask, row) => mask | row.Allowed));
         }
 
         public async Task<IDictionary<string, IDictionary<int, int>>> GetAggregatedForRolesAsync(
@@ -92,27 +82,15 @@ namespace BoardMgmt.Infrastructure.Auth
                 .Select(rp => new { rp.RoleId, Module = (int)rp.Module, Allowed = (int)rp.Allowed })
                 .ToListAsync(ct);
 
-            var result = new Dictionary<string, IDictionary<int, int>>();
-
-            foreach (var row in rows)
-            {
-                if (!result.TryGetValue(row.RoleId, out var moduleMap))
-                {
-                    moduleMap = new Dictionary<int, int>();
-                    result[row.RoleId] = moduleMap;
-                }
-
-                if (moduleMap.TryGetValue(row.Module, out var existing))
-                {
-                    moduleMap[row.Module] = existing | row.Allowed;
-                }
-                else
-                {
-                    moduleMap[row.Module] = row.Allowed;
-                }
-            }
-
-            return result;
+            return rows
+                .GroupBy(r => r.RoleId)
+                .ToDictionary(
+                    g => g.Key,
+                    g => (IDictionary<int, int>)g
+                        .GroupBy(row => row.Module)
+                        .ToDictionary(
+                            mg => mg.Key,
+                            mg => mg.Aggregate(0, (mask, row) => mask | row.Allowed)));
         }
     }
 }
