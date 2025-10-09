@@ -98,10 +98,17 @@ public sealed class Microsoft365CalendarService : ICalendarService
         return (true, joinUrl);
     }
 
-    public async Task CancelEventAsync(string eventId, CancellationToken ct = default)
+    public async Task CancelEventAsync(Meeting meeting, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(eventId)) return;
-        await _graph.Users[_opts.MailboxAddress].Events[eventId].DeleteAsync(cancellationToken: ct);
+        if (meeting is null) throw new ArgumentNullException(nameof(meeting));
+        if (string.IsNullOrWhiteSpace(meeting.ExternalEventId)) return;
+
+        var mailbox = string.IsNullOrWhiteSpace(meeting.ExternalCalendarMailbox)
+            ? _opts.MailboxAddress
+            : meeting.ExternalCalendarMailbox;
+
+        await _graph.Users[mailbox!].Events[meeting.ExternalEventId]
+            .DeleteAsync(cancellationToken: ct);
     }
 
     public async Task<IReadOnlyList<CalendarEventDto>> ListUpcomingAsync(int take = 20, CancellationToken ct = default)
