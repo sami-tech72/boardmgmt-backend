@@ -19,30 +19,21 @@ using Microsoft.Graph;
 
 namespace BoardMgmt.Application.Meetings.Commands
 {
-    public sealed class IngestTranscriptHandler : IRequestHandler<IngestTranscriptCommand, int>
+    public sealed class IngestTranscriptHandler(
+        IAppDbContext db,
+        GraphServiceClient graph,
+        IHttpClientFactory httpFactory,
+        IZoomTokenProvider zoomTokenProvider,
+        IEmailSender email,
+        IOptions<AppOptions> app)
+        : IRequestHandler<IngestTranscriptCommand, int>
     {
-                private readonly IAppDbContext _db;
-        private readonly GraphServiceClient _graph;
-        private readonly IHttpClientFactory _httpFactory;
-        private readonly IZoomTokenProvider _zoomTokenProvider;
-        private readonly IEmailSender _email;
-        private readonly AppOptions _app;
-
-        public         public IngestTranscriptHandler(
-            IAppDbContext db,
-            GraphServiceClient graph,
-            IHttpClientFactory httpFactory,
-            IZoomTokenProvider zoomTokenProvider,
-            IEmailSender email,
-            IOptions<AppOptions> app)
-        {
-            _db = db;
-            _graph = graph;
-            _httpFactory = httpFactory;
-            _zoomTokenProvider = zoomTokenProvider;
-            _email = email;
-            _app = app.Value ?? new AppOptions();
-        }
+        private readonly IAppDbContext _db = db;
+        private readonly GraphServiceClient _graph = graph;
+        private readonly IHttpClientFactory _httpFactory = httpFactory;
+        private readonly IZoomTokenProvider _zoomTokenProvider = zoomTokenProvider;
+        private readonly IEmailSender _email = email;
+        private readonly AppOptions _app = app.Value ?? new AppOptions();
 
         public async Task<int> Handle(IngestTranscriptCommand request, CancellationToken ct)
         {
@@ -94,10 +85,11 @@ namespace BoardMgmt.Application.Meetings.Commands
                 .OnlineMeetings[meeting.ExternalEventId]
                 .Transcripts[tr.Id!]
                 .Content
-                .GetAsync(cancellationToken: ct);
+                .GetAsync(cancellationToken: ct)
+                ?? throw new InvalidOperationException("Teams transcript download returned no content stream.");
 
             using var reader = new System.IO.StreamReader(stream);
-            var vtt = await reader.ReadToEndAsync();
+            var vtt = await reader.ReadToEndAsync(ct);
             if (string.IsNullOrWhiteSpace(vtt))
                 throw new InvalidOperationException("Teams returned an empty transcript content.");
 
@@ -168,7 +160,7 @@ namespace BoardMgmt.Application.Meetings.Commands
         }
 
         // -------------------- Zoom helpers --------------------
-        private async Task<JsonDocument?> TryGetJson(HttpClient http, string token, string url, CancellationToken ct)
+        private static async Task<JsonDocument?> TryGetJson(HttpClient http, string token, string url, CancellationToken ct)
         {
             using var req = new HttpRequestMessage(HttpMethod.Get, url);
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -181,7 +173,7 @@ namespace BoardMgmt.Application.Meetings.Commands
             throw new HttpRequestException($"Zoom query failed ({(int)resp.StatusCode} {resp.ReasonPhrase}). Body: {SummarizeZoomError(body)}");
         }
 
-        private async Task<JsonDocument> GetJsonOrThrow(HttpClient http, string token, string url, CancellationToken ct, string? on404 = null)
+        private static async Task<JsonDocument> GetJsonOrThrow(HttpClient http, string token, string url, CancellationToken ct, string? on404 = null)
         {
             using var req = new HttpRequestMessage(HttpMethod.Get, url);
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -276,7 +268,7 @@ namespace BoardMgmt.Application.Meetings.Commands
             foreach (var cue in SimpleVtt.Parse(vtt))
                 tr.Utterances.Add(MapUtterance(meeting, tr, cue));
 
-            _db.Add(tr);
+            _db.Transcripts.Add(tr);
             await _db.SaveChangesAsync(ct);
             return tr.Utterances.Count;
         }
@@ -391,6 +383,7 @@ namespace BoardMgmt.Application.Meetings.Commands
             var recipients = meeting.Attendees
                 .Select(a => a.Email)
                 .Where(e => !string.IsNullOrWhiteSpace(e))
+                .Select(e => e!)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
