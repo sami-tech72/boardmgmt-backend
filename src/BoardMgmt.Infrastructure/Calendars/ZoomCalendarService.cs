@@ -1,4 +1,5 @@
-﻿using System.Net.Http.Headers;
+﻿using System;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
@@ -140,14 +141,15 @@ public sealed class ZoomCalendarService : ICalendarService
     // ---------------------------
     // Delete
     // ---------------------------
-    public async Task CancelEventAsync(string eventId, CancellationToken ct = default)
+    public async Task CancelEventAsync(Meeting meeting, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(eventId)) return;
+        if (meeting is null) throw new ArgumentNullException(nameof(meeting));
+        if (string.IsNullOrWhiteSpace(meeting.ExternalEventId)) return;
 
         var token = await GetAccessTokenAsync(ct);
         using var req = new HttpRequestMessage(
             HttpMethod.Delete,
-            $"https://api.zoom.us/v2/meetings/{Uri.EscapeDataString(eventId)}");
+            $"https://api.zoom.us/v2/meetings/{Uri.EscapeDataString(meeting.ExternalEventId)}");
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         using var resp = await _http.SendAsync(req, ct);
@@ -155,7 +157,7 @@ public sealed class ZoomCalendarService : ICalendarService
         {
             var body = await resp.Content.ReadAsStringAsync(ct);
             throw new HttpRequestException(
-                $"Zoom delete meeting failed ({(int)resp.StatusCode} {resp.ReasonPhrase}) id={eventId}, body={body}");
+                $"Zoom delete meeting failed ({(int)resp.StatusCode} {resp.ReasonPhrase}) id={meeting.ExternalEventId}, body={body}");
         }
     }
 

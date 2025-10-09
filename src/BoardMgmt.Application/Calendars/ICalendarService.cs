@@ -7,7 +7,7 @@ public interface ICalendarService
     Task<(string eventId, string? joinUrl)> CreateEventAsync(Meeting meeting, CancellationToken ct = default);
     Task<(bool ok, string? joinUrl)> UpdateEventAsync(Meeting meeting, CancellationToken ct = default);
 
-    Task CancelEventAsync(string eventId, CancellationToken ct = default);
+    Task CancelEventAsync(Meeting meeting, CancellationToken ct = default);
 
     Task<IReadOnlyList<CalendarEventDto>> ListUpcomingAsync(int take = 20, CancellationToken ct = default);
 
