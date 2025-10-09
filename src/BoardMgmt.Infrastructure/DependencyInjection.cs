@@ -1,16 +1,20 @@
 ﻿// File: src/BoardMgmt.Infrastructure/DependencyInjection.cs
 using Azure.Identity;
 using BoardMgmt.Application.Calendars;
+using BoardMgmt.Application.Common.Email;
 using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Application.Common.Interfaces.Repositories;
+using BoardMgmt.Application.Common.Options;
 using BoardMgmt.Domain.Entities;
 using BoardMgmt.Domain.Identity;
 using BoardMgmt.Infrastructure.Auth;
 using BoardMgmt.Infrastructure.Calendars;
+using BoardMgmt.Infrastructure.Email;
 using BoardMgmt.Infrastructure.Files;
 using BoardMgmt.Infrastructure.Identity;
 using BoardMgmt.Infrastructure.Persistence;
 using BoardMgmt.Infrastructure.Persistence.Repositories;
+using BoardMgmt.Infrastructure.Persistence.Seed;
 using BoardMgmt.Infrastructure.Storage;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -28,6 +32,10 @@ namespace BoardMgmt.Infrastructure
     {
         public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration config)
         {
+            // Bind shared options from configuration so application handlers can request them.
+            services.Configure<AppOptions>(config.GetSection("App"));
+            services.Configure<SmtpOptions>(config.GetSection("Smtp"));
+
             // --- Connection string (fallback safe for local dev) ---
             var cs = config.GetConnectionString("DefaultConnection")
                      ?? "Server=localhost\\SQLEXPRESS;Database=BoardMgmtDb;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=True";
@@ -120,11 +128,10 @@ namespace BoardMgmt.Infrastructure
                 (IRolePermissionStore)sp.GetRequiredService<IPermissionService>());
 
             // File storage
-            //services.AddSingleton<IFileStorage, LocalFileStorage>();
-            //services.AddScoped<IFileStorage, DiskFileStorage>();
-
-            // SINGLE storage provider
             services.AddSingleton<IFileStorage, LocalFileStorage>();
+
+            // Outbound email
+            services.AddScoped<IEmailSender, SmtpEmailSender>();
 
             services.AddScoped<IMeetingReadRepository, MeetingReadRepository>();
             services.AddScoped<IDocumentReadRepository, DocumentReadRepository>();
@@ -132,13 +139,13 @@ namespace BoardMgmt.Infrastructure
             services.AddScoped<IActivityReadRepository, ActivityReadRepository>();
             services.AddScoped<IUserReadRepository, UserReadRepository>();
 
-
+            services.AddCalendarIntegrations(config);
 
             return services;
         }
 
 
-        public static IServiceCollection AddCalendarIntegrations(this IServiceCollection services, IConfiguration config)
+        private static IServiceCollection AddCalendarIntegrations(this IServiceCollection services, IConfiguration config)
         {
             // Options
             services.Configure<GraphOptions>(config.GetSection("Graph"));
@@ -183,6 +190,20 @@ namespace BoardMgmt.Infrastructure
 
 
             return services;
+        }
+
+
+        public static async Task InitializeInfrastructureAsync(this IServiceProvider services, ILogger logger)
+        {
+            using (var scope = services.CreateScope())
+            {
+                var scopedProvider = scope.ServiceProvider;
+                var db = scopedProvider.GetRequiredService<AppDbContext>();
+                await db.Database.MigrateAsync();
+                await DepartmentSeeder.SeedAsync(db);
+            }
+
+            await DbSeeder.SeedAsync(services, logger);
         }
     }
 }

@@ -1,26 +1,12 @@
-﻿using Azure.Identity;
 using BoardMgmt.Application;
-using BoardMgmt.Application.Calendars;
-using BoardMgmt.Application.Common.Email;
-using BoardMgmt.Application.Common.Interfaces; // IFileStorage
-using BoardMgmt.Domain.Identity;
 using BoardMgmt.Infrastructure;
-using BoardMgmt.Infrastructure.Calendars;
-using BoardMgmt.Infrastructure.Email;
-using BoardMgmt.Infrastructure.Graph;
-using BoardMgmt.Application.Common.Options;
-using BoardMgmt.Infrastructure.Persistence;
-using BoardMgmt.Infrastructure.Persistence.Seed;
 using BoardMgmt.WebApi.Auth;
 using BoardMgmt.WebApi.Common.Http;
 using BoardMgmt.WebApi.Hubs;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http.Features;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection.Extensions; // for RemoveAll
 using Microsoft.Extensions.Logging;
-using Microsoft.Graph;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Serilog;
@@ -45,19 +31,6 @@ builder.Host.UseSerilog((ctx, lc) => lc
 // ---- DI: Infrastructure then Application ----
 builder.Services.AddInfrastructure(config);
 builder.Services.AddApplication();
-
-// ---- File storage provider selection ----
-//builder.Services.RemoveAll<IFileStorage>(); // remove default if Infrastructure registered one
-//var uploadsProvider = builder.Configuration["Uploads:Provider"] ?? "Local";
-
-//if (uploadsProvider.Equals("Local", StringComparison.OrdinalIgnoreCase))
-//{
-//    builder.Services.AddSingleton<IFileStorage, BoardMgmt.Infrastructure.Storage.LocalFileStorage>();
-//}
-//else
-//{
-//    builder.Services.AddSingleton<IFileStorage, BoardMgmt.Infrastructure.Files.DiskFileStorage>();
-//}
 
 // ---- JWT ----
 var issuer = config["Jwt:Issuer"] ?? "BoardMgmt";
@@ -105,13 +78,6 @@ builder.Services.AddSignalR();
 builder.Services.AddAuthorization();
 
 
-// Bind options
-builder.Services.Configure<AppOptions>(builder.Configuration.GetSection("App"));
-builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection("Smtp"));
-
-// Use SMTP mailer
-builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
-
 var authz = builder.Services.AddAuthorizationBuilder();
 
 void AddModulePolicies(string name, AppModule m)
@@ -138,7 +104,6 @@ AddModulePolicies("Messages", AppModule.Messages);
 builder.Services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
 
 
-builder.Services.AddCalendarIntegrations(builder.Configuration);
 // ---- MVC + filters ----
 builder.Services
     .AddControllers(o => o.Filters.Add<InvalidModelStateFilter>())
@@ -205,15 +170,7 @@ if (string.IsNullOrWhiteSpace(webRoot))
     webRoot = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
 Directory.CreateDirectory(Path.Combine(webRoot, "uploads"));
 
-// auto-migrate + seed
-using (var scope = app.Services.CreateScope())
-{
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    await db.Database.MigrateAsync();
-    await DepartmentSeeder.SeedAsync(db);
-}
-
-await DbSeeder.SeedAsync(app.Services, app.Logger);
+await app.Services.InitializeInfrastructureAsync(app.Logger);
 
 // ---- Swagger only in Development ----
 if (app.Environment.IsDevelopment())
