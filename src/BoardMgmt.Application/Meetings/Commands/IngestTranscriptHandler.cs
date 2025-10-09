@@ -276,7 +276,7 @@ namespace BoardMgmt.Application.Meetings.Commands
             foreach (var cue in SimpleVtt.Parse(vtt))
                 tr.Utterances.Add(MapUtterance(meeting, tr, cue));
 
-            _db.Add(tr);
+            await _db.Set<Transcript>().AddAsync(tr, ct);
             await _db.SaveChangesAsync(ct);
             return tr.Utterances.Count;
         }
