@@ -96,8 +96,11 @@ namespace BoardMgmt.Application.Meetings.Commands
                 .Content
                 .GetAsync(cancellationToken: ct);
 
+            if (stream is null)
+                throw new InvalidOperationException("Teams returned an empty transcript stream.");
+
             using var reader = new System.IO.StreamReader(stream);
-            var vtt = await reader.ReadToEndAsync();
+            var vtt = await reader.ReadToEndAsync(ct);
             if (string.IsNullOrWhiteSpace(vtt))
                 throw new InvalidOperationException("Teams returned an empty transcript content.");
 
@@ -391,6 +394,7 @@ namespace BoardMgmt.Application.Meetings.Commands
             var recipients = meeting.Attendees
                 .Select(a => a.Email)
                 .Where(e => !string.IsNullOrWhiteSpace(e))
+                .Select(e => e!.Trim())
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
 

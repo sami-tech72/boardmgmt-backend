@@ -131,8 +131,8 @@ public class UpdateMeetingHandler : IRequestHandler<UpdateMeetingCommand, bool>
 
         // Calendar provider update (optional)
         var svc = _calSelector.For(entity.ExternalCalendar ?? CalendarProviders.Microsoft365);
-        var (_, joinUrl) = await svc.UpdateEventAsync(entity, ct);
-        entity.OnlineJoinUrl = joinUrl;
+        var updateResult = await svc.UpdateEventAsync(entity, ct);
+        entity.OnlineJoinUrl = updateResult.joinUrl;
 
         await SaveChangesHandlingRemovedAttendeesAsync(ct);
         return true;

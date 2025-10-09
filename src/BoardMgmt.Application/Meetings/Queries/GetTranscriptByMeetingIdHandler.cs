@@ -1,3 +1,4 @@
+using System.Linq;
 using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Application.Meetings.DTOs;
 using BoardMgmt.Domain.Entities;
