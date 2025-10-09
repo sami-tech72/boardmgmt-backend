@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using BoardMgmt.Application.Calendars;
+using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Application.Common.Email;
 using BoardMgmt.Application.Common.Options;
 using BoardMgmt.Application.Common.Parsing; // SimpleVtt
@@ -20,15 +21,15 @@ namespace BoardMgmt.Application.Meetings.Commands
 {
     public sealed class IngestTranscriptHandler : IRequestHandler<IngestTranscriptCommand, int>
     {
-        private readonly DbContext _db;
+                private readonly IAppDbContext _db;
         private readonly GraphServiceClient _graph;
         private readonly IHttpClientFactory _httpFactory;
         private readonly IZoomTokenProvider _zoomTokenProvider;
         private readonly IEmailSender _email;
         private readonly AppOptions _app;
 
-        public IngestTranscriptHandler(
-            DbContext db,
+        public         public IngestTranscriptHandler(
+            IAppDbContext db,
             GraphServiceClient graph,
             IHttpClientFactory httpFactory,
             IZoomTokenProvider zoomTokenProvider,

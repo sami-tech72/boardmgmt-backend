@@ -1,5 +1,5 @@
 ﻿using BoardMgmt.Domain.Entities;
-using BoardMgmt.Infrastructure.Persistence;
+using BoardMgmt.Application.Common.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -13,11 +13,11 @@ namespace BoardMgmt.WebApi.Controllers;
 [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
 public class MeController : ControllerBase
 {
-    private readonly AppDbContext _db;
+    private readonly IAppDbContext _db;
     private readonly UserManager<AppUser> _users;
     private readonly RoleManager<IdentityRole> _roles;
 
-    public MeController(AppDbContext db, UserManager<AppUser> users, RoleManager<IdentityRole> roles)
+    public MeController(IAppDbContext db, UserManager<AppUser> users, RoleManager<IdentityRole> roles)
     { _db = db; _users = users; _roles = roles; }
 
     [HttpGet("permissions")]

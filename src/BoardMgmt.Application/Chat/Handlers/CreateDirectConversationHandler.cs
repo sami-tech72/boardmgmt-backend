@@ -1,6 +1,7 @@
 ﻿namespace BoardMgmt.Application.Chat.Handlers;
 
 using BoardMgmt.Application.Chat;
+using BoardMgmt.Application.Common.Interfaces;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using BoardMgmt.Domain.Chat;
@@ -8,8 +9,8 @@ using BoardMgmt.Domain.Entities;
 
 public sealed class CreateDirectConversationHandler : IRequestHandler<CreateDirectConversationCommand, Guid>
 {
-    private readonly DbContext _db;
-    public CreateDirectConversationHandler(DbContext db) => _db = db;
+    private readonly IAppDbContext _db;
+    public CreateDirectConversationHandler(IAppDbContext db) => _db = db;
 
     public async Task<Guid> Handle(CreateDirectConversationCommand req, CancellationToken ct)
     {
