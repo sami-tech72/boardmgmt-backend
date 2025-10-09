@@ -110,10 +110,11 @@ namespace BoardMgmt.Application.Meetings.Commands
                     .Events[meeting.ExternalEventId]
                     .GetAsync(cfg =>
                     {
-                        cfg.QueryParameters.Select = new[] { "onlineMeeting", "onlineMeetingId" };
+                        cfg.QueryParameters.Expand = new[] { "onlineMeeting" };
+                        cfg.QueryParameters.Select = new[] { "onlineMeeting" };
                     }, ct);
 
-                var id = graphEvent?.OnlineMeetingId;
+                var id = graphEvent?.OnlineMeeting?.Id;
                 if (!string.IsNullOrWhiteSpace(id))
                     return id!;
             }
@@ -195,10 +196,16 @@ namespace BoardMgmt.Application.Meetings.Commands
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
             using var resp = await http.SendAsync(req, ct);
             if (resp.IsSuccessStatusCode)
-                return JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct));
+            {
+                var json = await resp.Content.ReadAsStringAsync(ct);
+                if (string.IsNullOrWhiteSpace(json))
+                    return null;
+
+                return JsonDocument.Parse(json);
+            }
             if (resp.StatusCode == System.Net.HttpStatusCode.NotFound)
                 return null;
-            var body = await resp.Content.ReadAsStringAsync(ct);
+            var body = await resp.Content.ReadAsStringAsync(ct) ?? string.Empty;
             throw new HttpRequestException($"Zoom query failed ({(int)resp.StatusCode} {resp.ReasonPhrase}). Body: {SummarizeZoomError(body)}");
         }
 
@@ -208,9 +215,15 @@ namespace BoardMgmt.Application.Meetings.Commands
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
             using var resp = await http.SendAsync(req, ct);
             if (resp.IsSuccessStatusCode)
-                return JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct));
+            {
+                var json = await resp.Content.ReadAsStringAsync(ct);
+                if (string.IsNullOrWhiteSpace(json))
+                    throw new InvalidOperationException("Zoom returned an empty response body.");
 
-            var body = await resp.Content.ReadAsStringAsync(ct);
+                return JsonDocument.Parse(json);
+            }
+
+            var body = await resp.Content.ReadAsStringAsync(ct) ?? string.Empty;
             if (resp.StatusCode == System.Net.HttpStatusCode.NotFound && !string.IsNullOrWhiteSpace(on404))
                 throw new InvalidOperationException(on404);
             throw new HttpRequestException($"Zoom query failed ({(int)resp.StatusCode} {resp.ReasonPhrase}). Body: {SummarizeZoomError(body)}");
@@ -253,7 +266,7 @@ namespace BoardMgmt.Application.Meetings.Commands
         {
             try
             {
-                using var doc = JsonDocument.Parse(json);
+                using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json);
                 var root = doc.RootElement;
                 var code = root.TryGetProperty("code", out var c) ? c.ToString() : "";
                 var msg = root.TryGetProperty("message", out var m) ? m.GetString() ?? "" : "";
