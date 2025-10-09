@@ -114,7 +114,7 @@ namespace BoardMgmt.Application.Meetings.Commands
                         cfg.QueryParameters.Select = new[] { "onlineMeeting" };
                     }, ct);
 
-                var id = graphEvent?.OnlineMeeting?.Id;
+                var id = graphEvent?.OnlineMeeting?.ConferenceId;
                 if (!string.IsNullOrWhiteSpace(id))
                     return id!;
             }
