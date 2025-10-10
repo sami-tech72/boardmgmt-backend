@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Net;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -17,6 +18,10 @@ public sealed class Microsoft365CalendarService : ICalendarService
 {
     private readonly GraphServiceClient _graph;
     private readonly GraphOptions _opts;
+    private static readonly Regex TeamsJoinUrlRegex = new(
+        "https://teams\\.microsoft\\.com/l/meetup-join/[^\\s\"\\<]+",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     private readonly ILogger<Microsoft365CalendarService> _logger;
     private bool? _supportsOnlineMeetingExpand;
 
@@ -442,11 +447,15 @@ public sealed class Microsoft365CalendarService : ICalendarService
             }
             catch (ApiException ex) when (ex.ResponseStatusCode == (int)HttpStatusCode.NotFound)
             {
-                return null;
+                return await TryExtractJoinUrlFromBodyAsync(mailbox, eventId, ct);
             }
         }
 
-        return ExtractJoinUrl(meeting);
+        joinUrl = ExtractJoinUrl(meeting);
+        if (!string.IsNullOrWhiteSpace(joinUrl))
+            return joinUrl;
+
+        return await TryExtractJoinUrlFromBodyAsync(mailbox, eventId, ct);
     }
 
     private Task<OnlineMeeting?> GetEventOnlineMeetingAsync(string mailbox, string eventId, CancellationToken ct)
@@ -467,6 +476,28 @@ public sealed class Microsoft365CalendarService : ICalendarService
                 cancellationToken: ct),
             "GET /users/{mailbox}/events/{id}/onlineMeeting",
             ct);
+    }
+
+    private async Task<string?> TryExtractJoinUrlFromBodyAsync(string mailbox, string eventId, CancellationToken ct)
+    {
+        var ev = await RunGraph<Event?>(
+            () => _graph.Users[mailbox].Events[eventId].GetAsync(cfg =>
+            {
+                cfg.QueryParameters.Select = new[] { "body" };
+            }, ct),
+            "GET /users/{mailbox}/events/{id}?$select=body",
+            ct);
+
+        var body = ev?.Body?.Content;
+        if (string.IsNullOrWhiteSpace(body))
+            return null;
+
+        var match = TeamsJoinUrlRegex.Match(body);
+        if (!match.Success)
+            return null;
+
+        var decoded = WebUtility.HtmlDecode(match.Value);
+        return string.IsNullOrWhiteSpace(decoded) ? null : decoded;
     }
 
     // RunGraph overload for functions returning a value (v5 ApiException)
