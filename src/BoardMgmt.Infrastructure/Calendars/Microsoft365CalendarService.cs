@@ -389,7 +389,7 @@ public sealed class Microsoft365CalendarService : ICalendarService
 
     private static bool IsOnlineMeetingExpandUnsupported(ApiException ex)
     {
-        if (ex.ResponseStatusCode != HttpStatusCode.BadRequest)
+        if (ex.ResponseStatusCode != (int)HttpStatusCode.BadRequest)
             return false;
 
         return ex.Message?.Contains("Only navigation properties can be expanded", StringComparison.OrdinalIgnoreCase) == true
