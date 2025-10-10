@@ -350,10 +350,7 @@ public sealed class Microsoft365CalendarService : ICalendarService
 
         try
         {
-            var meeting = await _graph.Users[mailbox]
-                .Events[eventId]
-                .OnlineMeeting
-                .GetAsync(cancellationToken: ct);
+            var meeting = await GetEventOnlineMeetingAsync(mailbox, eventId, ct);
 
             if (!string.IsNullOrWhiteSpace(meeting?.Id))
                 return meeting!.Id;
@@ -364,6 +361,26 @@ public sealed class Microsoft365CalendarService : ICalendarService
         }
 
         return null;
+    }
+
+    private Task<OnlineMeeting?> GetEventOnlineMeetingAsync(string mailbox, string eventId, CancellationToken ct)
+    {
+        var requestInfo = new RequestInformation
+        {
+            HttpMethod = Method.GET,
+            UrlTemplate = "{+baseurl}/users/{user%2Did}/events/{event%2Did}/onlineMeeting",
+        };
+
+        requestInfo.PathParameters["user%2Did"] = mailbox;
+        requestInfo.PathParameters["event%2Did"] = eventId;
+
+        return RunGraph(
+            () => _graph.RequestAdapter.SendAsync(
+                requestInfo,
+                OnlineMeeting.CreateFromDiscriminatorValue,
+                cancellationToken: ct),
+            "GET /users/{mailbox}/events/{id}/onlineMeeting",
+            ct);
     }
 
     // RunGraph overload for functions returning a value (v5 ApiException)
