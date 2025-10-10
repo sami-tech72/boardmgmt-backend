@@ -67,8 +67,8 @@ public sealed class Microsoft365CalendarService : ICalendarService
 
         // Refetch with $select=onlineMeeting,onlineMeetingUrl (short retry for consistency)
         var fetched = await GetEventWithOnlineMeetingAsync(mailbox!, id, ct);
-        await EnsureTeamsMeetingDefaultsAsync(mailbox!, id, fetched, ct);
-        var joinUrl = ExtractJoinUrl(fetched);
+        var meeting = await EnsureTeamsMeetingDefaultsAsync(mailbox!, id, fetched, ct);
+        var joinUrl = await ResolveJoinUrlAsync(mailbox!, id, fetched, meeting, ct);
 
         if (string.IsNullOrWhiteSpace(joinUrl))
         {
@@ -114,9 +114,9 @@ public sealed class Microsoft365CalendarService : ICalendarService
             "PATCH /users/{mailbox}/events/{id}", ct);
 
         var refreshed = await GetEventWithOnlineMeetingAsync(mailbox!, m.ExternalEventId!, ct);
-        await EnsureTeamsMeetingDefaultsAsync(mailbox!, m.ExternalEventId!, refreshed, ct);
+        var meeting = await EnsureTeamsMeetingDefaultsAsync(mailbox!, m.ExternalEventId!, refreshed, ct);
 
-        var joinUrl = ExtractJoinUrl(refreshed);
+        var joinUrl = await ResolveJoinUrlAsync(mailbox!, m.ExternalEventId!, refreshed, meeting, ct);
         if (string.IsNullOrWhiteSpace(joinUrl))
         {
             _logger.LogWarning("Teams meeting link was not generated for updated event {EventId}.", m.ExternalEventId);
@@ -238,7 +238,7 @@ public sealed class Microsoft365CalendarService : ICalendarService
         return fetched;
     }
 
-    private static string? ExtractJoinUrl(Event? ev)
+    private static string? ExtractJoinUrl(Event? ev, OnlineMeeting? meeting = null)
     {
         if (!string.IsNullOrWhiteSpace(ev?.OnlineMeeting?.JoinUrl))
             return ev!.OnlineMeeting!.JoinUrl;
@@ -251,6 +251,23 @@ public sealed class Microsoft365CalendarService : ICalendarService
 
         if (TryGetNestedString(ev?.AdditionalData, "onlineMeeting", "joinUrl", out var fromNested))
             return fromNested;
+
+        return ExtractJoinUrl(meeting);
+    }
+
+    private static string? ExtractJoinUrl(OnlineMeeting? meeting)
+    {
+        if (!string.IsNullOrWhiteSpace(meeting?.JoinWebUrl))
+            return meeting!.JoinWebUrl;
+
+        if (TryGetString(meeting?.AdditionalData, "joinWebUrl", out var joinWebUrl))
+            return joinWebUrl;
+
+        if (TryGetString(meeting?.AdditionalData, "joinUrl", out var joinUrl))
+            return joinUrl;
+
+        if (TryGetNestedString(meeting?.AdditionalData, "joinInformation", "content", out var joinInfoContent))
+            return joinInfoContent;
 
         return null;
     }
@@ -305,15 +322,20 @@ public sealed class Microsoft365CalendarService : ICalendarService
         return false;
     }
 
-    private async Task EnsureTeamsMeetingDefaultsAsync(string mailbox, string eventId, Event? graphEvent, CancellationToken ct)
+    private async Task<OnlineMeeting?> EnsureTeamsMeetingDefaultsAsync(string mailbox, string eventId, Event? graphEvent, CancellationToken ct)
     {
         var attempt = 0;
         var delayMs = 300;
+        OnlineMeeting? resolvedMeeting = null;
         while (attempt < 6)
         {
             try
             {
-                var onlineMeetingId = await ResolveOnlineMeetingIdAsync(mailbox, eventId, graphEvent, ct);
+                var (onlineMeetingId, meeting) = await ResolveOnlineMeetingAsync(mailbox, eventId, graphEvent, ct);
+                if (resolvedMeeting is null && meeting is not null)
+                {
+                    resolvedMeeting = meeting;
+                }
 
                 if (string.IsNullOrWhiteSpace(onlineMeetingId))
                 {
@@ -321,13 +343,15 @@ public sealed class Microsoft365CalendarService : ICalendarService
                     if (attempt >= 6)
                     {
                         _logger.LogWarning("Teams event {EventId} returned no online meeting id; unable to enforce recording/transcription defaults.", eventId);
-                        return;
+                        return resolvedMeeting;
                     }
 
                     await Task.Delay(delayMs, ct);
                     delayMs = Math.Min(delayMs * 2, 2000);
                     continue;
                 }
+
+                resolvedMeeting ??= await GetEventOnlineMeetingAsync(mailbox, eventId, ct);
 
                 var patch = new OnlineMeeting
                 {
@@ -342,7 +366,7 @@ public sealed class Microsoft365CalendarService : ICalendarService
                 await _graph.Users[mailbox]
                     .OnlineMeetings[onlineMeetingId]
                     .PatchAsync(patch, cancellationToken: ct);
-                return;
+                return resolvedMeeting;
             }
             catch (ApiException ex) when (attempt < 5)
             {
@@ -351,16 +375,17 @@ public sealed class Microsoft365CalendarService : ICalendarService
             catch (ApiException ex)
             {
                 _logger.LogWarning(ex, "Failed to enforce Teams meeting defaults for event {EventId}.", eventId);
-                return;
+                return resolvedMeeting;
             }
 
             attempt++;
             await Task.Delay(delayMs, ct);
             delayMs = Math.Min(delayMs * 2, 2000);
         }
+        return resolvedMeeting;
     }
 
-    private async Task<string?> ResolveOnlineMeetingIdAsync(string mailbox, string eventId, Event? ev, CancellationToken ct)
+    private async Task<(string? meetingId, OnlineMeeting? meeting)> ResolveOnlineMeetingAsync(string mailbox, string eventId, Event? ev, CancellationToken ct)
     {
         var fetchedEvent = ev;
 
@@ -375,30 +400,53 @@ public sealed class Microsoft365CalendarService : ICalendarService
         }
 
         if (TryGetString(fetchedEvent?.AdditionalData, "onlineMeetingId", out var rootId) && !string.IsNullOrWhiteSpace(rootId))
-            return rootId;
+            return (rootId, null);
 
         if (TryGetNestedString(fetchedEvent?.AdditionalData, "onlineMeeting", "id", out var nestedId) && !string.IsNullOrWhiteSpace(nestedId))
-            return nestedId;
+            return (nestedId, null);
 
         if (TryGetString(fetchedEvent?.OnlineMeeting?.AdditionalData, "id", out var directId) && !string.IsNullOrWhiteSpace(directId))
-            return directId;
+            return (directId, null);
 
         if (TryGetNestedString(fetchedEvent?.AdditionalData, "onlineMeeting", "onlineMeetingId", out var nestedMeetingId) && !string.IsNullOrWhiteSpace(nestedMeetingId))
-            return nestedMeetingId;
+            return (nestedMeetingId, null);
 
         try
         {
             var meeting = await GetEventOnlineMeetingAsync(mailbox, eventId, ct);
 
             if (!string.IsNullOrWhiteSpace(meeting?.Id))
-                return meeting!.Id;
+                return (meeting!.Id, meeting);
+
+            return (null, meeting);
         }
         catch (ApiException ex) when (ex.ResponseStatusCode == (int)HttpStatusCode.NotFound)
         {
             // Event exists but Graph hasn't linked an online meeting yet.
         }
 
-        return null;
+        return (null, null);
+    }
+
+    private async Task<string?> ResolveJoinUrlAsync(string mailbox, string eventId, Event? ev, OnlineMeeting? meeting, CancellationToken ct)
+    {
+        var joinUrl = ExtractJoinUrl(ev, meeting);
+        if (!string.IsNullOrWhiteSpace(joinUrl))
+            return joinUrl;
+
+        if (meeting is null)
+        {
+            try
+            {
+                meeting = await GetEventOnlineMeetingAsync(mailbox, eventId, ct);
+            }
+            catch (ApiException ex) when (ex.ResponseStatusCode == (int)HttpStatusCode.NotFound)
+            {
+                return null;
+            }
+        }
+
+        return ExtractJoinUrl(meeting);
     }
 
     private Task<OnlineMeeting?> GetEventOnlineMeetingAsync(string mailbox, string eventId, CancellationToken ct)
