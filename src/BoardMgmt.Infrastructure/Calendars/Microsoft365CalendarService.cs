@@ -70,6 +70,11 @@ public sealed class Microsoft365CalendarService : ICalendarService
         await EnsureTeamsMeetingDefaultsAsync(mailbox!, id, fetched, ct);
         var joinUrl = ExtractJoinUrl(fetched);
 
+        if (string.IsNullOrWhiteSpace(joinUrl))
+        {
+            _logger.LogWarning("Teams meeting link was not generated for newly created event {EventId}.", id);
+        }
+
         return (id, joinUrl);
     }
 
@@ -110,7 +115,14 @@ public sealed class Microsoft365CalendarService : ICalendarService
 
         var refreshed = await GetEventWithOnlineMeetingAsync(mailbox!, m.ExternalEventId!, ct);
         await EnsureTeamsMeetingDefaultsAsync(mailbox!, m.ExternalEventId!, refreshed, ct);
-        return (true, ExtractJoinUrl(refreshed));
+
+        var joinUrl = ExtractJoinUrl(refreshed);
+        if (string.IsNullOrWhiteSpace(joinUrl))
+        {
+            _logger.LogWarning("Teams meeting link was not generated for updated event {EventId}.", m.ExternalEventId);
+        }
+
+        return (true, joinUrl);
     }
 
     public async Task CancelEventAsync(string eventId, CancellationToken ct = default)
@@ -392,7 +404,9 @@ public sealed class Microsoft365CalendarService : ICalendarService
     {
         try
         {
-            return await action();
+            var result = await action();
+            _logger.LogInformation("GRAPH {Op} succeeded.", op);
+            return result;
         }
         catch (ApiException ex)
         {
@@ -421,6 +435,7 @@ public sealed class Microsoft365CalendarService : ICalendarService
         try
         {
             await action();
+            _logger.LogInformation("GRAPH {Op} succeeded.", op);
         }
         catch (ApiException ex)
         {
