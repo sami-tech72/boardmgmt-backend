@@ -18,6 +18,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.Graph;
 using Microsoft.Graph.Models;
+using Microsoft.Kiota.Abstractions;
 
 namespace BoardMgmt.Application.Meetings.Commands
 {
@@ -107,10 +108,7 @@ namespace BoardMgmt.Application.Meetings.Commands
 
             try
             {
-                var meetingResource = await _graph.Users[mailbox]
-                    .Events[meeting.ExternalEventId]
-                    .OnlineMeeting
-                    .GetAsync(cancellationToken: ct);
+                var meetingResource = await GetEventOnlineMeetingAsync(mailbox!, meeting.ExternalEventId!, ct);
 
                 if (!string.IsNullOrWhiteSpace(meetingResource?.Id))
                     return meetingResource!.Id;
@@ -131,6 +129,23 @@ namespace BoardMgmt.Application.Meetings.Commands
             }
 
             throw new InvalidOperationException("Teams meeting is missing an online meeting id. Ensure the event is a Teams meeting with transcription enabled.");
+        }
+
+        private Task<OnlineMeeting?> GetEventOnlineMeetingAsync(string mailbox, string eventId, CancellationToken ct)
+        {
+            var requestInfo = new RequestInformation
+            {
+                HttpMethod = Method.GET,
+                UrlTemplate = "{+baseurl}/users/{user%2Did}/events/{event%2Did}/onlineMeeting",
+            };
+
+            requestInfo.PathParameters["user%2Did"] = mailbox;
+            requestInfo.PathParameters["event%2Did"] = eventId;
+
+            return _graph.RequestAdapter.SendAsync(
+                requestInfo,
+                OnlineMeeting.CreateFromDiscriminatorValue,
+                cancellationToken: ct);
         }
 
         private static bool TryGetOnlineMeetingId(Event? graphEvent, out string? id)
