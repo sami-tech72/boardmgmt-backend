@@ -1,6 +1,8 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
+using System.Net;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.Graph;
@@ -16,6 +18,7 @@ public sealed class Microsoft365CalendarService : ICalendarService
     private readonly GraphServiceClient _graph;
     private readonly GraphOptions _opts;
     private readonly ILogger<Microsoft365CalendarService> _logger;
+    private bool? _supportsOnlineMeetingExpand;
 
     public Microsoft365CalendarService(
         GraphServiceClient graph,
@@ -131,7 +134,6 @@ public sealed class Microsoft365CalendarService : ICalendarService
                 cfg.QueryParameters.Top = take;
                 cfg.QueryParameters.Orderby = new[] { "start/dateTime" };
                 cfg.QueryParameters.Select = new[] { "id", "subject", "start", "end", "onlineMeeting", "onlineMeetingUrl" };
-                cfg.QueryParameters.Expand = new[] { "onlineMeeting" };
             }, ct),
             "GET /users/{mailbox}/calendarView?$select=onlineMeeting,onlineMeetingUrl", ct);
 
@@ -156,7 +158,6 @@ public sealed class Microsoft365CalendarService : ICalendarService
                 cfg.QueryParameters.Orderby = new[] { "start/dateTime" };
                 cfg.QueryParameters.Top = 100;
                 cfg.QueryParameters.Select = new[] { "id", "subject", "start", "end", "onlineMeeting", "onlineMeetingUrl" };
-                cfg.QueryParameters.Expand = new[] { "onlineMeeting" };
             }, ct),
             "GET /users/{mailbox}/calendarView?$select=onlineMeeting,onlineMeetingUrl", ct);
 
@@ -185,13 +186,33 @@ public sealed class Microsoft365CalendarService : ICalendarService
         Event? fetched = null;
         for (var attempt = 0; attempt < 4; attempt++)
         {
-            fetched = await RunGraph<Event?>(
-                () => _graph.Users[mailbox].Events[eventId].GetAsync(cfg =>
+            var tryExpand = _supportsOnlineMeetingExpand != false;
+
+            try
+            {
+                fetched = await RunGraph<Event?>(
+                    () => _graph.Users[mailbox].Events[eventId].GetAsync(cfg =>
+                    {
+                        cfg.QueryParameters.Select = new[] { "onlineMeeting", "onlineMeetingUrl" };
+                        if (tryExpand)
+                        {
+                            cfg.QueryParameters.Expand = new[] { "onlineMeeting" };
+                        }
+                    }, ct),
+                    "GET /users/{mailbox}/events/{id}?$select=onlineMeeting,onlineMeetingUrl", ct);
+
+                if (tryExpand)
                 {
-                    cfg.QueryParameters.Select = new[] { "onlineMeeting", "onlineMeetingUrl" };
-                    cfg.QueryParameters.Expand = new[] { "onlineMeeting" };
-                }, ct),
-                "GET /users/{mailbox}/events/{id}?$select=onlineMeeting,onlineMeetingUrl", ct);
+                    _supportsOnlineMeetingExpand = true;
+                }
+            }
+            catch (ApiException ex) when (tryExpand && IsOnlineMeetingExpandUnsupported(ex))
+            {
+                _supportsOnlineMeetingExpand = false;
+                _logger.LogInformation("Microsoft Graph rejected $expand=onlineMeeting; retrying without expand.");
+                attempt--;
+                continue;
+            }
 
             if (!string.IsNullOrEmpty(ExtractJoinUrl(fetched)))
                 return fetched;
@@ -275,6 +296,12 @@ public sealed class Microsoft365CalendarService : ICalendarService
             var ev = graphEvent;
             var onlineMeetingId = ev?.OnlineMeeting?.ConferenceId;
 
+            if (string.IsNullOrWhiteSpace(onlineMeetingId) &&
+                TryGetNestedString(ev?.AdditionalData, "onlineMeeting", "conferenceId", out var nestedConferenceId))
+            {
+                onlineMeetingId = nestedConferenceId;
+            }
+
             if (string.IsNullOrWhiteSpace(onlineMeetingId))
             {
                 ev = await _graph.Users[mailbox]
@@ -282,10 +309,15 @@ public sealed class Microsoft365CalendarService : ICalendarService
                     .GetAsync(cfg =>
                     {
                         cfg.QueryParameters.Select = new[] { "onlineMeeting", "onlineMeetingUrl" };
-                        cfg.QueryParameters.Expand = new[] { "onlineMeeting" };
                     }, ct);
 
                 onlineMeetingId = ev?.OnlineMeeting?.ConferenceId;
+
+                if (string.IsNullOrWhiteSpace(onlineMeetingId) &&
+                    TryGetNestedString(ev?.AdditionalData, "onlineMeeting", "conferenceId", out var retryNestedConferenceId))
+                {
+                    onlineMeetingId = retryNestedConferenceId;
+                }
             }
 
             if (string.IsNullOrWhiteSpace(onlineMeetingId))
@@ -353,5 +385,14 @@ public sealed class Microsoft365CalendarService : ICalendarService
                 op, status, ex.Message, headers);
             throw;
         }
+    }
+
+    private static bool IsOnlineMeetingExpandUnsupported(ApiException ex)
+    {
+        if (ex.ResponseStatusCode != HttpStatusCode.BadRequest)
+            return false;
+
+        return ex.Message?.Contains("Only navigation properties can be expanded", StringComparison.OrdinalIgnoreCase) == true
+            && ex.Message.Contains("'onlineMeeting'", StringComparison.OrdinalIgnoreCase);
     }
 }
