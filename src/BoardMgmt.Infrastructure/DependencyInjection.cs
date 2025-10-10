@@ -61,14 +61,15 @@ namespace BoardMgmt.Infrastructure
                 if (env.IsDevelopment())
                     options.EnableSensitiveDataLogging();
 
-                // Optional: fine-grained EF event selection
+                // Use the built-in EF Core logging category so Serilog configuration
+                // (MinimumLevel.Override["Microsoft.EntityFrameworkCore"] = Warning)
+                // can suppress high-volume messages such as CommandExecuted from being
+                // written to the Logs table.  Create the logger once instead of per
+                // message to avoid unnecessary allocations.
+                var efLogger = loggerFactory.CreateLogger("Microsoft.EntityFrameworkCore");
+
                 options.LogTo(
-                    // Send EF messages to MEL -> Serilog
-                    message =>
-                    {
-                        var efLogger = loggerFactory.CreateLogger("EFCore");
-                        efLogger.LogInformation("{EFCoreMessage}", message);
-                    },
+                    message => efLogger.LogInformation("{EFCoreMessage}", message),
                     new[]
                     {
                         RelationalEventId.CommandExecuting,
@@ -79,7 +80,7 @@ namespace BoardMgmt.Infrastructure
                         CoreEventId.SaveChangesStarting,
                         CoreEventId.SaveChangesCompleted
                     },
-                    LogLevel.Information
+                    env.IsDevelopment() ? LogLevel.Information : LogLevel.Warning
                 );
             });
 
