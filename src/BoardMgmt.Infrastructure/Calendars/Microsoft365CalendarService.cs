@@ -294,32 +294,7 @@ public sealed class Microsoft365CalendarService : ICalendarService
     {
         try
         {
-            var ev = graphEvent;
-            var onlineMeetingId = ev?.OnlineMeeting?.ConferenceId;
-
-            if (string.IsNullOrWhiteSpace(onlineMeetingId) &&
-                TryGetNestedString(ev?.AdditionalData, "onlineMeeting", "conferenceId", out var nestedConferenceId))
-            {
-                onlineMeetingId = nestedConferenceId;
-            }
-
-            if (string.IsNullOrWhiteSpace(onlineMeetingId))
-            {
-                ev = await _graph.Users[mailbox]
-                    .Events[eventId]
-                    .GetAsync(cfg =>
-                    {
-                        cfg.QueryParameters.Select = new[] { "onlineMeeting", "onlineMeetingUrl" };
-                    }, ct);
-
-                onlineMeetingId = ev?.OnlineMeeting?.ConferenceId;
-
-                if (string.IsNullOrWhiteSpace(onlineMeetingId) &&
-                    TryGetNestedString(ev?.AdditionalData, "onlineMeeting", "conferenceId", out var retryNestedConferenceId))
-                {
-                    onlineMeetingId = retryNestedConferenceId;
-                }
-            }
+            var onlineMeetingId = await ResolveOnlineMeetingIdAsync(mailbox, eventId, graphEvent, ct);
 
             if (string.IsNullOrWhiteSpace(onlineMeetingId))
             {
@@ -345,6 +320,50 @@ public sealed class Microsoft365CalendarService : ICalendarService
         {
             _logger.LogWarning(ex, "Failed to enforce Teams meeting defaults for event {EventId}.", eventId);
         }
+    }
+
+    private async Task<string?> ResolveOnlineMeetingIdAsync(string mailbox, string eventId, Event? ev, CancellationToken ct)
+    {
+        var fetchedEvent = ev;
+
+        if (fetchedEvent is null)
+        {
+            fetchedEvent = await _graph.Users[mailbox]
+                .Events[eventId]
+                .GetAsync(cfg =>
+                {
+                    cfg.QueryParameters.Select = new[] { "onlineMeeting" };
+                }, ct);
+        }
+
+        if (TryGetString(fetchedEvent?.AdditionalData, "onlineMeetingId", out var rootId) && !string.IsNullOrWhiteSpace(rootId))
+            return rootId;
+
+        if (TryGetNestedString(fetchedEvent?.AdditionalData, "onlineMeeting", "id", out var nestedId) && !string.IsNullOrWhiteSpace(nestedId))
+            return nestedId;
+
+        if (TryGetString(fetchedEvent?.OnlineMeeting?.AdditionalData, "id", out var directId) && !string.IsNullOrWhiteSpace(directId))
+            return directId;
+
+        if (TryGetNestedString(fetchedEvent?.AdditionalData, "onlineMeeting", "onlineMeetingId", out var nestedMeetingId) && !string.IsNullOrWhiteSpace(nestedMeetingId))
+            return nestedMeetingId;
+
+        try
+        {
+            var meeting = await _graph.Users[mailbox]
+                .Events[eventId]
+                .OnlineMeeting
+                .GetAsync(cancellationToken: ct);
+
+            if (!string.IsNullOrWhiteSpace(meeting?.Id))
+                return meeting!.Id;
+        }
+        catch (ApiException ex) when (ex.ResponseStatusCode == (int)HttpStatusCode.NotFound)
+        {
+            // Event exists but Graph hasn't linked an online meeting yet.
+        }
+
+        return null;
     }
 
     // RunGraph overload for functions returning a value (v5 ApiException)

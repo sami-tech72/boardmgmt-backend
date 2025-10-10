@@ -17,6 +17,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.Graph;
+using Microsoft.Graph.Models;
 
 namespace BoardMgmt.Application.Meetings.Commands
 {
@@ -106,6 +107,14 @@ namespace BoardMgmt.Application.Meetings.Commands
 
             try
             {
+                var meetingResource = await _graph.Users[mailbox]
+                    .Events[meeting.ExternalEventId]
+                    .OnlineMeeting
+                    .GetAsync(cancellationToken: ct);
+
+                if (!string.IsNullOrWhiteSpace(meetingResource?.Id))
+                    return meetingResource!.Id;
+
                 var graphEvent = await _graph.Users[mailbox]
                     .Events[meeting.ExternalEventId]
                     .GetAsync(cfg =>
@@ -113,9 +122,8 @@ namespace BoardMgmt.Application.Meetings.Commands
                         cfg.QueryParameters.Select = new[] { "onlineMeeting" };
                     }, ct);
 
-                var id = graphEvent?.OnlineMeeting?.ConferenceId;
-                if (!string.IsNullOrWhiteSpace(id))
-                    return id!;
+                if (TryGetOnlineMeetingId(graphEvent, out var inlineId))
+                    return inlineId!;
             }
             catch (ServiceException ex) when (ex.ResponseStatusCode == (int)HttpStatusCode.NotFound)
             {
@@ -123,6 +131,55 @@ namespace BoardMgmt.Application.Meetings.Commands
             }
 
             throw new InvalidOperationException("Teams meeting is missing an online meeting id. Ensure the event is a Teams meeting with transcription enabled.");
+        }
+
+        private static bool TryGetOnlineMeetingId(Event? graphEvent, out string? id)
+        {
+            id = null;
+
+            if (graphEvent?.OnlineMeeting?.AdditionalData != null &&
+                graphEvent.OnlineMeeting.AdditionalData.TryGetValue("id", out var value) &&
+                value is string str && !string.IsNullOrWhiteSpace(str))
+            {
+                id = str;
+                return true;
+            }
+
+            if (graphEvent?.AdditionalData != null &&
+                graphEvent.AdditionalData.TryGetValue("onlineMeetingId", out var rootId) &&
+                rootId is string rootStr && !string.IsNullOrWhiteSpace(rootStr))
+            {
+                id = rootStr;
+                return true;
+            }
+
+            if (graphEvent?.AdditionalData != null &&
+                graphEvent.AdditionalData.TryGetValue("onlineMeeting", out var nested) &&
+                nested is JsonElement el &&
+                el.ValueKind == JsonValueKind.Object)
+            {
+                string? candidate = null;
+
+                if (el.TryGetProperty("id", out var nestedIdEl) && nestedIdEl.ValueKind == JsonValueKind.String)
+                {
+                    candidate = nestedIdEl.GetString();
+                }
+
+                if (string.IsNullOrWhiteSpace(candidate) &&
+                    el.TryGetProperty("onlineMeetingId", out var nestedMeetingIdEl) &&
+                    nestedMeetingIdEl.ValueKind == JsonValueKind.String)
+                {
+                    candidate = nestedMeetingIdEl.GetString();
+                }
+
+                if (!string.IsNullOrWhiteSpace(candidate))
+                {
+                    id = candidate;
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         // --------------------------------------------------------------------
