@@ -196,7 +196,9 @@ public sealed class Microsoft365CalendarService : ICalendarService
     private async Task<Event?> GetEventWithOnlineMeetingAsync(string mailbox, string eventId, CancellationToken ct)
     {
         Event? fetched = null;
-        for (var attempt = 0; attempt < 4; attempt++)
+        var attempt = 0;
+        var delayMs = 300;
+        while (attempt < 10)
         {
             var tryExpand = _supportsOnlineMeetingExpand != false;
 
@@ -223,14 +225,15 @@ public sealed class Microsoft365CalendarService : ICalendarService
             {
                 _supportsOnlineMeetingExpand = false;
                 _logger.LogInformation("Microsoft Graph rejected $expand=onlineMeeting; retrying without expand.");
-                attempt--;
                 continue;
             }
 
             if (!string.IsNullOrEmpty(ExtractJoinUrl(fetched)))
                 return fetched;
 
-            await Task.Delay(400, ct);
+            attempt++;
+            await Task.Delay(delayMs, ct);
+            delayMs = Math.Min(delayMs * 2, 2000);
         }
         return fetched;
     }
@@ -304,33 +307,56 @@ public sealed class Microsoft365CalendarService : ICalendarService
 
     private async Task EnsureTeamsMeetingDefaultsAsync(string mailbox, string eventId, Event? graphEvent, CancellationToken ct)
     {
-        try
+        var attempt = 0;
+        var delayMs = 300;
+        while (attempt < 6)
         {
-            var onlineMeetingId = await ResolveOnlineMeetingIdAsync(mailbox, eventId, graphEvent, ct);
-
-            if (string.IsNullOrWhiteSpace(onlineMeetingId))
+            try
             {
-                _logger.LogWarning("Teams event {EventId} returned no online meeting id; unable to enforce recording/transcription defaults.", eventId);
+                var onlineMeetingId = await ResolveOnlineMeetingIdAsync(mailbox, eventId, graphEvent, ct);
+
+                if (string.IsNullOrWhiteSpace(onlineMeetingId))
+                {
+                    attempt++;
+                    if (attempt >= 6)
+                    {
+                        _logger.LogWarning("Teams event {EventId} returned no online meeting id; unable to enforce recording/transcription defaults.", eventId);
+                        return;
+                    }
+
+                    await Task.Delay(delayMs, ct);
+                    delayMs = Math.Min(delayMs * 2, 2000);
+                    continue;
+                }
+
+                var patch = new OnlineMeeting
+                {
+                    AdditionalData = new Dictionary<string, object?>
+                    {
+                        ["allowRecording"] = true,
+                        ["recordAutomatically"] = true,
+                        ["isTranscriptionEnabled"] = true
+                    }
+                };
+
+                await _graph.Users[mailbox]
+                    .OnlineMeetings[onlineMeetingId]
+                    .PatchAsync(patch, cancellationToken: ct);
+                return;
+            }
+            catch (ApiException ex) when (attempt < 5)
+            {
+                _logger.LogInformation(ex, "Retrying Teams meeting defaults enforcement for event {EventId} after transient Graph error.", eventId);
+            }
+            catch (ApiException ex)
+            {
+                _logger.LogWarning(ex, "Failed to enforce Teams meeting defaults for event {EventId}.", eventId);
                 return;
             }
 
-            var patch = new OnlineMeeting
-            {
-                AdditionalData = new Dictionary<string, object?>
-                {
-                    ["allowRecording"] = true,
-                    ["recordAutomatically"] = true,
-                    ["isTranscriptionEnabled"] = true
-                }
-            };
-
-            await _graph.Users[mailbox]
-                .OnlineMeetings[onlineMeetingId]
-                .PatchAsync(patch, cancellationToken: ct);
-        }
-        catch (ApiException ex)
-        {
-            _logger.LogWarning(ex, "Failed to enforce Teams meeting defaults for event {EventId}.", eventId);
+            attempt++;
+            await Task.Delay(delayMs, ct);
+            delayMs = Math.Min(delayMs * 2, 2000);
         }
     }
 
