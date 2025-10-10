@@ -199,7 +199,8 @@ public sealed class Microsoft365CalendarService : ICalendarService
                             cfg.QueryParameters.Expand = new[] { "onlineMeeting" };
                         }
                     }, ct),
-                    "GET /users/{mailbox}/events/{id}?$select=onlineMeeting,onlineMeetingUrl", ct);
+                    "GET /users/{mailbox}/events/{id}?$select=onlineMeeting,onlineMeetingUrl", ct,
+                    ex => tryExpand && IsOnlineMeetingExpandUnsupported(ex));
 
                 if (tryExpand)
                 {
@@ -347,7 +348,11 @@ public sealed class Microsoft365CalendarService : ICalendarService
     }
 
     // RunGraph overload for functions returning a value (v5 ApiException)
-    private async Task<T?> RunGraph<T>(Func<Task<T?>> action, string op, CancellationToken ct) where T : class
+    private async Task<T?> RunGraph<T>(
+        Func<Task<T?>> action,
+        string op,
+        CancellationToken ct,
+        Func<ApiException, bool>? suppressLogPredicate = null) where T : class
     {
         try
         {
@@ -361,14 +366,21 @@ public sealed class Microsoft365CalendarService : ICalendarService
                 ? string.Join(", ", ex.ResponseHeaders.Select(kv => $"{kv.Key}={string.Join("|", kv.Value)}"))
                 : "(no headers)";
 
-            _logger.LogError(ex, "GRAPH {Op} failed: status={Status} message={Msg} headers={Headers}",
-                op, status, ex.Message, headers);
+            if (suppressLogPredicate?.Invoke(ex) != true)
+            {
+                _logger.LogError(ex, "GRAPH {Op} failed: status={Status} message={Msg} headers={Headers}",
+                    op, status, ex.Message, headers);
+            }
             throw;
         }
     }
 
     // RunGraph overload for void-returning functions
-    private async Task RunGraph(Func<Task> action, string op, CancellationToken ct)
+    private async Task RunGraph(
+        Func<Task> action,
+        string op,
+        CancellationToken ct,
+        Func<ApiException, bool>? suppressLogPredicate = null)
     {
         try
         {
@@ -381,8 +393,11 @@ public sealed class Microsoft365CalendarService : ICalendarService
                 ? string.Join(", ", ex.ResponseHeaders.Select(kv => $"{kv.Key}={string.Join("|", kv.Value)}"))
                 : "(no headers)";
 
-            _logger.LogError(ex, "GRAPH {Op} failed: status={Status} message={Msg} headers={Headers}",
-                op, status, ex.Message, headers);
+            if (suppressLogPredicate?.Invoke(ex) != true)
+            {
+                _logger.LogError(ex, "GRAPH {Op} failed: status={Status} message={Msg} headers={Headers}",
+                    op, status, ex.Message, headers);
+            }
             throw;
         }
     }
