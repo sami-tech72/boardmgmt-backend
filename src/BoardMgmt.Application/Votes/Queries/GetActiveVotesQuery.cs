@@ -38,17 +38,19 @@ public sealed class GetActiveVotesQueryHandler
 
     internal static IQueryable<VotePoll> FilterByEligibility(IQueryable<VotePoll> q, ICurrentUser user)
     {
-        if (user.IsAuthenticated is false)
+        if (user.IsAuthenticated is false || string.IsNullOrEmpty(user.UserId))
             return q.Where(v => v.Eligibility == VoteEligibility.Public);
+
+        var userId = user.UserId!;
 
         return q.Where(v =>
                v.Eligibility == VoteEligibility.Public
-            || v.CreatedByUserId == user.UserId
+            || v.CreatedByUserId == userId
             || (v.Eligibility == VoteEligibility.SpecificUsers
-                && v.EligibleUsers.Any(e => e.UserId == user.UserId))
+                && v.EligibleUsers.Any(e => e.UserId == userId))
             || (v.Eligibility == VoteEligibility.MeetingAttendees
                 && v.MeetingId != null
-                && v.Meeting!.Attendees.Any(a => a.UserId == user.UserId))
+                && v.Meeting!.Attendees.Any(a => a.UserId == userId))
         );
     }
 
@@ -57,7 +59,7 @@ public sealed class GetActiveVotesQueryHandler
         var results = BuildResults(v);
 
         // compute current user's ballot (if any)
-        var myBallot = user.IsAuthenticated
+        var myBallot = user.IsAuthenticated && !string.IsNullOrEmpty(user.UserId)
             ? v.Ballots.FirstOrDefault(b => b.UserId == user.UserId)
             : null;
 
