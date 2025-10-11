@@ -69,10 +69,15 @@ namespace BoardMgmt.Application.Meetings.Commands
         // --------------------------------------------------------------------
         private async Task<int> IngestTeams(Meeting meeting, CancellationToken ct)
         {
-            var mailbox = meeting.ExternalCalendarMailbox;
+            var mailbox = !string.IsNullOrWhiteSpace(meeting.ExternalCalendarMailbox)
+                ? meeting.ExternalCalendarMailbox
+                : !string.IsNullOrWhiteSpace(meeting.HostIdentity)
+                    ? meeting.HostIdentity
+                    : _app.MailboxAddress;
+
             if (string.IsNullOrWhiteSpace(mailbox))
                 throw new InvalidOperationException(
-                    "Meeting.ExternalCalendarMailbox is required for Teams transcript ingestion (set HostIdentity when creating the meeting).");
+                    "Meeting.ExternalCalendarMailbox is required for Teams transcript ingestion (set HostIdentity when creating the meeting or configure a default mailbox).");
 
             var onlineMeetingId = await ResolveTeamsOnlineMeetingIdAsync(mailbox!, meeting, ct);
 

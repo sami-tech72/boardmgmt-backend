@@ -44,6 +44,15 @@ public sealed class Microsoft365CalendarService : ICalendarService
             ? _opts.MailboxAddress
             : m.ExternalCalendarMailbox;
 
+        // Ensure the meeting keeps track of the mailbox that actually hosts the
+        // Teams event.  The transcript ingest workflow relies on
+        // Meeting.ExternalCalendarMailbox being populated; if the caller did not
+        // provide a HostIdentity when creating the meeting we still fall back to
+        // the configured default mailbox.  Persisting it here means later
+        // handlers (such as IngestTranscriptHandler) can safely resolve the
+        // online meeting without requiring additional context.
+        m.ExternalCalendarMailbox = mailbox;
+
         var ev = new Event
         {
             Subject = m.Title,
@@ -91,6 +100,12 @@ public sealed class Microsoft365CalendarService : ICalendarService
         var mailbox = string.IsNullOrWhiteSpace(m.ExternalCalendarMailbox)
             ? _opts.MailboxAddress
             : m.ExternalCalendarMailbox;
+
+        // Mirror the create logic so updates continue to persist whichever
+        // mailbox we ultimately act against.  This protects against meetings
+        // created before the create logic populated the mailbox and ensures
+        // subsequent transcript ingestion has the data it needs.
+        m.ExternalCalendarMailbox = mailbox;
 
         var patch = new Event
         {
