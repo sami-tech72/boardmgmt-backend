@@ -69,6 +69,13 @@ public class ExceptionHandlingMiddleware : IMiddleware
                 new { dbex.InnerException?.Message }
             ),
 
+            InvalidOperationException ioex => (
+                StatusCodes.Status400BadRequest,
+                "invalid_operation",
+                ioex.Message,
+                null
+            ),
+
             _ => (
                 StatusCodes.Status500InternalServerError,
                 "server_error",
