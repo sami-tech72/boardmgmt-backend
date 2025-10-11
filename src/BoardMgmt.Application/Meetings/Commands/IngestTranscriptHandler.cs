@@ -380,13 +380,15 @@ namespace BoardMgmt.Application.Meetings.Commands
 
         private void LogGraphServiceException(ServiceException ex, string context, object? data = null)
         {
+            var detail = GetGraphErrorDetail(ex);
+
             if (data is not null)
             {
-                _logger.LogError(ex, "{Context}. StatusCode: {StatusCode}. Data: {@Data}", context, ex.ResponseStatusCode, data);
+                _logger.LogError(ex, "{Context}. StatusCode: {StatusCode}. Detail: {Detail}. Data: {@Data}", context, ex.ResponseStatusCode, detail, data);
             }
             else
             {
-                _logger.LogError(ex, "{Context}. StatusCode: {StatusCode}", context, ex.ResponseStatusCode);
+                _logger.LogError(ex, "{Context}. StatusCode: {StatusCode}. Detail: {Detail}", context, ex.ResponseStatusCode, detail);
             }
         }
 
@@ -395,10 +397,118 @@ namespace BoardMgmt.Application.Meetings.Commands
 
         private static string GetGraphErrorDetail(ServiceException ex)
         {
-            if (!string.IsNullOrWhiteSpace(ex.Message))
-                return ex.Message;
+            var details = new List<string>();
 
-            return "BadRequest";
+            if (!string.IsNullOrWhiteSpace(ex.Error?.Code))
+                details.Add($"Code: {ex.Error.Code}");
+
+            if (!string.IsNullOrWhiteSpace(ex.Error?.Message))
+                details.Add($"Message: {ex.Error.Message}");
+
+            if (!string.IsNullOrWhiteSpace(ex.Message))
+                details.Add(ex.Message);
+
+            if (!string.IsNullOrWhiteSpace(ex.RawResponseBody))
+            {
+                var summary = TrySummarizeGraphRawResponse(ex.RawResponseBody!);
+                if (!string.IsNullOrWhiteSpace(summary))
+                    details.Add(summary!);
+            }
+
+            if (details.Count == 0)
+            {
+                if (ex.ResponseStatusCode is int statusCode)
+                {
+                    details.Add($"Status {(HttpStatusCode)statusCode} ({statusCode})");
+                }
+                else
+                {
+                    details.Add("Unknown Graph error");
+                }
+            }
+
+            return string.Join("; ", details.Distinct(StringComparer.Ordinal));
+        }
+
+        private static string? TrySummarizeGraphRawResponse(string rawResponse)
+        {
+            if (string.IsNullOrWhiteSpace(rawResponse))
+                return null;
+
+            try
+            {
+                using var doc = JsonDocument.Parse(rawResponse);
+                var root = doc.RootElement;
+
+                if (root.ValueKind == JsonValueKind.Object)
+                {
+                    if (root.TryGetProperty("error", out var errorEl) && errorEl.ValueKind == JsonValueKind.Object)
+                    {
+                        var code = errorEl.TryGetProperty("code", out var codeEl) && codeEl.ValueKind == JsonValueKind.String
+                            ? codeEl.GetString()
+                            : null;
+                        var message = errorEl.TryGetProperty("message", out var msgEl) && msgEl.ValueKind == JsonValueKind.String
+                            ? msgEl.GetString()
+                            : null;
+                        var inner = ExtractInnerErrorDetail(errorEl);
+
+                        var parts = new List<string>();
+
+                        if (!string.IsNullOrWhiteSpace(code) || !string.IsNullOrWhiteSpace(message))
+                        {
+                            var baseDetail = string.IsNullOrWhiteSpace(code)
+                                ? message
+                                : string.IsNullOrWhiteSpace(message)
+                                    ? code
+                                    : $"{code}: {message}";
+
+                            if (!string.IsNullOrWhiteSpace(baseDetail))
+                                parts.Add(baseDetail!);
+                        }
+
+                        if (!string.IsNullOrWhiteSpace(inner))
+                            parts.Add(inner!);
+
+                        if (parts.Count > 0)
+                            return string.Join("; ", parts);
+                    }
+                }
+            }
+            catch (JsonException)
+            {
+                // Ignore parsing issues and fall back to the raw response body.
+            }
+
+            return rawResponse.Length > 256
+                ? rawResponse[..256] + "…"
+                : rawResponse;
+        }
+
+        private static string? ExtractInnerErrorDetail(JsonElement errorElement)
+        {
+            if (!errorElement.TryGetProperty("innerError", out var inner) || inner.ValueKind != JsonValueKind.Object)
+                return null;
+
+            var properties = new List<string>();
+
+            foreach (var property in inner.EnumerateObject())
+            {
+                var value = property.Value.ValueKind switch
+                {
+                    JsonValueKind.String => property.Value.GetString(),
+                    JsonValueKind.Number => property.Value.GetRawText(),
+                    JsonValueKind.True => "true",
+                    JsonValueKind.False => "false",
+                    _ => null
+                };
+
+                if (!string.IsNullOrWhiteSpace(value))
+                    properties.Add($"{property.Name}: {value}");
+            }
+
+            return properties.Count == 0
+                ? null
+                : "InnerError => " + string.Join(", ", properties);
         }
 
         private static bool TryGetOnlineMeetingId(Event? graphEvent, out string? id)
