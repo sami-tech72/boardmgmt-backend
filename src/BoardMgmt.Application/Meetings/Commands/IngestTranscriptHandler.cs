@@ -1,10 +1,12 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using BoardMgmt.Application.Calendars;
@@ -37,6 +39,10 @@ namespace BoardMgmt.Application.Meetings.Commands
         private readonly IZoomTokenProvider _zoomTokenProvider = zoomTokenProvider;
         private readonly IEmailSender _email = email;
         private readonly AppOptions _app = app.Value ?? new AppOptions();
+
+        private static readonly Regex TeamsMeetingIdRegex = new(
+            @"19(?:%3a|:)meeting[^\s/?\"'<>]+",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         public async Task<int> Handle(IngestTranscriptCommand request, CancellationToken ct)
         {
@@ -111,14 +117,17 @@ namespace BoardMgmt.Application.Meetings.Commands
             if (string.IsNullOrWhiteSpace(meeting.ExternalEventId))
                 throw new InvalidOperationException("Meeting.ExternalEventId not set.");
 
+            Event? graphEvent = null;
+            OnlineMeeting? meetingResource = null;
+
             try
             {
-                var meetingResource = await GetEventOnlineMeetingAsync(mailbox!, meeting.ExternalEventId!, ct);
+                meetingResource = await GetEventOnlineMeetingAsync(mailbox!, meeting.ExternalEventId!, ct);
 
                 if (!string.IsNullOrWhiteSpace(meetingResource?.Id))
                     return meetingResource!.Id;
 
-                var graphEvent = await _graph.Users[mailbox]
+                graphEvent = await _graph.Users[mailbox]
                     .Events[meeting.ExternalEventId]
                     .GetAsync(cfg =>
                     {
@@ -132,6 +141,9 @@ namespace BoardMgmt.Application.Meetings.Commands
             {
                 throw new InvalidOperationException("Teams meeting not found when resolving online meeting id. Verify the mailbox and meeting id.", ex);
             }
+
+            if (TryResolveOnlineMeetingIdFromJoinUrls(meeting, graphEvent, meetingResource, out var joinId))
+                return joinId!;
 
             throw new InvalidOperationException("Teams meeting is missing an online meeting id. Ensure the event is a Teams meeting with transcription enabled.");
         }
@@ -197,6 +209,169 @@ namespace BoardMgmt.Application.Meetings.Commands
                     id = candidate;
                     return true;
                 }
+            }
+
+            return false;
+        }
+
+        private static bool TryResolveOnlineMeetingIdFromJoinUrls(
+            Meeting meeting,
+            Event? graphEvent,
+            OnlineMeeting? meetingResource,
+            out string? id)
+        {
+            id = null;
+
+            if (TryExtractOnlineMeetingId(meeting.OnlineJoinUrl, out id))
+                return true;
+
+            if (TryExtractOnlineMeetingId(GetJoinUrlFromEvent(graphEvent), out id))
+                return true;
+
+            if (TryExtractOnlineMeetingId(GetJoinUrlFromOnlineMeeting(meetingResource), out id))
+                return true;
+
+            return false;
+        }
+
+        private static bool TryExtractOnlineMeetingId(string? source, out string? id)
+        {
+            id = null;
+            if (string.IsNullOrWhiteSpace(source))
+                return false;
+
+            var decoded = WebUtility.HtmlDecode(source);
+            var match = TeamsMeetingIdRegex.Match(decoded ?? source);
+            if (!match.Success)
+                return false;
+
+            var raw = match.Value;
+
+            try
+            {
+                var unescaped = Uri.UnescapeDataString(raw);
+                if (string.IsNullOrWhiteSpace(unescaped))
+                    return false;
+
+                id = unescaped;
+                return true;
+            }
+            catch (UriFormatException)
+            {
+                id = raw
+                    .Replace("%3a", ":", StringComparison.OrdinalIgnoreCase)
+                    .Replace("%40", "@", StringComparison.OrdinalIgnoreCase);
+                return !string.IsNullOrWhiteSpace(id);
+            }
+        }
+
+        private static string? GetJoinUrlFromEvent(Event? graphEvent)
+        {
+            if (!string.IsNullOrWhiteSpace(graphEvent?.OnlineMeeting?.JoinUrl))
+                return graphEvent!.OnlineMeeting!.JoinUrl;
+
+            if (graphEvent?.OnlineMeeting?.AdditionalData != null &&
+                TryExtractAdditionalString(graphEvent.OnlineMeeting.AdditionalData, "joinUrl", out var inlineJoinUrl))
+            {
+                return inlineJoinUrl;
+            }
+
+            if (!string.IsNullOrWhiteSpace(graphEvent?.OnlineMeetingUrl))
+                return graphEvent!.OnlineMeetingUrl;
+
+            if (graphEvent?.AdditionalData != null)
+            {
+                if (TryExtractAdditionalString(graphEvent.AdditionalData, "onlineMeetingUrl", out var fromRoot))
+                    return fromRoot;
+
+                if (graphEvent.AdditionalData.TryGetValue("onlineMeeting", out var nested) &&
+                    TryReadJoinUrlFromAdditionalData(nested, out var nestedJoinUrl))
+                {
+                    return nestedJoinUrl;
+                }
+            }
+
+            return null;
+        }
+
+        private static string? GetJoinUrlFromOnlineMeeting(OnlineMeeting? meetingResource)
+        {
+            if (meetingResource is null)
+                return null;
+
+            if (!string.IsNullOrWhiteSpace(meetingResource.JoinWebUrl))
+                return meetingResource.JoinWebUrl;
+
+            if (!string.IsNullOrWhiteSpace(meetingResource.JoinInformation?.Content))
+                return meetingResource.JoinInformation.Content;
+
+            if (meetingResource.AdditionalData != null)
+            {
+                if (TryExtractAdditionalString(meetingResource.AdditionalData, "joinWebUrl", out var joinWebUrl))
+                    return joinWebUrl;
+
+                if (TryExtractAdditionalString(meetingResource.AdditionalData, "joinUrl", out var joinUrl))
+                    return joinUrl;
+
+                if (meetingResource.AdditionalData.TryGetValue("joinInformation", out var nested) &&
+                    TryReadJoinUrlFromAdditionalData(nested, out var joinInfoContent))
+                {
+                    return joinInfoContent;
+                }
+            }
+
+            return null;
+        }
+
+        private static bool TryExtractAdditionalString(IDictionary<string, object?> data, string key, out string? value)
+        {
+            value = null;
+            if (!data.TryGetValue(key, out var raw) || raw is null)
+                return false;
+
+            if (raw is string str && !string.IsNullOrWhiteSpace(str))
+            {
+                value = str;
+                return true;
+            }
+
+            if (raw is JsonElement el && el.ValueKind == JsonValueKind.String)
+            {
+                var strVal = el.GetString();
+                if (!string.IsNullOrWhiteSpace(strVal))
+                {
+                    value = strVal;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool TryReadJoinUrlFromAdditionalData(object? nested, out string? value)
+        {
+            value = null;
+            switch (nested)
+            {
+                case IDictionary<string, object?> dict when TryExtractAdditionalString(dict, "joinUrl", out var joinUrl):
+                    value = joinUrl;
+                    return true;
+                case IDictionary<string, object?> dict when TryExtractAdditionalString(dict, "content", out var content):
+                    value = content;
+                    return true;
+                case JsonElement element when element.ValueKind == JsonValueKind.Object:
+                    if (element.TryGetProperty("joinUrl", out var joinUrlEl) && joinUrlEl.ValueKind == JsonValueKind.String)
+                    {
+                        value = joinUrlEl.GetString();
+                        return !string.IsNullOrWhiteSpace(value);
+                    }
+
+                    if (element.TryGetProperty("content", out var contentEl) && contentEl.ValueKind == JsonValueKind.String)
+                    {
+                        value = contentEl.GetString();
+                        return !string.IsNullOrWhiteSpace(value);
+                    }
+                    break;
             }
 
             return false;
