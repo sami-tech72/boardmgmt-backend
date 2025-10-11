@@ -57,6 +57,12 @@ namespace BoardMgmt.WebApi.Controllers
                     Request.Headers["x-zm-request-timestamp"].ToString(),
                     Request.Headers["x-zm-signature"].ToString());
 
+                if (string.IsNullOrWhiteSpace(body))
+                {
+                    _logger.LogWarning("Zoom webhook received empty body.");
+                    return BadRequest("empty body");
+                }
+
                 using var doc = JsonDocument.Parse(body);
                 var root = doc.RootElement;
 

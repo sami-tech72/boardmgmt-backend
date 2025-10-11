@@ -17,7 +17,8 @@ public sealed class GetVoteQueryHandler(IAppDbContext db, ICurrentUser user)
             .Include(x => x.Options)
             .Include(x => x.Ballots)
             .Include(x => x.EligibleUsers)
-            .Include(x => x.Meeting)!.ThenInclude(m => m.Attendees)
+            .Include(x => x.Meeting)
+                .ThenInclude(m => m.Attendees)
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.Id == request.Id, ct);
 

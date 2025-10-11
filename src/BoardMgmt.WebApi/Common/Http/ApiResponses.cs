@@ -10,7 +10,7 @@ public record ApiResponse<T>(
     DateTimeOffset Timestamp
 )
 {
-    public static ApiResponse<T> Ok(T data, string? message, string traceId) =>
+    public static ApiResponse<T> Ok(T? data, string? message, string traceId) =>
         new(true, data, message, traceId, DateTimeOffset.UtcNow);
 }
 
