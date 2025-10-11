@@ -111,7 +111,8 @@ namespace BoardMgmt.Application.Meetings.Commands
                 throw new InvalidOperationException($"Microsoft 365 reported that the transcript is not available yet. Wait for processing to finish and try again. Details: {GetGraphErrorDetail(ex)}", ex);
             }
 
-            transcript ??= throw new InvalidOperationException("No transcript found for this Teams meeting. Ensure transcription was enabled.");
+            if (transcript is null)
+                throw new InvalidOperationException("No transcript found for this Teams meeting. Ensure transcription was enabled.");
 
             // Download VTT
             await using var stream = await DownloadTeamsTranscriptContentAsync(mailbox!, onlineMeetingId, transcript.Id, ct)
@@ -282,14 +283,10 @@ namespace BoardMgmt.Application.Meetings.Commands
         }
 
         private static bool IsBadRequest(ServiceException ex)
-            => ex.ResponseStatusCode == (int)HttpStatusCode.BadRequest
-               || string.Equals(ex.Error?.Code, "BadRequest", StringComparison.OrdinalIgnoreCase);
+            => ex.ResponseStatusCode == (int)HttpStatusCode.BadRequest;
 
         private static string GetGraphErrorDetail(ServiceException ex)
         {
-            if (!string.IsNullOrWhiteSpace(ex.Error?.Message))
-                return ex.Error.Message;
-
             if (!string.IsNullOrWhiteSpace(ex.Message))
                 return ex.Message;
 
