@@ -162,7 +162,7 @@ namespace BoardMgmt.Infrastructure
             services.AddHttpClient("Zoom", client =>
             {
                 client.BaseAddress = new Uri("https://api.zoom.us/v2/");
-                client.Timeout = TimeSpan.FromSeconds(30);
+                client.Timeout = TimeSpan.FromMinutes(5);
                 // BaseAddress optional; we send absolute URLs.
             });
 
