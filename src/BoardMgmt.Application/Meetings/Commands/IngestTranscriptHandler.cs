@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -152,20 +153,53 @@ namespace BoardMgmt.Application.Meetings.Commands
                 if (!doc.RootElement.TryGetProperty("value", out var valueElement) || valueElement.ValueKind != JsonValueKind.Array)
                     return null;
 
+                var transcripts = new List<TeamsTranscriptMetadata>();
+
                 foreach (var element in valueElement.EnumerateArray())
                 {
                     if (element.ValueKind != JsonValueKind.Object)
                         continue;
 
-                    if (element.TryGetProperty("id", out var idElement) && idElement.ValueKind == JsonValueKind.String)
-                    {
-                        var id = idElement.GetString();
-                        if (!string.IsNullOrWhiteSpace(id))
-                            return new TeamsTranscriptMetadata(id);
-                    }
+                    var metadata = TryParseTeamsTranscriptMetadata(element);
+                    if (metadata is not null)
+                        transcripts.Add(metadata);
                 }
 
-                return null;
+                if (transcripts.Count == 0)
+                {
+                    _logger.LogInformation(
+                        "Teams transcript list returned no entries. Mailbox={Mailbox} OnlineMeetingId={OnlineMeetingId}",
+                        mailbox,
+                        onlineMeetingId);
+                    return null;
+                }
+
+                var ready = transcripts
+                    .Where(t => IsTranscriptReady(t.Status))
+                    .OrderByDescending(t => t.CreatedUtc ?? DateTimeOffset.MinValue)
+                    .ToList();
+
+                TeamsTranscriptMetadata selected;
+
+                if (ready.Count > 0)
+                {
+                    selected = ready[0];
+                }
+                else
+                {
+                    selected = transcripts
+                        .OrderByDescending(t => t.CreatedUtc ?? DateTimeOffset.MinValue)
+                        .First();
+                }
+
+                _logger.LogInformation(
+                    "Selected Teams transcript {TranscriptId}. Status={Status} CreatedUtc={CreatedUtc}. TotalTranscripts={Count}",
+                    selected.Id,
+                    string.IsNullOrWhiteSpace(selected.Status) ? "(unknown)" : selected.Status,
+                    selected.CreatedUtc?.ToString("O") ?? "(unknown)",
+                    transcripts.Count);
+
+                return selected;
             }
             catch (ServiceException ex)
             {
@@ -174,7 +208,81 @@ namespace BoardMgmt.Application.Meetings.Commands
             }
         }
 
-        private sealed record TeamsTranscriptMetadata(string Id);
+        private TeamsTranscriptMetadata? TryParseTeamsTranscriptMetadata(JsonElement element)
+        {
+            if (!element.TryGetProperty("id", out var idElement) || idElement.ValueKind != JsonValueKind.String)
+                return null;
+
+            var id = idElement.GetString();
+            if (string.IsNullOrWhiteSpace(id))
+                return null;
+
+            DateTimeOffset? created = null;
+            if (TryGetDateTimeOffset(element, "createdDateTime", out var createdValue))
+                created = createdValue;
+
+            var status = GetOptionalString(element, "status")
+                ?? GetOptionalString(element, "state");
+
+            return new TeamsTranscriptMetadata(id!, created, status);
+        }
+
+        private static bool TryGetDateTimeOffset(JsonElement element, string propertyName, out DateTimeOffset value)
+        {
+            value = default;
+            if (!element.TryGetProperty(propertyName, out var property))
+                return false;
+
+            if (property.ValueKind == JsonValueKind.String)
+            {
+                var raw = property.GetString();
+                if (!string.IsNullOrWhiteSpace(raw) &&
+                    DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed))
+                {
+                    value = parsed;
+                    return true;
+                }
+            }
+            else if (property.ValueKind == JsonValueKind.Number)
+            {
+                if (property.TryGetInt64(out var seconds))
+                {
+                    value = DateTimeOffset.FromUnixTimeSeconds(seconds);
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static string? GetOptionalString(JsonElement element, string propertyName)
+        {
+            if (!element.TryGetProperty(propertyName, out var property))
+                return null;
+
+            if (property.ValueKind == JsonValueKind.String)
+            {
+                var raw = property.GetString();
+                return string.IsNullOrWhiteSpace(raw) ? null : raw;
+            }
+
+            return null;
+        }
+
+        private static bool IsTranscriptReady(string? status)
+        {
+            if (string.IsNullOrWhiteSpace(status))
+                return true;
+
+            return status.Equals("completed", StringComparison.OrdinalIgnoreCase)
+                || status.Equals("complete", StringComparison.OrdinalIgnoreCase)
+                || status.Equals("ready", StringComparison.OrdinalIgnoreCase)
+                || status.Equals("published", StringComparison.OrdinalIgnoreCase)
+                || status.Equals("succeeded", StringComparison.OrdinalIgnoreCase)
+                || status.Equals("success", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private sealed record TeamsTranscriptMetadata(string Id, DateTimeOffset? CreatedUtc, string? Status);
 
         private Task<System.IO.Stream?> DownloadTeamsTranscriptContentAsync(
             string mailbox,
