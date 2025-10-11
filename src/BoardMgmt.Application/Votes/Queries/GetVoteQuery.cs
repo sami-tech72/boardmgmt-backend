@@ -42,19 +42,20 @@ public sealed class GetVoteQueryHandler(IAppDbContext db, ICurrentUser user)
 
         var uid = user.UserId;
         var isAuthed = user.IsAuthenticated && !string.IsNullOrEmpty(uid);
+        var authedUserId = isAuthed ? uid! : null;
 
         bool eligible = v.Eligibility switch
         {
             VoteEligibility.Public => true,
             VoteEligibility.SpecificUsers =>
-                isAuthed && v.EligibleUsers.Any(e => e.UserId == uid),
+                authedUserId is not null && v.EligibleUsers.Any(e => e.UserId == authedUserId),
             VoteEligibility.MeetingAttendees =>
-                isAuthed && v.MeetingId != null &&
-                (v.Meeting?.Attendees?.Any(a => a.UserId == uid) ?? false),
+                authedUserId is not null && v.MeetingId != null &&
+                (v.Meeting?.Attendees?.Any(a => a.UserId == authedUserId) ?? false),
             _ => false
         };
 
-        var alreadyVoted = isAuthed && v.Ballots.Any(b => b.UserId == uid);
+        var alreadyVoted = authedUserId is not null && v.Ballots.Any(b => b.UserId == authedUserId);
 
         // Build individual votes WITHOUT display names (Application layer stays pure)
         IReadOnlyList<IndividualVoteDto>? individualVotes = null;
