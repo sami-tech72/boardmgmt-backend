@@ -435,7 +435,7 @@ public sealed class Microsoft365CalendarService : ICalendarService
 
     private static bool IsMissingTranscriptPermission(ApiException ex)
     {
-        if (ex.ResponseStatusCode != HttpStatusCode.Forbidden && ex.ResponseStatusCode != HttpStatusCode.InternalServerError)
+        if (ex.ResponseStatusCode != (int)HttpStatusCode.Forbidden && ex.ResponseStatusCode != (int)HttpStatusCode.InternalServerError)
         {
             return false;
         }
@@ -467,10 +467,10 @@ public sealed class Microsoft365CalendarService : ICalendarService
                     if (stream.CanSeek)
                     {
                         var position = stream.Position;
-                        using var reader = new StreamReader(stream, leaveOpen: true);
-                        var content = reader.ReadToEnd();
+                        using var seekableReader = new StreamReader(stream, leaveOpen: true);
+                        var text = seekableReader.ReadToEnd();
                         stream.Seek(position, SeekOrigin.Begin);
-                        return content;
+                        return text;
                     }
 
                     using var reader = new StreamReader(stream, leaveOpen: true);
@@ -479,9 +479,9 @@ public sealed class Microsoft365CalendarService : ICalendarService
             }
 
             var responseContentProperty = ex.GetType().GetProperty("ResponseContent");
-            if (responseContentProperty?.GetValue(ex) is string content)
+            if (responseContentProperty?.GetValue(ex) is string responseContent)
             {
-                return content;
+                return responseContent;
             }
         }
         catch
