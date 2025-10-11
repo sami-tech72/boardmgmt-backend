@@ -399,18 +399,20 @@ namespace BoardMgmt.Application.Meetings.Commands
         {
             var details = new List<string>();
 
-            if (!string.IsNullOrWhiteSpace(ex.Error?.Code))
-                details.Add($"Code: {ex.Error.Code}");
+            var (errorCode, errorMessage, rawResponse) = GetGraphErrorInfo(ex);
 
-            if (!string.IsNullOrWhiteSpace(ex.Error?.Message))
-                details.Add($"Message: {ex.Error.Message}");
+            if (!string.IsNullOrWhiteSpace(errorCode))
+                details.Add($"Code: {errorCode}");
+
+            if (!string.IsNullOrWhiteSpace(errorMessage))
+                details.Add($"Message: {errorMessage}");
 
             if (!string.IsNullOrWhiteSpace(ex.Message))
                 details.Add(ex.Message);
 
-            if (!string.IsNullOrWhiteSpace(ex.RawResponseBody))
+            if (!string.IsNullOrWhiteSpace(rawResponse))
             {
-                var summary = TrySummarizeGraphRawResponse(ex.RawResponseBody!);
+                var summary = TrySummarizeGraphRawResponse(rawResponse!);
                 if (!string.IsNullOrWhiteSpace(summary))
                     details.Add(summary!);
             }
@@ -428,6 +430,29 @@ namespace BoardMgmt.Application.Meetings.Commands
             }
 
             return string.Join("; ", details.Distinct(StringComparer.Ordinal));
+        }
+
+        private static (string? Code, string? Message, string? RawResponse) GetGraphErrorInfo(ServiceException ex)
+        {
+            string? code = null;
+            string? message = null;
+            string? rawResponse = null;
+
+            var errorProp = ex.GetType().GetProperty("Error");
+            if (errorProp != null)
+            {
+                var errorValue = errorProp.GetValue(ex);
+                if (errorValue != null)
+                {
+                    code = errorValue.GetType().GetProperty("Code")?.GetValue(errorValue) as string;
+                    message = errorValue.GetType().GetProperty("Message")?.GetValue(errorValue) as string;
+                }
+            }
+
+            rawResponse = ex.GetType().GetProperty("RawResponseBody")?.GetValue(ex) as string
+                ?? ex.GetType().GetProperty("ResponseBody")?.GetValue(ex) as string;
+
+            return (code, message, rawResponse);
         }
 
         private static string? TrySummarizeGraphRawResponse(string rawResponse)
