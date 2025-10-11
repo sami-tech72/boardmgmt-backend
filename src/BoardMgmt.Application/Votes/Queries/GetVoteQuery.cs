@@ -42,7 +42,7 @@ public sealed class GetVoteQueryHandler(IAppDbContext db, ICurrentUser user)
 
         var uid = user.UserId;
         var isAuthed = user.IsAuthenticated && !string.IsNullOrEmpty(uid);
-        var authedUserId = isAuthed ? uid! : null;
+        var authedUserId = isAuthed ? uid : null;
 
         bool eligible = v.Eligibility switch
         {
