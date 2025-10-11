@@ -29,7 +29,7 @@ public sealed record VoteSummaryDto(
 // New: per-user vote row (populate only when not Anonymous and caller authorized)
 public sealed record IndividualVoteDto(
     string UserId,
-    string DisplayName,
+    string? DisplayName,
     string? ChoiceLabel,   // "Yes" | "No" | "Abstain" for Y/N/Abstain polls
     string? OptionText,    // filled for MultipleChoice
     DateTimeOffset VotedAt

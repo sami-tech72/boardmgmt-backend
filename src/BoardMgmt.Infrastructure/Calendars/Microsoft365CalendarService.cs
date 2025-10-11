@@ -64,7 +64,7 @@ public sealed class Microsoft365CalendarService : ICalendarService
         };
 
         // Create
-        var created = await RunGraph<Event?>(
+        var created = await RunGraph<Event>(
             () => _graph.Users[mailbox].Events.PostAsync(ev, cancellationToken: ct),
             "POST /users/{mailbox}/events", ct);
 
@@ -143,7 +143,7 @@ public sealed class Microsoft365CalendarService : ICalendarService
     {
         var now = DateTimeOffset.UtcNow;
 
-        var resp = await RunGraph<EventCollectionResponse?>(
+        var resp = await RunGraph<EventCollectionResponse>(
             () => _graph.Users[_opts.MailboxAddress].CalendarView.GetAsync(cfg =>
             {
                 cfg.QueryParameters.StartDateTime = now.ToString("o");
@@ -167,7 +167,7 @@ public sealed class Microsoft365CalendarService : ICalendarService
 
     public async Task<IReadOnlyList<CalendarEventDto>> ListRangeAsync(DateTimeOffset startUtc, DateTimeOffset endUtc, CancellationToken ct = default)
     {
-        var resp = await RunGraph<EventCollectionResponse?>(
+        var resp = await RunGraph<EventCollectionResponse>(
             () => _graph.Users[_opts.MailboxAddress].CalendarView.GetAsync(cfg =>
             {
                 cfg.QueryParameters.StartDateTime = startUtc.ToString("o");
@@ -209,7 +209,7 @@ public sealed class Microsoft365CalendarService : ICalendarService
 
             try
             {
-                fetched = await RunGraph<Event?>(
+                fetched = await RunGraph<Event>(
                     () => _graph.Users[mailbox].Events[eventId].GetAsync(cfg =>
                     {
                         cfg.QueryParameters.Select = new[] { "onlineMeeting", "onlineMeetingUrl" };
@@ -480,7 +480,7 @@ public sealed class Microsoft365CalendarService : ICalendarService
 
     private async Task<string?> TryExtractJoinUrlFromBodyAsync(string mailbox, string eventId, CancellationToken ct)
     {
-        var ev = await RunGraph<Event?>(
+        var ev = await RunGraph<Event>(
             () => _graph.Users[mailbox].Events[eventId].GetAsync(cfg =>
             {
                 cfg.QueryParameters.Select = new[] { "body" };
