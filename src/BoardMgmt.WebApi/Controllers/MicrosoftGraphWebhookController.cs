@@ -156,7 +156,7 @@ namespace BoardMgmt.WebApi.Controllers
             {
                 var found = await _db.Set<Meeting>()
                     .Where(m => m.ExternalCalendar == "Microsoft365" &&
-                                m.ExternalEventId == onlineMeetingId) // <-- add this nullable column if not present
+                                m.ExternalOnlineMeetingId == onlineMeetingId)
                     .Select(m => m.Id)
                     .FirstOrDefaultAsync(ct);
 

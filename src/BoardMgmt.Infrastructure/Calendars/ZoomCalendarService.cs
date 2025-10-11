@@ -25,7 +25,7 @@ public sealed class ZoomCalendarService : ICalendarService
     // ---------------------------
     // Create
     // ---------------------------
-    public async Task<(string eventId, string? joinUrl)> CreateEventAsync(Meeting m, CancellationToken ct = default)
+    public async Task<(string eventId, string? joinUrl, string? onlineMeetingId)> CreateEventAsync(Meeting m, CancellationToken ct = default)
     {
         var token = await GetAccessTokenAsync(ct);
         var host = string.IsNullOrWhiteSpace(m.ExternalCalendarMailbox)
@@ -79,13 +79,13 @@ public sealed class ZoomCalendarService : ICalendarService
         var created = await resp.Content.ReadFromJsonAsync<ZoomCreateMeetingResponse>(cancellationToken: ct);
         if (created is null) throw new InvalidOperationException("Zoom didn't return meeting payload.");
 
-        return (created.id.ToString(), created.join_url);
+        return (created.id.ToString(), created.join_url, null);
     }
 
     // ---------------------------
     // Update
     // ---------------------------
-    public async Task<(bool ok, string? joinUrl)> UpdateEventAsync(Meeting m, CancellationToken ct = default)
+    public async Task<(bool ok, string? joinUrl, string? onlineMeetingId)> UpdateEventAsync(Meeting m, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(m.ExternalEventId)) return (false, null);
 
@@ -134,7 +134,7 @@ public sealed class ZoomCalendarService : ICalendarService
         }
 
         var meeting = await getResp.Content.ReadFromJsonAsync<ZoomCreateMeetingResponse>(cancellationToken: ct);
-        return (true, meeting?.join_url);
+        return (true, meeting?.join_url, null);
     }
 
     // ---------------------------

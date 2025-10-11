@@ -78,9 +78,10 @@ public class CreateMeetingHandler : IRequestHandler<CreateMeetingCommand, Guid>
 
         // Create in chosen provider
         var svc = _calSelector.For(request.Provider);
-        var (eventId, joinUrl) = await svc.CreateEventAsync(entity, ct);
+        var (eventId, joinUrl, onlineMeetingId) = await svc.CreateEventAsync(entity, ct);
         entity.ExternalEventId = eventId;
         entity.OnlineJoinUrl = joinUrl;
+        entity.ExternalOnlineMeetingId = onlineMeetingId;
 
 
         _db.Meetings.Add(entity);

@@ -314,31 +314,56 @@ namespace BoardMgmt.Application.Meetings.Commands
 
         private async Task<string> ResolveTeamsOnlineMeetingIdAsync(string mailbox, Meeting meeting, CancellationToken ct)
         {
+            using var scope = _logger.BeginScope(new Dictionary<string, object?>
+            {
+                ["TeamsMailbox"] = mailbox,
+                ["ExternalEventId"] = meeting.ExternalEventId,
+                ["MeetingId"] = meeting.Id
+            });
+
             if (string.IsNullOrWhiteSpace(meeting.ExternalEventId))
                 throw new InvalidOperationException("Meeting.ExternalEventId not set.");
+
+            if (!string.IsNullOrWhiteSpace(meeting.ExternalOnlineMeetingId))
+            {
+                _logger.LogInformation("Reusing cached Teams onlineMeetingId={OnlineMeetingId} stored on meeting.", meeting.ExternalOnlineMeetingId);
+                return meeting.ExternalOnlineMeetingId!;
+            }
 
             Event? graphEvent = null;
             OnlineMeeting? meetingResource = null;
 
             try
             {
+                _logger.LogDebug("Attempting direct /events/{id}/onlineMeeting fetch to resolve onlineMeetingId.");
                 meetingResource = await GetEventOnlineMeetingAsync(mailbox!, meeting.ExternalEventId!, ct);
 
                 if (!string.IsNullOrWhiteSpace(meetingResource?.Id))
-                    return meetingResource!.Id;
+                {
+                    PersistOnlineMeetingId(meeting, meetingResource!.Id!);
+                    _logger.LogInformation("Resolved onlineMeetingId via /onlineMeeting: {OnlineMeetingId}.", meetingResource.Id);
+                    return meetingResource!.Id!;
+                }
 
+                _logger.LogDebug("Falling back to /events/{id}?$select=onlineMeeting to resolve onlineMeetingId.");
                 graphEvent = await _graph.Users[mailbox]
                     .Events[meeting.ExternalEventId]
                     .GetAsync(cfg =>
                     {
-                        cfg.QueryParameters.Select = new[] { "onlineMeeting" };
+                        cfg.QueryParameters.Select = new[] { "onlineMeeting", "onlineMeetingUrl" };
                     }, ct);
 
                 if (TryGetOnlineMeetingId(graphEvent, out var inlineId))
+                {
+                    if (!string.IsNullOrWhiteSpace(inlineId))
+                        PersistOnlineMeetingId(meeting, inlineId!);
+                    _logger.LogInformation("Resolved onlineMeetingId from event payload: {OnlineMeetingId}.", inlineId);
                     return inlineId!;
+                }
             }
             catch (ServiceException ex) when (ex.ResponseStatusCode == (int)HttpStatusCode.NotFound)
             {
+                _logger.LogWarning(ex, "Teams event not found. Mailbox or EventId invalid?");
                 throw new InvalidOperationException("Teams meeting not found when resolving online meeting id. Verify the mailbox and meeting id.", ex);
             }
             catch (ServiceException ex)
@@ -348,8 +373,14 @@ namespace BoardMgmt.Application.Meetings.Commands
             }
 
             if (TryResolveOnlineMeetingIdFromJoinUrls(meeting, graphEvent, meetingResource, out var joinId))
+            {
+                if (!string.IsNullOrWhiteSpace(joinId))
+                    PersistOnlineMeetingId(meeting, joinId!);
+                _logger.LogInformation("Resolved onlineMeetingId by parsing join URLs: {OnlineMeetingId}.", joinId);
                 return joinId!;
+            }
 
+            _logger.LogWarning("Unable to resolve a Teams onlineMeetingId for EventId={EventId}.", meeting.ExternalEventId);
             throw new InvalidOperationException("Teams meeting is missing an online meeting id. Ensure the event is a Teams meeting with transcription enabled.");
         }
 
@@ -468,6 +499,17 @@ namespace BoardMgmt.Application.Meetings.Commands
                 return true;
 
             return false;
+        }
+
+        private static void PersistOnlineMeetingId(Meeting meeting, string onlineMeetingId)
+        {
+            if (string.IsNullOrWhiteSpace(onlineMeetingId))
+                return;
+
+            if (!string.Equals(meeting.ExternalOnlineMeetingId, onlineMeetingId, StringComparison.Ordinal))
+            {
+                meeting.ExternalOnlineMeetingId = onlineMeetingId;
+            }
         }
 
         private static bool TryExtractOnlineMeetingId(string? source, out string? id)

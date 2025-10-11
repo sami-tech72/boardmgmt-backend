@@ -36,7 +36,15 @@ namespace BoardMgmt.Application.Calendars.Commands
             // Push change to external provider if applicable
             var provider = meeting.ExternalCalendar ?? CalendarProviders.Microsoft365;
             var svc = _calSelector.For(provider);
-            await svc.UpdateEventAsync(meeting, ct); // returns (eventId, joinUrl); joinUrl usually unchanged
+            var (_, joinUrl, onlineMeetingId) = await svc.UpdateEventAsync(meeting, ct);
+            if (!string.IsNullOrWhiteSpace(joinUrl))
+            {
+                meeting.OnlineJoinUrl = joinUrl;
+            }
+            if (!string.IsNullOrWhiteSpace(onlineMeetingId))
+            {
+                meeting.ExternalOnlineMeetingId = onlineMeetingId;
+            }
 
             await _db.SaveChangesAsync(ct);
             return true;

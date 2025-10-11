@@ -38,7 +38,7 @@ public sealed class Microsoft365CalendarService : ICalendarService
 
     // ---------------- ICalendarService ----------------
 
-    public async Task<(string eventId, string? joinUrl)> CreateEventAsync(Meeting m, CancellationToken ct = default)
+    public async Task<(string eventId, string? joinUrl, string? onlineMeetingId)> CreateEventAsync(Meeting m, CancellationToken ct = default)
     {
         var end = m.EndAt ?? m.ScheduledAt.AddHours(1);
         var mailbox = string.IsNullOrWhiteSpace(m.ExternalCalendarMailbox)
@@ -82,7 +82,7 @@ public sealed class Microsoft365CalendarService : ICalendarService
 
         // Refetch with $select=onlineMeeting,onlineMeetingUrl (short retry for consistency)
         var fetched = await GetEventWithOnlineMeetingAsync(mailbox!, id, ct);
-        var meeting = await EnsureTeamsMeetingDefaultsAsync(mailbox!, id, fetched, ct);
+        var (onlineMeetingId, meeting) = await EnsureTeamsMeetingDefaultsAsync(mailbox!, id, fetched, ct);
         var joinUrl = await ResolveJoinUrlAsync(mailbox!, id, fetched, meeting, ct);
 
         if (string.IsNullOrWhiteSpace(joinUrl))
@@ -90,12 +90,12 @@ public sealed class Microsoft365CalendarService : ICalendarService
             _logger.LogWarning("Teams meeting link was not generated for newly created event {EventId}.", id);
         }
 
-        return (id, joinUrl);
+        return (id, joinUrl, onlineMeetingId);
     }
 
-    public async Task<(bool ok, string? joinUrl)> UpdateEventAsync(Meeting m, CancellationToken ct = default)
+    public async Task<(bool ok, string? joinUrl, string? onlineMeetingId)> UpdateEventAsync(Meeting m, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(m.ExternalEventId)) return (false, null);
+        if (string.IsNullOrWhiteSpace(m.ExternalEventId)) return (false, null, null);
 
         var end = m.EndAt ?? m.ScheduledAt.AddHours(1);
         var mailbox = string.IsNullOrWhiteSpace(m.ExternalCalendarMailbox)
@@ -135,7 +135,7 @@ public sealed class Microsoft365CalendarService : ICalendarService
             "PATCH /users/{mailbox}/events/{id}", ct);
 
         var refreshed = await GetEventWithOnlineMeetingAsync(mailbox!, m.ExternalEventId!, ct);
-        var meeting = await EnsureTeamsMeetingDefaultsAsync(mailbox!, m.ExternalEventId!, refreshed, ct);
+        var (onlineMeetingId, meeting) = await EnsureTeamsMeetingDefaultsAsync(mailbox!, m.ExternalEventId!, refreshed, ct);
 
         var joinUrl = await ResolveJoinUrlAsync(mailbox!, m.ExternalEventId!, refreshed, meeting, ct);
         if (string.IsNullOrWhiteSpace(joinUrl))
@@ -143,7 +143,7 @@ public sealed class Microsoft365CalendarService : ICalendarService
             _logger.LogWarning("Teams meeting link was not generated for updated event {EventId}.", m.ExternalEventId);
         }
 
-        return (true, joinUrl);
+        return (true, joinUrl, onlineMeetingId);
     }
 
     public async Task CancelEventAsync(string eventId, CancellationToken ct = default)
@@ -343,16 +343,21 @@ public sealed class Microsoft365CalendarService : ICalendarService
         return false;
     }
 
-    private async Task<OnlineMeeting?> EnsureTeamsMeetingDefaultsAsync(string mailbox, string eventId, Event? graphEvent, CancellationToken ct)
+    private async Task<(string? onlineMeetingId, OnlineMeeting? meeting)> EnsureTeamsMeetingDefaultsAsync(string mailbox, string eventId, Event? graphEvent, CancellationToken ct)
     {
         var attempt = 0;
         var delayMs = 300;
         OnlineMeeting? resolvedMeeting = null;
+        string? resolvedMeetingId = null;
         while (attempt < 6)
         {
             try
             {
                 var (onlineMeetingId, meeting) = await ResolveOnlineMeetingAsync(mailbox, eventId, graphEvent, ct);
+                if (!string.IsNullOrWhiteSpace(onlineMeetingId))
+                {
+                    resolvedMeetingId = onlineMeetingId;
+                }
                 if (resolvedMeeting is null && meeting is not null)
                 {
                     resolvedMeeting = meeting;
@@ -364,7 +369,7 @@ public sealed class Microsoft365CalendarService : ICalendarService
                     if (attempt >= 6)
                     {
                         _logger.LogWarning("Teams event {EventId} returned no online meeting id; unable to enforce recording/transcription defaults.", eventId);
-                        return resolvedMeeting;
+                        return (resolvedMeetingId, resolvedMeeting);
                     }
 
                     await Task.Delay(delayMs, ct);
@@ -395,7 +400,7 @@ public sealed class Microsoft365CalendarService : ICalendarService
                         .OnlineMeetings[onlineMeetingId]
                         .PatchAsync(fallbackPatch, cancellationToken: ct);
                 }
-                return resolvedMeeting;
+                return (onlineMeetingId, resolvedMeeting ?? meeting);
             }
             catch (ApiException ex) when (attempt < 5)
             {
@@ -404,14 +409,14 @@ public sealed class Microsoft365CalendarService : ICalendarService
             catch (ApiException ex)
             {
                 _logger.LogWarning(ex, "Failed to enforce Teams meeting defaults for event {EventId}.", eventId);
-                return resolvedMeeting;
+                return (resolvedMeetingId, resolvedMeeting);
             }
 
             attempt++;
             await Task.Delay(delayMs, ct);
             delayMs = Math.Min(delayMs * 2, 2000);
         }
-        return resolvedMeeting;
+        return (resolvedMeetingId, resolvedMeeting);
     }
 
     private static OnlineMeeting BuildOnlineMeetingDefaultsPatch(bool includeTranscription)
