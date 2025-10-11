@@ -27,7 +27,8 @@ public sealed class GetActiveVotesQueryHandler
             .Include(v => v.Options)
             .Include(v => v.Ballots)
             .Include(v => v.EligibleUsers)
-            .Include(v => v.Meeting)!.ThenInclude(m => m.Attendees)
+            .Include(v => v.Meeting)
+                .ThenInclude(m => m.Attendees)
             .Where(v => v.Deadline >= nowUtc);
 
         q = FilterByEligibility(q, _user);
@@ -38,20 +39,21 @@ public sealed class GetActiveVotesQueryHandler
 
     internal static IQueryable<VotePoll> FilterByEligibility(IQueryable<VotePoll> q, ICurrentUser user)
     {
-        if (user.IsAuthenticated is false || string.IsNullOrEmpty(user.UserId))
-            return q.Where(v => v.Eligibility == VoteEligibility.Public);
+        if (user.IsAuthenticated && user.UserId is { Length: > 0 } userId)
+        {
+            return q.Where(v =>
+                   v.Eligibility == VoteEligibility.Public
+                || v.CreatedByUserId == userId
+                || (v.Eligibility == VoteEligibility.SpecificUsers
+                    && v.EligibleUsers.Any(e => e.UserId == userId))
+                || (v.Eligibility == VoteEligibility.MeetingAttendees
+                    && v.MeetingId != null
+                    && v.Meeting != null
+                    && v.Meeting.Attendees.Any(a => a.UserId == userId))
+            );
+        }
 
-        var userId = user.UserId!;
-
-        return q.Where(v =>
-               v.Eligibility == VoteEligibility.Public
-            || v.CreatedByUserId == userId
-            || (v.Eligibility == VoteEligibility.SpecificUsers
-                && v.EligibleUsers.Any(e => e.UserId == userId))
-            || (v.Eligibility == VoteEligibility.MeetingAttendees
-                && v.MeetingId != null
-                && v.Meeting!.Attendees.Any(a => a.UserId == userId))
-        );
+        return q.Where(v => v.Eligibility == VoteEligibility.Public);
     }
 
     internal static VoteSummaryDto MapSummary(VotePoll v, ICurrentUser user)

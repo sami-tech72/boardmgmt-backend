@@ -28,7 +28,8 @@ public sealed class SubmitBallotCommandHandler
             .Include(x => x.Options)
             .Include(x => x.Ballots) // needed to find/update the user's ballot + recompute results
             .Include(x => x.EligibleUsers)
-            .Include(x => x.Meeting)!.ThenInclude(m => m.Attendees)
+            .Include(x => x.Meeting)
+                .ThenInclude(m => m.Attendees)
             .FirstOrDefaultAsync(x => x.Id == r.VoteId, ct)
             ?? throw new KeyNotFoundException("Vote not found.");
 
@@ -40,7 +41,8 @@ public sealed class SubmitBallotCommandHandler
         {
             VoteEligibility.Public => true,
             VoteEligibility.SpecificUsers => v.EligibleUsers.Any(e => e.UserId == userId),
-            VoteEligibility.MeetingAttendees => v.MeetingId != null && v.Meeting!.Attendees.Any(a => a.UserId == userId),
+            VoteEligibility.MeetingAttendees => v.MeetingId != null && v.Meeting != null &&
+                v.Meeting.Attendees.Any(a => a.UserId == userId),
             _ => false
         };
         if (!eligible) throw new UnauthorizedAccessException("Not eligible to vote.");
