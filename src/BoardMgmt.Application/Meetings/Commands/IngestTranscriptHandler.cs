@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Net;
@@ -600,13 +601,70 @@ namespace BoardMgmt.Application.Meetings.Commands
 
             var fileId = trFile.GetProperty("id").GetString()!;
             var downloadUrl = trFile.GetProperty("download_url").GetString()!;
-            var vttUrl = $"{downloadUrl}?access_token={token}";
 
-            var vtt = await http.GetStringAsync(new Uri(vttUrl), ct);
+            var vtt = await DownloadZoomTranscriptAsync(http, token, downloadUrl, ct);
             if (string.IsNullOrWhiteSpace(vtt))
                 throw new InvalidOperationException("Zoom returned an empty transcript content.");
 
             return await SaveVtt(meeting, "Zoom", fileId, vtt, ct);
+        }
+
+        private async Task<string> DownloadZoomTranscriptAsync(HttpClient http, string token, string downloadUrl, CancellationToken ct)
+        {
+            if (string.IsNullOrWhiteSpace(downloadUrl))
+                throw new InvalidOperationException("Zoom recording download URL is missing.");
+
+            const int MaxAttempts = 3;
+
+            for (var attempt = 1; attempt <= MaxAttempts; attempt++)
+            {
+                try
+                {
+                    using var req = new HttpRequestMessage(HttpMethod.Get, $"{downloadUrl}?access_token={token}");
+                    req.Headers.Accept.Clear();
+                    req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/vtt"));
+                    req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/plain"));
+                    req.Version = HttpVersion.Version11;
+                    req.VersionPolicy = HttpVersionPolicy.RequestVersionOrLower;
+
+                    using var resp = await http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+                    resp.EnsureSuccessStatusCode();
+
+                    await using var stream = await resp.Content.ReadAsStreamAsync(ct);
+                    using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+                    return await reader.ReadToEndAsync(ct);
+                }
+                catch (TaskCanceledException ex) when (!ct.IsCancellationRequested && attempt < MaxAttempts)
+                {
+                    _logger.LogWarning(ex, "Transient cancellation while downloading Zoom transcript (attempt {Attempt}/{MaxAttempts}).", attempt, MaxAttempts);
+                    await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt - 1)), ct);
+                    continue;
+                }
+                catch (HttpRequestException ex) when (IsTransientStatusCode(ex.StatusCode) && attempt < MaxAttempts)
+                {
+                    _logger.LogWarning(ex, "Transient HTTP error while downloading Zoom transcript (attempt {Attempt}/{MaxAttempts}).", attempt, MaxAttempts);
+                    await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt - 1)), ct);
+                    continue;
+                }
+                catch (IOException ex) when (attempt < MaxAttempts)
+                {
+                    _logger.LogWarning(ex, "Transient I/O error while downloading Zoom transcript (attempt {Attempt}/{MaxAttempts}).", attempt, MaxAttempts);
+                    await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt - 1)), ct);
+                    continue;
+                }
+            }
+
+            throw new InvalidOperationException("Failed to download Zoom transcript after multiple attempts.");
+        }
+
+        private static bool IsTransientStatusCode(HttpStatusCode? statusCode)
+        {
+            if (!statusCode.HasValue)
+                return false;
+
+            return statusCode == HttpStatusCode.RequestTimeout
+                || statusCode == (HttpStatusCode)429
+                || (int)statusCode >= 500;
         }
 
         private static string SummarizeZoomError(string json)
