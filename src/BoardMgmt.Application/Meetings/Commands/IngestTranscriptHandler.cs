@@ -17,6 +17,7 @@ using BoardMgmt.Application.Common.Parsing; // SimpleVtt
 using BoardMgmt.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.Graph;
 using Microsoft.Graph.Models;
@@ -30,7 +31,8 @@ namespace BoardMgmt.Application.Meetings.Commands
         IHttpClientFactory httpFactory,
         IZoomTokenProvider zoomTokenProvider,
         IEmailSender email,
-        IOptions<AppOptions> app)
+        IOptions<AppOptions> app,
+        ILogger<IngestTranscriptHandler> logger)
         : IRequestHandler<IngestTranscriptCommand, int>
     {
         private readonly IAppDbContext _db = db;
@@ -39,6 +41,7 @@ namespace BoardMgmt.Application.Meetings.Commands
         private readonly IZoomTokenProvider _zoomTokenProvider = zoomTokenProvider;
         private readonly IEmailSender _email = email;
         private readonly AppOptions _app = app.Value ?? new AppOptions();
+        private readonly ILogger<IngestTranscriptHandler> _logger = logger;
         private const string GraphBetaBaseUrl = "https://graph.microsoft.com/beta";
 
         private static readonly Regex TeamsMeetingIdRegex = new(
@@ -116,31 +119,39 @@ namespace BoardMgmt.Application.Meetings.Commands
 
             requestInfo.PathParameters["baseurl"] = GraphBetaBaseUrl;
 
-            await using var stream = await _graph.RequestAdapter.SendPrimitiveAsync<System.IO.Stream>(
-                requestInfo,
-                cancellationToken: ct);
-
-            if (stream is null)
-                return null;
-
-            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
-            if (!doc.RootElement.TryGetProperty("value", out var valueElement) || valueElement.ValueKind != JsonValueKind.Array)
-                return null;
-
-            foreach (var element in valueElement.EnumerateArray())
+            try
             {
-                if (element.ValueKind != JsonValueKind.Object)
-                    continue;
+                await using var stream = await _graph.RequestAdapter.SendPrimitiveAsync<System.IO.Stream>(
+                    requestInfo,
+                    cancellationToken: ct);
 
-                if (element.TryGetProperty("id", out var idElement) && idElement.ValueKind == JsonValueKind.String)
+                if (stream is null)
+                    return null;
+
+                using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+                if (!doc.RootElement.TryGetProperty("value", out var valueElement) || valueElement.ValueKind != JsonValueKind.Array)
+                    return null;
+
+                foreach (var element in valueElement.EnumerateArray())
                 {
-                    var id = idElement.GetString();
-                    if (!string.IsNullOrWhiteSpace(id))
-                        return new TeamsTranscriptMetadata(id);
-                }
-            }
+                    if (element.ValueKind != JsonValueKind.Object)
+                        continue;
 
-            return null;
+                    if (element.TryGetProperty("id", out var idElement) && idElement.ValueKind == JsonValueKind.String)
+                    {
+                        var id = idElement.GetString();
+                        if (!string.IsNullOrWhiteSpace(id))
+                            return new TeamsTranscriptMetadata(id);
+                    }
+                }
+
+                return null;
+            }
+            catch (ServiceException ex)
+            {
+                LogGraphServiceException(ex, "Failed to list Teams transcripts", new { mailbox, onlineMeetingId });
+                throw;
+            }
         }
 
         private sealed record TeamsTranscriptMetadata(string Id);
@@ -159,9 +170,17 @@ namespace BoardMgmt.Application.Meetings.Commands
 
             requestInfo.PathParameters["baseurl"] = GraphBetaBaseUrl;
 
-            return _graph.RequestAdapter.SendPrimitiveAsync<System.IO.Stream>(
-                requestInfo,
-                cancellationToken: ct);
+            try
+            {
+                return _graph.RequestAdapter.SendPrimitiveAsync<System.IO.Stream>(
+                    requestInfo,
+                    cancellationToken: ct);
+            }
+            catch (ServiceException ex)
+            {
+                LogGraphServiceException(ex, "Failed to download Teams transcript content", new { mailbox, onlineMeetingId, transcriptId });
+                throw;
+            }
         }
 
         private async Task<string> ResolveTeamsOnlineMeetingIdAsync(string mailbox, Meeting meeting, CancellationToken ct)
@@ -193,6 +212,11 @@ namespace BoardMgmt.Application.Meetings.Commands
             {
                 throw new InvalidOperationException("Teams meeting not found when resolving online meeting id. Verify the mailbox and meeting id.", ex);
             }
+            catch (ServiceException ex)
+            {
+                LogGraphServiceException(ex, "Teams Graph API error while resolving online meeting id", new { mailbox, meeting.ExternalEventId });
+                throw;
+            }
 
             if (TryResolveOnlineMeetingIdFromJoinUrls(meeting, graphEvent, meetingResource, out var joinId))
                 return joinId!;
@@ -211,10 +235,30 @@ namespace BoardMgmt.Application.Meetings.Commands
             requestInfo.PathParameters["user%2Did"] = mailbox;
             requestInfo.PathParameters["event%2Did"] = eventId;
 
-            return _graph.RequestAdapter.SendAsync(
-                requestInfo,
-                OnlineMeeting.CreateFromDiscriminatorValue,
-                cancellationToken: ct);
+            try
+            {
+                return _graph.RequestAdapter.SendAsync(
+                    requestInfo,
+                    OnlineMeeting.CreateFromDiscriminatorValue,
+                    cancellationToken: ct);
+            }
+            catch (ServiceException ex)
+            {
+                LogGraphServiceException(ex, "Failed to retrieve Teams online meeting", new { mailbox, eventId });
+                throw;
+            }
+        }
+
+        private void LogGraphServiceException(ServiceException ex, string context, object? data = null)
+        {
+            if (data is not null)
+            {
+                _logger.LogError(ex, "{Context}. StatusCode: {StatusCode}. Data: {@Data}", context, ex.ResponseStatusCode, data);
+            }
+            else
+            {
+                _logger.LogError(ex, "{Context}. StatusCode: {StatusCode}", context, ex.ResponseStatusCode);
+            }
         }
 
         private static bool TryGetOnlineMeetingId(Event? graphEvent, out string? id)
