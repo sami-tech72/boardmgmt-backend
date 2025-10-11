@@ -566,10 +566,23 @@ namespace BoardMgmt.Application.Meetings.Commands
             return tr.Utterances.Count;
         }
 
+        private const int MaxUtteranceTextLength = 4000;
+
         private static TranscriptUtterance MapUtterance(Meeting meeting, Transcript tr, SimpleVtt.Cue cue)
         {
             string? userId = null;
             string? email = cue.SpeakerEmail;
+
+            var text = cue.Text;
+            if (text.Length > MaxUtteranceTextLength)
+            {
+                // Avoid exceeding the database limit imposed by TranscriptUtterance.Text (nvarchar(4000)).
+                // Keep as much of the speaker text as possible and add an ellipsis to indicate truncation.
+                const string ellipsis = "…";
+                var max = MaxUtteranceTextLength - ellipsis.Length;
+                if (max < 0) max = 0;
+                text = text[..max] + ellipsis;
+            }
 
             if (!string.IsNullOrWhiteSpace(email))
             {
@@ -593,7 +606,7 @@ namespace BoardMgmt.Application.Meetings.Commands
                 Transcript = tr,
                 Start = cue.Start,
                 End = cue.End,
-                Text = cue.Text,
+                Text = text,
                 SpeakerName = cue.SpeakerName,
                 SpeakerEmail = email,
                 UserId = userId
