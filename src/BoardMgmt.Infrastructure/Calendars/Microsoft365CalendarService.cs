@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -440,12 +441,55 @@ public sealed class Microsoft365CalendarService : ICalendarService
         }
 
         var message = ex.Message ?? string.Empty;
-        var body = ex.ResponseBody ?? string.Empty;
+        var body = GetResponseBody(ex);
 
         return message.Contains("OnlineMeetingTranscript.Read.All", StringComparison.OrdinalIgnoreCase)
             || message.Contains("OnlineMeetingTranscript.Read.Chat", StringComparison.OrdinalIgnoreCase)
             || body.Contains("OnlineMeetingTranscript.Read.All", StringComparison.OrdinalIgnoreCase)
             || body.Contains("OnlineMeetingTranscript.Read.Chat", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string GetResponseBody(ApiException ex)
+    {
+        try
+        {
+            var responseBodyProperty = ex.GetType().GetProperty("ResponseBody");
+            if (responseBodyProperty is not null)
+            {
+                var value = responseBodyProperty.GetValue(ex);
+                if (value is string text)
+                {
+                    return text;
+                }
+
+                if (value is Stream stream)
+                {
+                    if (stream.CanSeek)
+                    {
+                        var position = stream.Position;
+                        using var reader = new StreamReader(stream, leaveOpen: true);
+                        var content = reader.ReadToEnd();
+                        stream.Seek(position, SeekOrigin.Begin);
+                        return content;
+                    }
+
+                    using var reader = new StreamReader(stream, leaveOpen: true);
+                    return reader.ReadToEnd();
+                }
+            }
+
+            var responseContentProperty = ex.GetType().GetProperty("ResponseContent");
+            if (responseContentProperty?.GetValue(ex) is string content)
+            {
+                return content;
+            }
+        }
+        catch
+        {
+            // If reflection or stream access fails, fall back to an empty string.
+        }
+
+        return string.Empty;
     }
 
     private async Task<(string? meetingId, OnlineMeeting? meeting)> ResolveOnlineMeetingAsync(string mailbox, string eventId, Event? ev, CancellationToken ct)
