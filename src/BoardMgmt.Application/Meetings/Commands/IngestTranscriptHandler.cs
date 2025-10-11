@@ -89,13 +89,11 @@ namespace BoardMgmt.Application.Meetings.Commands
             var onlineMeetingId = await ResolveTeamsOnlineMeetingIdAsync(mailbox!, meeting, ct);
 
             // List transcripts (ONLINE MEETING scope)
-            var list = await GetTeamsTranscriptsAsync(mailbox!, onlineMeetingId, ct);
-
-            var tr = list?.Value?.FirstOrDefault()
+            var transcript = await GetTeamsTranscriptMetadataAsync(mailbox!, onlineMeetingId, ct)
                 ?? throw new InvalidOperationException("No transcript found for this Teams meeting. Ensure transcription was enabled.");
 
             // Download VTT
-            await using var stream = await DownloadTeamsTranscriptContentAsync(mailbox!, onlineMeetingId, tr.Id!, ct)
+            await using var stream = await DownloadTeamsTranscriptContentAsync(mailbox!, onlineMeetingId, transcript.Id, ct)
                 ?? throw new InvalidOperationException("Teams transcript download returned no content stream.");
 
             using var reader = new System.IO.StreamReader(stream);
@@ -103,10 +101,10 @@ namespace BoardMgmt.Application.Meetings.Commands
             if (string.IsNullOrWhiteSpace(vtt))
                 throw new InvalidOperationException("Teams returned an empty transcript content.");
 
-            return await SaveVtt(meeting, "Microsoft365", tr.Id!, vtt, ct);
+            return await SaveVtt(meeting, "Microsoft365", transcript.Id, vtt, ct);
         }
 
-        private Task<Microsoft.Graph.Users.Item.OnlineMeetings.Item.Transcripts.OnlineMeetingTranscriptsCollectionResponse?> GetTeamsTranscriptsAsync(
+        private async Task<TeamsTranscriptMetadata?> GetTeamsTranscriptMetadataAsync(
             string mailbox,
             string onlineMeetingId,
             CancellationToken ct)
@@ -118,11 +116,34 @@ namespace BoardMgmt.Application.Meetings.Commands
 
             requestInfo.PathParameters["baseurl"] = GraphBetaBaseUrl;
 
-            return _graph.RequestAdapter.SendAsync(
+            await using var stream = await _graph.RequestAdapter.SendPrimitiveAsync<System.IO.Stream>(
                 requestInfo,
-                Microsoft.Graph.Users.Item.OnlineMeetings.Item.Transcripts.OnlineMeetingTranscriptsCollectionResponse.CreateFromDiscriminatorValue,
                 cancellationToken: ct);
+
+            if (stream is null)
+                return null;
+
+            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+            if (!doc.RootElement.TryGetProperty("value", out var valueElement) || valueElement.ValueKind != JsonValueKind.Array)
+                return null;
+
+            foreach (var element in valueElement.EnumerateArray())
+            {
+                if (element.ValueKind != JsonValueKind.Object)
+                    continue;
+
+                if (element.TryGetProperty("id", out var idElement) && idElement.ValueKind == JsonValueKind.String)
+                {
+                    var id = idElement.GetString();
+                    if (!string.IsNullOrWhiteSpace(id))
+                        return new TeamsTranscriptMetadata(id);
+                }
+            }
+
+            return null;
         }
+
+        private sealed record TeamsTranscriptMetadata(string Id);
 
         private Task<System.IO.Stream?> DownloadTeamsTranscriptContentAsync(
             string mailbox,
