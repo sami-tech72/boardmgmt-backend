@@ -419,7 +419,9 @@ public sealed class Microsoft365CalendarService : ICalendarService
         var additionalData = new Dictionary<string, object?>
         {
             ["allowRecording"] = true,
-            ["recordAutomatically"] = true
+            ["recordAutomatically"] = true,
+            // Allow transcription so Teams can generate transcripts once the meeting starts.
+            ["allowTranscription"] = true
         };
 
         if (includeTranscription)
