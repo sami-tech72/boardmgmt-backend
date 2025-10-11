@@ -41,8 +41,8 @@ namespace BoardMgmt.Application.Meetings.Commands
         private readonly AppOptions _app = app.Value ?? new AppOptions();
 
         private static readonly Regex TeamsMeetingIdRegex = new(
-            @"19(?:%3a|:)meeting[^\s/?\"'<>]+",
-            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+                     @"19(?:%3a|:)meeting[^\s/?""'<>]+",
+                     RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         public async Task<int> Handle(IngestTranscriptCommand request, CancellationToken ct)
         {
