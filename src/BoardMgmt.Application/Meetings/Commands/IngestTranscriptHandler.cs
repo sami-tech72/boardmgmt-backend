@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -615,12 +616,15 @@ namespace BoardMgmt.Application.Meetings.Commands
                 throw new InvalidOperationException("Zoom recording download URL is missing.");
 
             const int MaxAttempts = 3;
+            Exception? lastError = null;
 
             for (var attempt = 1; attempt <= MaxAttempts; attempt++)
             {
                 try
                 {
-                    using var req = new HttpRequestMessage(HttpMethod.Get, $"{downloadUrl}?access_token={token}");
+                    var requestUrl = BuildZoomTranscriptDownloadUrl(downloadUrl, token);
+
+                    using var req = new HttpRequestMessage(HttpMethod.Get, requestUrl);
                     req.Headers.Accept.Clear();
                     req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/vtt"));
                     req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/plain"));
@@ -634,27 +638,64 @@ namespace BoardMgmt.Application.Meetings.Commands
                     using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
                     return await reader.ReadToEndAsync(ct);
                 }
-                catch (TaskCanceledException ex) when (!ct.IsCancellationRequested && attempt < MaxAttempts)
+                catch (TaskCanceledException ex) when (!ct.IsCancellationRequested)
                 {
+                    lastError = ex;
+                    if (attempt == MaxAttempts)
+                        break;
+
                     _logger.LogWarning(ex, "Transient cancellation while downloading Zoom transcript (attempt {Attempt}/{MaxAttempts}).", attempt, MaxAttempts);
-                    await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt - 1)), ct);
+                    await Task.Delay(GetZoomDownloadRetryDelay(attempt), ct);
                     continue;
                 }
                 catch (HttpRequestException ex) when (IsTransientStatusCode(ex.StatusCode) && attempt < MaxAttempts)
                 {
                     _logger.LogWarning(ex, "Transient HTTP error while downloading Zoom transcript (attempt {Attempt}/{MaxAttempts}).", attempt, MaxAttempts);
-                    await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt - 1)), ct);
+                    await Task.Delay(GetZoomDownloadRetryDelay(attempt), ct);
                     continue;
                 }
-                catch (IOException ex) when (attempt < MaxAttempts)
+                catch (HttpRequestException ex) when (IsTransientStatusCode(ex.StatusCode))
+                {
+                    lastError = ex;
+                    break;
+                }
+                catch (IOException ex) when (IsOperationAborted(ex) && attempt < MaxAttempts)
                 {
                     _logger.LogWarning(ex, "Transient I/O error while downloading Zoom transcript (attempt {Attempt}/{MaxAttempts}).", attempt, MaxAttempts);
-                    await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, attempt - 1)), ct);
+                    await Task.Delay(GetZoomDownloadRetryDelay(attempt), ct);
                     continue;
+                }
+                catch (IOException ex) when (IsOperationAborted(ex))
+                {
+                    lastError = ex;
+                    break;
                 }
             }
 
-            throw new InvalidOperationException("Failed to download Zoom transcript after multiple attempts.");
+            throw new InvalidOperationException("Failed to download Zoom transcript after multiple attempts.", lastError);
+        }
+
+        private static TimeSpan GetZoomDownloadRetryDelay(int attempt)
+            => TimeSpan.FromSeconds(Math.Pow(2, attempt - 1));
+
+        private static string BuildZoomTranscriptDownloadUrl(string downloadUrl, string token)
+        {
+            if (downloadUrl.Contains("access_token=", StringComparison.OrdinalIgnoreCase))
+                return downloadUrl;
+
+            var separator = downloadUrl.Contains('?') ? '&' : '?';
+            return $"{downloadUrl}{separator}access_token={Uri.EscapeDataString(token)}";
+        }
+
+        private static bool IsOperationAborted(IOException ex)
+        {
+            if (ex is null)
+                return false;
+
+            if (ex.HResult == unchecked((int)0x800703E3))
+                return true;
+
+            return ex.InnerException is SocketException { ErrorCode: 995 };
         }
 
         private static bool IsTransientStatusCode(HttpStatusCode? statusCode)
