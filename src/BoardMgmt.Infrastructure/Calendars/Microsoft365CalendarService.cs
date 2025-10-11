@@ -468,7 +468,7 @@ public sealed class Microsoft365CalendarService : ICalendarService
                     {
                         var position = stream.Position;
                         using var seekableReader = new StreamReader(stream, leaveOpen: true);
-                        var text = seekableReader.ReadToEnd();
+                         text = seekableReader.ReadToEnd();
                         stream.Seek(position, SeekOrigin.Begin);
                         return text;
                     }
