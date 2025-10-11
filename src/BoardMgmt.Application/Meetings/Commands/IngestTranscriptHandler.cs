@@ -39,6 +39,7 @@ namespace BoardMgmt.Application.Meetings.Commands
         private readonly IZoomTokenProvider _zoomTokenProvider = zoomTokenProvider;
         private readonly IEmailSender _email = email;
         private readonly AppOptions _app = app.Value ?? new AppOptions();
+        private const string GraphBetaBaseUrl = "https://graph.microsoft.com/beta";
 
         private static readonly Regex TeamsMeetingIdRegex = new(
                      @"19(?:%3a|:)meeting[^\s/?""'<>]+",
@@ -88,20 +89,13 @@ namespace BoardMgmt.Application.Meetings.Commands
             var onlineMeetingId = await ResolveTeamsOnlineMeetingIdAsync(mailbox!, meeting, ct);
 
             // List transcripts (ONLINE MEETING scope)
-            var list = await _graph.Users[mailbox]
-                .OnlineMeetings[onlineMeetingId]
-                .Transcripts
-                .GetAsync(cancellationToken: ct);
+            var list = await GetTeamsTranscriptsAsync(mailbox!, onlineMeetingId, ct);
 
             var tr = list?.Value?.FirstOrDefault()
                 ?? throw new InvalidOperationException("No transcript found for this Teams meeting. Ensure transcription was enabled.");
 
             // Download VTT
-            using var stream = await _graph.Users[mailbox]
-                .OnlineMeetings[onlineMeetingId]
-                .Transcripts[tr.Id!]
-                .Content
-                .GetAsync(cancellationToken: ct)
+            await using var stream = await DownloadTeamsTranscriptContentAsync(mailbox!, onlineMeetingId, tr.Id!, ct)
                 ?? throw new InvalidOperationException("Teams transcript download returned no content stream.");
 
             using var reader = new System.IO.StreamReader(stream);
@@ -110,6 +104,43 @@ namespace BoardMgmt.Application.Meetings.Commands
                 throw new InvalidOperationException("Teams returned an empty transcript content.");
 
             return await SaveVtt(meeting, "Microsoft365", tr.Id!, vtt, ct);
+        }
+
+        private Task<Microsoft.Graph.Users.Item.OnlineMeetings.Item.Transcripts.OnlineMeetingTranscriptsCollectionResponse?> GetTeamsTranscriptsAsync(
+            string mailbox,
+            string onlineMeetingId,
+            CancellationToken ct)
+        {
+            var requestInfo = _graph.Users[mailbox]
+                .OnlineMeetings[onlineMeetingId]
+                .Transcripts
+                .ToGetRequestInformation();
+
+            requestInfo.PathParameters["baseurl"] = GraphBetaBaseUrl;
+
+            return _graph.RequestAdapter.SendAsync(
+                requestInfo,
+                Microsoft.Graph.Users.Item.OnlineMeetings.Item.Transcripts.OnlineMeetingTranscriptsCollectionResponse.CreateFromDiscriminatorValue,
+                cancellationToken: ct);
+        }
+
+        private Task<System.IO.Stream?> DownloadTeamsTranscriptContentAsync(
+            string mailbox,
+            string onlineMeetingId,
+            string transcriptId,
+            CancellationToken ct)
+        {
+            var requestInfo = _graph.Users[mailbox]
+                .OnlineMeetings[onlineMeetingId]
+                .Transcripts[transcriptId]
+                .Content
+                .ToGetRequestInformation();
+
+            requestInfo.PathParameters["baseurl"] = GraphBetaBaseUrl;
+
+            return _graph.RequestAdapter.SendPrimitiveAsync<System.IO.Stream>(
+                requestInfo,
+                cancellationToken: ct);
         }
 
         private async Task<string> ResolveTeamsOnlineMeetingIdAsync(string mailbox, Meeting meeting, CancellationToken ct)
