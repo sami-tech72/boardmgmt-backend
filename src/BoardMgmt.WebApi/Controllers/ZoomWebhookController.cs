@@ -2,6 +2,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using BoardMgmt.Application.Meetings.Commands;
 using BoardMgmt.Domain.Entities;
 using BoardMgmt.Application.Common.Interfaces;
@@ -11,6 +12,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Hosting;
 
 namespace BoardMgmt.WebApi.Controllers
 {
@@ -23,16 +25,19 @@ namespace BoardMgmt.WebApi.Controllers
         private readonly string _secretToken;
         private readonly ILogger<ZoomWebhookController> _logger;
         private readonly bool _disableSigValidation;
+        private readonly IHostApplicationLifetime _appLifetime;
 
         public ZoomWebhookController(
             IMediator mediator,
             IAppDbContext db,
             IConfiguration config,
-            ILogger<ZoomWebhookController> logger)
+            ILogger<ZoomWebhookController> logger,
+            IHostApplicationLifetime appLifetime)
         {
             _mediator = mediator;
             _db = db;
             _logger = logger;
+            _appLifetime = appLifetime;
 
             _secretToken = config["Zoom:WebhookSecretToken"]
                 ?? throw new InvalidOperationException("Zoom:WebhookSecretToken not configured.");
@@ -132,7 +137,8 @@ namespace BoardMgmt.WebApi.Controllers
                     try
                     {
                         _logger.LogInformation("Starting transcript ingest. MeetingId={MeetingId}", ourMeeting.Id);
-                        await _mediator.Send(new IngestTranscriptCommand(ourMeeting.Id), ct);
+                        using var ingestCts = CancellationTokenSource.CreateLinkedTokenSource(_appLifetime.ApplicationStopping);
+                        await _mediator.Send(new IngestTranscriptCommand(ourMeeting.Id), ingestCts.Token);
                         _logger.LogInformation("Transcript ingest finished. MeetingId={MeetingId}", ourMeeting.Id);
                     }
                     catch (Exception exIngest)
