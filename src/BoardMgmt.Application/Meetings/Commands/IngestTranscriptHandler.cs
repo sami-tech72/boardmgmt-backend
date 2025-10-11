@@ -23,7 +23,9 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.Graph;
 using Microsoft.Graph.Models;
+using Microsoft.Graph.Models.ODataErrors;
 using Microsoft.Kiota.Abstractions;
+using Microsoft.Kiota.Abstractions.Serialization;
 
 namespace BoardMgmt.Application.Meetings.Commands
 {
@@ -45,6 +47,11 @@ namespace BoardMgmt.Application.Meetings.Commands
         private readonly AppOptions _app = app.Value ?? new AppOptions();
         private readonly ILogger<IngestTranscriptHandler> _logger = logger;
         private const string GraphBetaBaseUrl = "https://graph.microsoft.com/beta";
+        private static readonly Dictionary<string, ParsableFactory<IParsable>> GraphErrorMapping = new()
+        {
+            {"4XX", ODataError.CreateFromDiscriminatorValue},
+            {"5XX", ODataError.CreateFromDiscriminatorValue}
+        };
 
         private static readonly Regex TeamsMeetingIdRegex = new(
                      @"19(?:%3a|:)meeting[^\s/?""'<>]+",
@@ -94,8 +101,17 @@ namespace BoardMgmt.Application.Meetings.Commands
             var onlineMeetingId = await ResolveTeamsOnlineMeetingIdAsync(mailbox!, meeting, ct);
 
             // List transcripts (ONLINE MEETING scope)
-            var transcript = await GetTeamsTranscriptMetadataAsync(mailbox!, onlineMeetingId, ct)
-                ?? throw new InvalidOperationException("No transcript found for this Teams meeting. Ensure transcription was enabled.");
+            TeamsTranscriptMetadata? transcript;
+            try
+            {
+                transcript = await GetTeamsTranscriptMetadataAsync(mailbox!, onlineMeetingId, ct);
+            }
+            catch (ServiceException ex) when (IsBadRequest(ex))
+            {
+                throw new InvalidOperationException($"Microsoft 365 reported that the transcript is not available yet. Wait for processing to finish and try again. Details: {GetGraphErrorDetail(ex)}", ex);
+            }
+
+            transcript ??= throw new InvalidOperationException("No transcript found for this Teams meeting. Ensure transcription was enabled.");
 
             // Download VTT
             await using var stream = await DownloadTeamsTranscriptContentAsync(mailbox!, onlineMeetingId, transcript.Id, ct)
@@ -125,6 +141,7 @@ namespace BoardMgmt.Application.Meetings.Commands
             {
                 await using var stream = await _graph.RequestAdapter.SendPrimitiveAsync<System.IO.Stream>(
                     requestInfo,
+                    GraphErrorMapping,
                     cancellationToken: ct);
 
                 if (stream is null)
@@ -176,6 +193,7 @@ namespace BoardMgmt.Application.Meetings.Commands
             {
                 return _graph.RequestAdapter.SendPrimitiveAsync<System.IO.Stream>(
                     requestInfo,
+                    GraphErrorMapping,
                     cancellationToken: ct);
             }
             catch (ServiceException ex)
@@ -261,6 +279,21 @@ namespace BoardMgmt.Application.Meetings.Commands
             {
                 _logger.LogError(ex, "{Context}. StatusCode: {StatusCode}", context, ex.ResponseStatusCode);
             }
+        }
+
+        private static bool IsBadRequest(ServiceException ex)
+            => ex.ResponseStatusCode == (int)HttpStatusCode.BadRequest
+               || string.Equals(ex.Error?.Code, "BadRequest", StringComparison.OrdinalIgnoreCase);
+
+        private static string GetGraphErrorDetail(ServiceException ex)
+        {
+            if (!string.IsNullOrWhiteSpace(ex.Error?.Message))
+                return ex.Error.Message;
+
+            if (!string.IsNullOrWhiteSpace(ex.Message))
+                return ex.Message;
+
+            return "BadRequest";
         }
 
         private static bool TryGetOnlineMeetingId(Event? graphEvent, out string? id)
