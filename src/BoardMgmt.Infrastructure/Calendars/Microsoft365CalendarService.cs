@@ -373,19 +373,27 @@ public sealed class Microsoft365CalendarService : ICalendarService
 
                 resolvedMeeting ??= await GetEventOnlineMeetingAsync(mailbox, eventId, ct);
 
-                var patch = new OnlineMeeting
-                {
-                    AdditionalData = new Dictionary<string, object?>
-                    {
-                        ["allowRecording"] = true,
-                        ["recordAutomatically"] = true,
-                        ["isTranscriptionEnabled"] = true
-                    }
-                };
+                var patch = BuildOnlineMeetingDefaultsPatch(includeTranscription: true);
 
-                await _graph.Users[mailbox]
-                    .OnlineMeetings[onlineMeetingId]
-                    .PatchAsync(patch, cancellationToken: ct);
+                try
+                {
+                    await _graph.Users[mailbox]
+                        .OnlineMeetings[onlineMeetingId]
+                        .PatchAsync(patch, cancellationToken: ct);
+                }
+                catch (ApiException ex) when (IsMissingTranscriptPermission(ex))
+                {
+                    _logger.LogWarning(
+                        ex,
+                        "Unable to enable Teams transcription for event {EventId} because the app registration lacks the required Graph permissions. Falling back to recording-only defaults.",
+                        eventId);
+
+                    var fallbackPatch = BuildOnlineMeetingDefaultsPatch(includeTranscription: false);
+
+                    await _graph.Users[mailbox]
+                        .OnlineMeetings[onlineMeetingId]
+                        .PatchAsync(fallbackPatch, cancellationToken: ct);
+                }
                 return resolvedMeeting;
             }
             catch (ApiException ex) when (attempt < 5)
@@ -403,6 +411,41 @@ public sealed class Microsoft365CalendarService : ICalendarService
             delayMs = Math.Min(delayMs * 2, 2000);
         }
         return resolvedMeeting;
+    }
+
+    private static OnlineMeeting BuildOnlineMeetingDefaultsPatch(bool includeTranscription)
+    {
+        var additionalData = new Dictionary<string, object?>
+        {
+            ["allowRecording"] = true,
+            ["recordAutomatically"] = true
+        };
+
+        if (includeTranscription)
+        {
+            additionalData["isTranscriptionEnabled"] = true;
+        }
+
+        return new OnlineMeeting
+        {
+            AdditionalData = additionalData
+        };
+    }
+
+    private static bool IsMissingTranscriptPermission(ApiException ex)
+    {
+        if (ex.ResponseStatusCode != HttpStatusCode.Forbidden && ex.ResponseStatusCode != HttpStatusCode.InternalServerError)
+        {
+            return false;
+        }
+
+        var message = ex.Message ?? string.Empty;
+        var body = ex.ResponseBody ?? string.Empty;
+
+        return message.Contains("OnlineMeetingTranscript.Read.All", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("OnlineMeetingTranscript.Read.Chat", StringComparison.OrdinalIgnoreCase)
+            || body.Contains("OnlineMeetingTranscript.Read.All", StringComparison.OrdinalIgnoreCase)
+            || body.Contains("OnlineMeetingTranscript.Read.Chat", StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task<(string? meetingId, OnlineMeeting? meeting)> ResolveOnlineMeetingAsync(string mailbox, string eventId, Event? ev, CancellationToken ct)
