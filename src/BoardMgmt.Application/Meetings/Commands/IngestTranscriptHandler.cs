@@ -615,7 +615,7 @@ namespace BoardMgmt.Application.Meetings.Commands
             if (string.IsNullOrWhiteSpace(downloadUrl))
                 throw new InvalidOperationException("Zoom recording download URL is missing.");
 
-            const int MaxAttempts = 3;
+            const int MaxAttempts = 5;
             Exception? lastError = null;
 
             for (var attempt = 1; attempt <= MaxAttempts; attempt++)
@@ -628,6 +628,9 @@ namespace BoardMgmt.Application.Meetings.Commands
                     req.Headers.Accept.Clear();
                     req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/vtt"));
                     req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/plain"));
+                    req.Headers.AcceptEncoding.Clear();
+                    req.Headers.AcceptEncoding.Add(new StringWithQualityHeaderValue("identity"));
+                    req.Headers.ConnectionClose = true;
                     req.Version = HttpVersion.Version11;
                     req.VersionPolicy = HttpVersionPolicy.RequestVersionOrLower;
 
@@ -638,8 +641,23 @@ namespace BoardMgmt.Application.Meetings.Commands
                     using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
                     return await reader.ReadToEndAsync(ct);
                 }
-                catch (TaskCanceledException ex) when (!ct.IsCancellationRequested)
+                catch (TaskCanceledException ex)
                 {
+                    if (ct.IsCancellationRequested)
+                        throw;
+
+                    var ioEx = ex.InnerException as IOException;
+                    if (ioEx is not null && IsOperationAborted(ioEx))
+                    {
+                        lastError = ioEx;
+                        if (attempt == MaxAttempts)
+                            break;
+
+                        _logger.LogWarning(ioEx, "Transient I/O cancellation while downloading Zoom transcript (attempt {Attempt}/{MaxAttempts}).", attempt, MaxAttempts);
+                        await Task.Delay(GetZoomDownloadRetryDelay(attempt), ct);
+                        continue;
+                    }
+
                     lastError = ex;
                     if (attempt == MaxAttempts)
                         break;
