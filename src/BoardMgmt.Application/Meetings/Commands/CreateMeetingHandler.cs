@@ -41,7 +41,8 @@ public class CreateMeetingHandler : IRequestHandler<CreateMeetingCommand, Guid>
             Location = string.IsNullOrWhiteSpace(request.Location) ? "TBD" : request.Location.Trim(),
             Status = MeetingStatus.Scheduled,
             ExternalCalendar = request.Provider, // "Microsoft365" or "Zoom"
-            ExternalCalendarMailbox = request.HostIdentity // M365 mailbox or Zoom host email (optional)
+            ExternalCalendarMailbox = request.HostIdentity, // M365 mailbox or Zoom host email (optional)
+            HostIdentity = request.HostIdentity
         };
 
 
