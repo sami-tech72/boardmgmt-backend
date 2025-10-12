@@ -196,9 +196,14 @@ namespace BoardMgmt.Application.Meetings.Commands
         {
             if (_db is DbContext dbContext)
             {
-                await dbContext.Set<TranscriptUtterance>()
+                var utterances = await dbContext.Set<TranscriptUtterance>()
                     .Where(u => u.TranscriptId == transcript.Id)
-                    .ExecuteDeleteAsync(ct);
+                    .ToListAsync(ct);
+
+                if (utterances.Count > 0)
+                {
+                    dbContext.Set<TranscriptUtterance>().RemoveRange(utterances);
+                }
 
                 foreach (var entry in dbContext.ChangeTracker.Entries<TranscriptUtterance>()
                              .Where(e => e.Entity.TranscriptId == transcript.Id))
