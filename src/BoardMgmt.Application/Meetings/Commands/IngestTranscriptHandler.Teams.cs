@@ -108,15 +108,15 @@ namespace BoardMgmt.Application.Meetings.Commands
                     .ToGetRequestInformation(),
                 async requestInfo =>
                 {
-                    await using var stream = await _graph.RequestAdapter.SendPrimitiveAsync<Stream>(
+                    var json = await _graph.RequestAdapter.SendPrimitiveAsync<string>(
                         requestInfo,
                         GraphErrorMapping,
                         cancellationToken: ct);
 
-                    if (stream is null)
+                    if (string.IsNullOrWhiteSpace(json))
                         return null;
 
-                    using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+                    using var doc = JsonDocument.Parse(json);
                     if (!doc.RootElement.TryGetProperty("value", out var valueElement) || valueElement.ValueKind != JsonValueKind.Array)
                         return null;
 
