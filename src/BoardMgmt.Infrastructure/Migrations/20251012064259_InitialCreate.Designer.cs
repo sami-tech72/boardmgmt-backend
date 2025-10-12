@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace BoardMgmt.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20251011105232_InitialCreate")]
+    [Migration("20251012064259_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -1331,7 +1331,7 @@ namespace BoardMgmt.Infrastructure.Migrations
             modelBuilder.Entity("BoardMgmt.Domain.Entities.Transcript", b =>
                 {
                     b.HasOne("BoardMgmt.Domain.Entities.Meeting", "Meeting")
-                        .WithMany()
+                        .WithMany("Transcripts")
                         .HasForeignKey("MeetingId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -1503,6 +1503,8 @@ namespace BoardMgmt.Infrastructure.Migrations
                     b.Navigation("Attendees");
 
                     b.Navigation("Documents");
+
+                    b.Navigation("Transcripts");
 
                     b.Navigation("Votes");
                 });

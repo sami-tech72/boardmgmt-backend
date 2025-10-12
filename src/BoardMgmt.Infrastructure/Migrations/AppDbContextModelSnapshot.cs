@@ -1328,7 +1328,7 @@ namespace BoardMgmt.Infrastructure.Migrations
             modelBuilder.Entity("BoardMgmt.Domain.Entities.Transcript", b =>
                 {
                     b.HasOne("BoardMgmt.Domain.Entities.Meeting", "Meeting")
-                        .WithMany()
+                        .WithMany("Transcripts")
                         .HasForeignKey("MeetingId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -1500,6 +1500,8 @@ namespace BoardMgmt.Infrastructure.Migrations
                     b.Navigation("Attendees");
 
                     b.Navigation("Documents");
+
+                    b.Navigation("Transcripts");
 
                     b.Navigation("Votes");
                 });
