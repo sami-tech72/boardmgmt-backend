@@ -61,6 +61,10 @@ namespace BoardMgmt.Application.Meetings.Commands
         {
             throw new InvalidOperationException($"Microsoft 365 reported an internal error while retrieving the Teams transcript. Wait for processing to finish and try again. Details: {GetGraphErrorDetail(ex)}", ex);
         }
+        catch (ServiceException ex)
+        {
+            throw new InvalidOperationException($"Microsoft 365 returned an unexpected error while retrieving the Teams transcript metadata. Details: {GetGraphErrorDetail(ex)}", ex);
+        }
 
         if (transcript is null)
             throw new InvalidOperationException("No transcript found for this Teams meeting. Ensure transcription was enabled.");
@@ -73,6 +77,10 @@ namespace BoardMgmt.Application.Meetings.Commands
         catch (ServiceException ex) when (IsTransientGraphServerError(ex))
         {
             throw new InvalidOperationException($"Microsoft 365 reported an internal error while downloading the Teams transcript content. Wait for processing to finish and try again. Details: {GetGraphErrorDetail(ex)}", ex);
+        }
+        catch (ServiceException ex)
+        {
+            throw new InvalidOperationException($"Microsoft 365 returned an unexpected error while downloading the Teams transcript content. Details: {GetGraphErrorDetail(ex)}", ex);
         }
 
         await using var contentStream = stream
