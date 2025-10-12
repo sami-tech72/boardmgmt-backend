@@ -25,6 +25,8 @@ public class Meeting : AuditableEntity
 
     public List<VotePoll> Votes { get; set; } = new();
 
+    public ICollection<Transcript> Transcripts { get; set; } = new List<Transcript>();
+
     [MaxLength(256)]
     public string? ExternalCalendar { get; set; }
 
