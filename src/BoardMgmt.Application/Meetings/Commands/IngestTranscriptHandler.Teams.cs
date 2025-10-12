@@ -20,7 +20,9 @@ namespace BoardMgmt.Application.Meetings.Commands
 {
     public sealed partial class IngestTranscriptHandler
     {
+    private const string GraphV1BaseUrl = "https://graph.microsoft.com/v1.0";
     private const string GraphBetaBaseUrl = "https://graph.microsoft.com/beta";
+    private static readonly string[] TranscriptApiBaseUrls = { GraphV1BaseUrl, GraphBetaBaseUrl };
 
     private static readonly Dictionary<string, ParsableFactory<IParsable>> GraphErrorMapping = new()
     {
@@ -75,74 +77,75 @@ namespace BoardMgmt.Application.Meetings.Commands
         string onlineMeetingId,
         CancellationToken ct)
     {
-        var requestInfo = _graph.Users[mailbox]
-            .OnlineMeetings[onlineMeetingId]
-            .Transcripts
-            .ToGetRequestInformation();
-
-        requestInfo.PathParameters["baseurl"] = GraphBetaBaseUrl;
-
         try
         {
-            await using var stream = await _graph.RequestAdapter.SendPrimitiveAsync<Stream>(
-                requestInfo,
-                GraphErrorMapping,
-                cancellationToken: ct);
+            return await ExecuteTranscriptRequestWithFallbackAsync(
+                () => _graph.Users[mailbox]
+                    .OnlineMeetings[onlineMeetingId]
+                    .Transcripts
+                    .ToGetRequestInformation(),
+                async requestInfo =>
+                {
+                    await using var stream = await _graph.RequestAdapter.SendPrimitiveAsync<Stream>(
+                        requestInfo,
+                        GraphErrorMapping,
+                        cancellationToken: ct);
 
-            if (stream is null)
-                return null;
+                    if (stream is null)
+                        return null;
 
-            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
-            if (!doc.RootElement.TryGetProperty("value", out var valueElement) || valueElement.ValueKind != JsonValueKind.Array)
-                return null;
+                    using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+                    if (!doc.RootElement.TryGetProperty("value", out var valueElement) || valueElement.ValueKind != JsonValueKind.Array)
+                        return null;
 
-            var transcripts = new List<TeamsTranscriptMetadata>();
+                    var transcripts = new List<TeamsTranscriptMetadata>();
 
-            foreach (var element in valueElement.EnumerateArray())
-            {
-                if (element.ValueKind != JsonValueKind.Object)
-                    continue;
+                    foreach (var element in valueElement.EnumerateArray())
+                    {
+                        if (element.ValueKind != JsonValueKind.Object)
+                            continue;
 
-                var metadata = TryParseTeamsTranscriptMetadata(element);
-                if (metadata is not null)
-                    transcripts.Add(metadata);
-            }
+                        var metadata = TryParseTeamsTranscriptMetadata(element);
+                        if (metadata is not null)
+                            transcripts.Add(metadata);
+                    }
 
-            if (transcripts.Count == 0)
-            {
-                _logger.LogInformation(
-                    "Teams transcript list returned no entries. Mailbox={Mailbox} OnlineMeetingId={OnlineMeetingId}",
-                    mailbox,
-                    onlineMeetingId);
-                return null;
-            }
+                    if (transcripts.Count == 0)
+                    {
+                        _logger.LogInformation(
+                            "Teams transcript list returned no entries. Mailbox={Mailbox} OnlineMeetingId={OnlineMeetingId}",
+                            mailbox,
+                            onlineMeetingId);
+                        return null;
+                    }
 
-            var ready = transcripts
-                .Where(t => IsTranscriptReady(t.Status))
-                .OrderByDescending(t => t.CreatedUtc ?? DateTimeOffset.MinValue)
-                .ToList();
+                    var ready = transcripts
+                        .Where(t => IsTranscriptReady(t.Status))
+                        .OrderByDescending(t => t.CreatedUtc ?? DateTimeOffset.MinValue)
+                        .ToList();
 
-            TeamsTranscriptMetadata selected;
+                    TeamsTranscriptMetadata selected;
 
-            if (ready.Count > 0)
-            {
-                selected = ready[0];
-            }
-            else
-            {
-                selected = transcripts
-                    .OrderByDescending(t => t.CreatedUtc ?? DateTimeOffset.MinValue)
-                    .First();
-            }
+                    if (ready.Count > 0)
+                    {
+                        selected = ready[0];
+                    }
+                    else
+                    {
+                        selected = transcripts
+                            .OrderByDescending(t => t.CreatedUtc ?? DateTimeOffset.MinValue)
+                            .First();
+                    }
 
-            _logger.LogInformation(
-                "Selected Teams transcript {TranscriptId}. Status={Status} CreatedUtc={CreatedUtc}. TotalTranscripts={Count}",
-                selected.Id,
-                string.IsNullOrWhiteSpace(selected.Status) ? "(unknown)" : selected.Status,
-                selected.CreatedUtc?.ToString("O") ?? "(unknown)",
-                transcripts.Count);
+                    _logger.LogInformation(
+                        "Selected Teams transcript {TranscriptId}. Status={Status} CreatedUtc={CreatedUtc}. TotalTranscripts={Count}",
+                        selected.Id,
+                        string.IsNullOrWhiteSpace(selected.Status) ? "(unknown)" : selected.Status,
+                        selected.CreatedUtc?.ToString("O") ?? "(unknown)",
+                        transcripts.Count);
 
-            return selected;
+                    return selected;
+                });
         }
         catch (ServiceException ex)
         {
@@ -227,32 +230,80 @@ namespace BoardMgmt.Application.Meetings.Commands
 
     private sealed record TeamsTranscriptMetadata(string Id, DateTimeOffset? CreatedUtc, string? Status);
 
-    private Task<Stream?> DownloadTeamsTranscriptContentAsync(
+    private async Task<Stream?> DownloadTeamsTranscriptContentAsync(
         string mailbox,
         string onlineMeetingId,
         string transcriptId,
         CancellationToken ct)
     {
-        var requestInfo = _graph.Users[mailbox]
-            .OnlineMeetings[onlineMeetingId]
-            .Transcripts[transcriptId]
-            .Content
-            .ToGetRequestInformation();
-
-        requestInfo.PathParameters["baseurl"] = GraphBetaBaseUrl;
-
         try
         {
-            return _graph.RequestAdapter.SendPrimitiveAsync<Stream>(
-                requestInfo,
-                GraphErrorMapping,
-                cancellationToken: ct);
+            return await ExecuteTranscriptRequestWithFallbackAsync(
+                () => _graph.Users[mailbox]
+                    .OnlineMeetings[onlineMeetingId]
+                    .Transcripts[transcriptId]
+                    .Content
+                    .ToGetRequestInformation(),
+                requestInfo => _graph.RequestAdapter.SendPrimitiveAsync<Stream>(
+                    requestInfo,
+                    GraphErrorMapping,
+                    cancellationToken: ct));
         }
         catch (ServiceException ex)
         {
             LogGraphServiceException(ex, "Failed to download Teams transcript content", new { mailbox, onlineMeetingId, transcriptId });
             throw;
         }
+    }
+
+    private async Task<T?> ExecuteTranscriptRequestWithFallbackAsync<T>(
+        Func<RequestInformation> buildRequest,
+        Func<RequestInformation, Task<T?>> sendAsync)
+    {
+        ServiceException? fallbackTrigger = null;
+
+        foreach (var baseUrl in TranscriptApiBaseUrls)
+        {
+            var requestInfo = buildRequest();
+            requestInfo.PathParameters["baseurl"] = baseUrl;
+
+            try
+            {
+                return await sendAsync(requestInfo);
+            }
+            catch (ServiceException ex) when (baseUrl == GraphV1BaseUrl && ShouldRetryTranscriptRequest(ex))
+            {
+                fallbackTrigger = ex;
+                _logger.LogDebug(
+                    ex,
+                    "Retrying Teams transcript request using beta endpoint because v1.0 returned StatusCode={StatusCode}. Detail: {Detail}",
+                    ex.ResponseStatusCode,
+                    GetGraphErrorDetail(ex));
+                continue;
+            }
+        }
+
+        if (fallbackTrigger is not null)
+        {
+            throw fallbackTrigger;
+        }
+
+        return default;
+    }
+
+    private static bool ShouldRetryTranscriptRequest(ServiceException ex)
+    {
+        if (ex.ResponseStatusCode == (int)HttpStatusCode.NotFound)
+        {
+            return true;
+        }
+
+        if (ex.ResponseStatusCode == (int)HttpStatusCode.BadRequest)
+        {
+            return true;
+        }
+
+        return false;
     }
 
     private async Task<string> ResolveTeamsOnlineMeetingIdAsync(string mailbox, Meeting meeting, CancellationToken ct)
