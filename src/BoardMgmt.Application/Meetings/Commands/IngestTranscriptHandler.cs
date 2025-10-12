@@ -1023,8 +1023,11 @@ namespace BoardMgmt.Application.Meetings.Commands
 
             if (existing != null)
             {
-                _db.Set<TranscriptUtterance>().RemoveRange(
-                    _db.Set<TranscriptUtterance>().Where(u => u.TranscriptId == existing.Id));
+                if (existing.Utterances.Count > 0)
+                {
+                    _db.Set<TranscriptUtterance>().RemoveRange(existing.Utterances);
+                    existing.Utterances.Clear();
+                }
 
                 existing.ProviderTranscriptId = providerTranscriptId;
                 existing.CreatedUtc = DateTimeOffset.UtcNow;
