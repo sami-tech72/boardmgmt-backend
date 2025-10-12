@@ -101,7 +101,26 @@ namespace BoardMgmt.Application.Meetings.Commands
                 {
                     if (existing.Utterances.Count > 0)
                     {
-                        _db.Set<TranscriptUtterance>().RemoveRange(existing.Utterances);
+                        var oldUtterances = existing.Utterances.ToList();
+
+                        if (_db is DbContext dbContextOld)
+                        {
+                            await dbContextOld.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM [TranscriptUtterances] WHERE [TranscriptId] = {existing.Id}", ct);
+
+                            foreach (var utterance in oldUtterances)
+                            {
+                                var entry = dbContextOld.Entry(utterance);
+                                if (entry?.State is EntityState.Added or EntityState.Modified or EntityState.Unchanged)
+                                {
+                                    entry.State = EntityState.Detached;
+                                }
+                            }
+                        }
+                        else
+                        {
+                            _db.Set<TranscriptUtterance>().RemoveRange(oldUtterances);
+                        }
+
                         existing.Utterances.Clear();
                     }
 
