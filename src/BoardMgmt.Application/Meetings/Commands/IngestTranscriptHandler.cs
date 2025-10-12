@@ -130,8 +130,21 @@ namespace BoardMgmt.Application.Meetings.Commands
                 await _db.SaveChangesAsync(ct);
                 return tr.Utterances.Count;
             }
-            catch (DbUpdateConcurrencyException ex) when (attempt < maxAttempts)
+            catch (DbUpdateConcurrencyException ex)
             {
+                if (attempt >= maxAttempts)
+                {
+                    _logger.LogError(
+                        ex,
+                        "Failed to save transcript {ProviderTranscriptId} for meeting {MeetingId} using provider {Provider} after {MaxAttempts} attempts due to concurrency conflicts.",
+                        providerTranscriptId,
+                        meeting.Id,
+                        provider,
+                        maxAttempts);
+
+                    throw new InvalidOperationException("Failed to save transcript after retrying due to concurrency conflicts.", ex);
+                }
+
                 _logger.LogWarning(
                     ex,
                     "Concurrency conflict while saving transcript {ProviderTranscriptId} for meeting {MeetingId} using provider {Provider}. Retrying attempt {Attempt} of {MaxAttempts}.",
@@ -143,8 +156,6 @@ namespace BoardMgmt.Application.Meetings.Commands
 
                 return await SaveVttWithRetryAsync(meeting, provider, providerTranscriptId, cues, ct, attempt + 1, maxAttempts);
             }
-
-            throw new InvalidOperationException("Failed to save transcript after retrying due to concurrency conflicts.");
         }
 
         private const int MaxUtteranceTextLength = 4000;
