@@ -12,7 +12,7 @@ using BoardMgmt.Application.Common.Options;
 using BoardMgmt.Application.Common.Parsing; // SimpleVtt
 using BoardMgmt.Domain.Entities;
 using MediatR;
-using Microsoft.EntityFrameworkCore; // ✅ needed for ExecuteDeleteAsync
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.Graph;
@@ -111,12 +111,8 @@ namespace BoardMgmt.Application.Meetings.Commands
                 {
                     if (existing.Utterances.Count > 0)
                     {
-                        // ✅ Set-based delete (EF Core 7+)
-                        await _db.Set<TranscriptUtterance>()
-                            .Where(u => u.TranscriptId == existing.Id)
-                            .ExecuteDeleteAsync(ct);
-
-                        // Make sure the in-memory navigation is cleared as well
+                        // EF Core 6.x does not support ExecuteDeleteAsync, so remove the tracked entities manually.
+                        _db.Set<TranscriptUtterance>().RemoveRange(existing.Utterances);
                         existing.Utterances.Clear();
                     }
 
