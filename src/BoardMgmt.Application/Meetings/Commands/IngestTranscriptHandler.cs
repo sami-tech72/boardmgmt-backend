@@ -111,9 +111,13 @@ namespace BoardMgmt.Application.Meetings.Commands
                 {
                     if (existing.Utterances.Count > 0)
                     {
+
+                        _logger.LogWarning("if", existing.Utterances.Count);
                         // EF Core 6.x does not support ExecuteDeleteAsync, so remove the tracked entities manually.
                         _db.Set<TranscriptUtterance>().RemoveRange(existing.Utterances);
+                        _logger.LogWarning("if 2");
                         existing.Utterances.Clear();
+                        _logger.LogWarning("if 3");
                     }
 
                     existing.ProviderTranscriptId = providerTranscriptId;
