@@ -1017,42 +1017,80 @@ namespace BoardMgmt.Application.Meetings.Commands
         // --------------------------------------------------------------------
         private async Task<int> SaveVtt(Meeting meeting, string provider, string providerTranscriptId, string vtt, CancellationToken ct)
         {
-            var existing = await _db.Set<Transcript>()
-                .Include(t => t.Utterances)
-                .FirstOrDefaultAsync(t => t.MeetingId == meeting.Id && t.Provider == provider, ct);
+            var cues = SimpleVtt.Parse(vtt).ToList();
+            const int MaxAttempts = 3;
 
-            if (existing != null)
+            return await SaveVttWithRetryAsync(meeting, provider, providerTranscriptId, cues, ct, attempt: 1, maxAttempts: MaxAttempts);
+        }
+
+        private async Task<int> SaveVttWithRetryAsync(
+            Meeting meeting,
+            string provider,
+            string providerTranscriptId,
+            IReadOnlyList<SimpleVtt.Cue> cues,
+            CancellationToken ct,
+            int attempt,
+            int maxAttempts)
+        {
+            if (attempt > 1 && _db is DbContext dbContext)
             {
-                if (existing.Utterances.Count > 0)
-                {
-                    _db.Set<TranscriptUtterance>().RemoveRange(existing.Utterances);
-                    existing.Utterances.Clear();
-                }
-
-                existing.ProviderTranscriptId = providerTranscriptId;
-                existing.CreatedUtc = DateTimeOffset.UtcNow;
-
-                foreach (var cue in SimpleVtt.Parse(vtt))
-                    existing.Utterances.Add(MapUtterance(meeting, existing, cue));
-
-                await _db.SaveChangesAsync(ct);
-                return existing.Utterances.Count;
+                dbContext.ChangeTracker.Clear();
             }
 
-            var tr = new Transcript
+            try
             {
-                MeetingId = meeting.Id,
-                Provider = provider,
-                ProviderTranscriptId = providerTranscriptId,
-                CreatedUtc = DateTimeOffset.UtcNow
-            };
+                var existing = await _db.Set<Transcript>()
+                    .Include(t => t.Utterances)
+                    .FirstOrDefaultAsync(t => t.MeetingId == meeting.Id && t.Provider == provider, ct);
 
-            foreach (var cue in SimpleVtt.Parse(vtt))
-                tr.Utterances.Add(MapUtterance(meeting, tr, cue));
+                if (existing != null)
+                {
+                    if (existing.Utterances.Count > 0)
+                    {
+                        _db.Set<TranscriptUtterance>().RemoveRange(existing.Utterances);
+                        existing.Utterances.Clear();
+                    }
 
-            _db.Transcripts.Add(tr);
-            await _db.SaveChangesAsync(ct);
-            return tr.Utterances.Count;
+                    existing.ProviderTranscriptId = providerTranscriptId;
+                    existing.CreatedUtc = DateTimeOffset.UtcNow;
+
+                    foreach (var cue in cues)
+                        existing.Utterances.Add(MapUtterance(meeting, existing, cue));
+
+                    await _db.SaveChangesAsync(ct);
+                    return existing.Utterances.Count;
+                }
+
+                var tr = new Transcript
+                {
+                    MeetingId = meeting.Id,
+                    Provider = provider,
+                    ProviderTranscriptId = providerTranscriptId,
+                    CreatedUtc = DateTimeOffset.UtcNow
+                };
+
+                foreach (var cue in cues)
+                    tr.Utterances.Add(MapUtterance(meeting, tr, cue));
+
+                _db.Transcripts.Add(tr);
+                await _db.SaveChangesAsync(ct);
+                return tr.Utterances.Count;
+            }
+            catch (DbUpdateConcurrencyException ex) when (attempt < maxAttempts)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Concurrency conflict while saving transcript {ProviderTranscriptId} for meeting {MeetingId} using provider {Provider}. Retrying attempt {Attempt} of {MaxAttempts}.",
+                    providerTranscriptId,
+                    meeting.Id,
+                    provider,
+                    attempt,
+                    maxAttempts);
+
+                return await SaveVttWithRetryAsync(meeting, provider, providerTranscriptId, cues, ct, attempt + 1, maxAttempts);
+            }
+
+            throw new InvalidOperationException("Failed to save transcript after retrying due to concurrency conflicts.");
         }
 
         private const int MaxUtteranceTextLength = 4000;
