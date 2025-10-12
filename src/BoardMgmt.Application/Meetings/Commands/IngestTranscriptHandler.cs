@@ -196,19 +196,14 @@ namespace BoardMgmt.Application.Meetings.Commands
         {
             if (_db is DbContext dbContext)
             {
-                var existingUtterances = await dbContext.Set<TranscriptUtterance>()
+                await dbContext.Set<TranscriptUtterance>()
                     .Where(u => u.TranscriptId == transcript.Id)
-                    .ToListAsync(ct);
+                    .ExecuteDeleteAsync(ct);
 
-                if (existingUtterances.Count > 0)
+                foreach (var entry in dbContext.ChangeTracker.Entries<TranscriptUtterance>()
+                             .Where(e => e.Entity.TranscriptId == transcript.Id))
                 {
-                    dbContext.Set<TranscriptUtterance>().RemoveRange(existingUtterances);
-
-                    foreach (var entry in dbContext.ChangeTracker.Entries<TranscriptUtterance>()
-                                 .Where(e => e.Entity.TranscriptId == transcript.Id))
-                    {
-                        entry.State = EntityState.Detached;
-                    }
+                    entry.State = EntityState.Detached;
                 }
             }
             else
