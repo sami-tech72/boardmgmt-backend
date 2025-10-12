@@ -111,13 +111,7 @@ namespace BoardMgmt.Application.Meetings.Commands
                 {
                     if (existing.Utterances.Count > 0)
                     {
-
-                        _logger.LogWarning("if", existing.Utterances.Count);
-                        // EF Core 6.x does not support ExecuteDeleteAsync, so remove the tracked entities manually.
-                        _db.Set<TranscriptUtterance>().RemoveRange(existing.Utterances);
-                        _logger.LogWarning("if 2");
-                        existing.Utterances.Clear();
-                        _logger.LogWarning("if 3");
+                        await DeleteExistingUtterancesAsync(existing, ct);
                     }
 
                     existing.ProviderTranscriptId = providerTranscriptId;
@@ -147,6 +141,24 @@ namespace BoardMgmt.Application.Meetings.Commands
             }
             catch (DbUpdateConcurrencyException ex)
             {
+                if (_db is DbContext retryContext)
+                {
+                    retryContext.ChangeTracker.Clear();
+                }
+
+                if (attempt < maxAttempts)
+                {
+                    var backoffDelay = TimeSpan.FromMilliseconds(Math.Pow(2, attempt) * 50);
+                    try
+                    {
+                        await Task.Delay(backoffDelay, ct);
+                    }
+                    catch (TaskCanceledException)
+                    {
+                        // Ignore cancellation during delay so that we can surface the original concurrency exception below.
+                    }
+                }
+
                 if (attempt >= maxAttempts)
                 {
                     _logger.LogError(
@@ -178,6 +190,28 @@ namespace BoardMgmt.Application.Meetings.Commands
                     maxAttempts,
                     ct);
             }
+        }
+
+        private async Task DeleteExistingUtterancesAsync(Transcript transcript, CancellationToken ct)
+        {
+            if (_db is DbContext dbContext)
+            {
+                await dbContext.Set<TranscriptUtterance>()
+                    .Where(u => u.TranscriptId == transcript.Id)
+                    .ExecuteDeleteAsync(ct);
+
+                foreach (var entry in dbContext.ChangeTracker.Entries<TranscriptUtterance>()
+                             .Where(e => e.Entity.TranscriptId == transcript.Id))
+                {
+                    entry.State = EntityState.Detached;
+                }
+            }
+            else
+            {
+                _db.Set<TranscriptUtterance>().RemoveRange(transcript.Utterances);
+            }
+
+            transcript.Utterances.Clear();
         }
 
         private const int MaxUtteranceTextLength = 4000;
