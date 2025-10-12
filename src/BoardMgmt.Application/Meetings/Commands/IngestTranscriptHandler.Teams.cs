@@ -341,6 +341,14 @@ namespace BoardMgmt.Application.Meetings.Commands
             return true;
         }
 
+        if (ex.ResponseStatusCode == (int)HttpStatusCode.Forbidden)
+        {
+            if (IsPreviewAccessDenied(ex))
+            {
+                return true;
+            }
+        }
+
         if (ex.ResponseStatusCode >= 500 && ex.ResponseStatusCode < 600)
         {
             return true;
@@ -362,6 +370,48 @@ namespace BoardMgmt.Application.Meetings.Commands
             && (code.Equals("UnknownError", StringComparison.OrdinalIgnoreCase)
                 || code.Equals("generalException", StringComparison.OrdinalIgnoreCase)
                 || code.Equals("serverError", StringComparison.OrdinalIgnoreCase));
+
+    private static bool IsPreviewAccessDenied(ServiceException ex)
+    {
+        var (code, message, rawResponse) = GetGraphErrorInfo(ex);
+
+        if (ContainsPreviewKeyword(message))
+        {
+            return true;
+        }
+
+        if (string.Equals(code, "AccessDenied", StringComparison.OrdinalIgnoreCase))
+        {
+            if (ContainsPreviewKeyword(rawResponse))
+            {
+                return true;
+            }
+
+            if (ContainsPreviewKeyword(message))
+            {
+                return true;
+            }
+        }
+
+        if (ContainsPreviewKeyword(rawResponse))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool ContainsPreviewKeyword(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        return value.IndexOf("preview", StringComparison.OrdinalIgnoreCase) >= 0
+            || value.IndexOf("beta", StringComparison.OrdinalIgnoreCase) >= 0
+            || value.IndexOf("not supported in v1.0", StringComparison.OrdinalIgnoreCase) >= 0
+            || value.IndexOf("not available in v1.0", StringComparison.OrdinalIgnoreCase) >= 0
+            || value.IndexOf("use the /beta endpoint", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
 
     private async Task<string> ResolveTeamsOnlineMeetingIdAsync(string mailbox, Meeting meeting, CancellationToken ct)
     {
