@@ -308,40 +308,22 @@ namespace BoardMgmt.Application.Meetings.Commands
             return true;
         }
 
-        static bool MatchesRetryableGraphErrorCode(ServiceException exception)
+        foreach (var code in GetGraphErrorCodes(ex))
         {
-            if (exception.Error is null)
-            {
-                return false;
-            }
-
-            if (IsRetryableGraphErrorCode(exception.Error.Code))
+            if (IsRetryableGraphErrorCode(code))
             {
                 return true;
             }
-
-            var inner = exception.Error.InnerError;
-            while (inner is not null)
-            {
-                if (IsRetryableGraphErrorCode(inner.Code))
-                {
-                    return true;
-                }
-
-                inner = inner.InnerError;
-            }
-
-            return false;
         }
 
-        static bool IsRetryableGraphErrorCode(string? code)
-            => !string.IsNullOrWhiteSpace(code)
-                && (code.Equals("UnknownError", StringComparison.OrdinalIgnoreCase)
-                    || code.Equals("generalException", StringComparison.OrdinalIgnoreCase)
-                    || code.Equals("serverError", StringComparison.OrdinalIgnoreCase));
-
-        return MatchesRetryableGraphErrorCode(ex);
+        return false;
     }
+
+    private static bool IsRetryableGraphErrorCode(string? code)
+        => !string.IsNullOrWhiteSpace(code)
+            && (code.Equals("UnknownError", StringComparison.OrdinalIgnoreCase)
+                || code.Equals("generalException", StringComparison.OrdinalIgnoreCase)
+                || code.Equals("serverError", StringComparison.OrdinalIgnoreCase));
 
     private async Task<string> ResolveTeamsOnlineMeetingIdAsync(string mailbox, Meeting meeting, CancellationToken ct)
     {
@@ -463,6 +445,71 @@ namespace BoardMgmt.Application.Meetings.Commands
         return string.Join("; ", details.Distinct(StringComparer.Ordinal));
     }
 
+    private static IReadOnlyCollection<string> GetGraphErrorCodes(ServiceException ex)
+    {
+        var codes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        var (code, _, rawResponse) = GetGraphErrorInfo(ex);
+
+        if (!string.IsNullOrWhiteSpace(code))
+            codes.Add(code!);
+
+        if (!string.IsNullOrWhiteSpace(rawResponse))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(rawResponse);
+                CollectGraphErrorCodes(doc.RootElement, codes);
+            }
+            catch (JsonException)
+            {
+                // Ignore parsing issues and fall back to the raw response body.
+            }
+        }
+
+        return codes;
+    }
+
+    private static void CollectGraphErrorCodes(JsonElement element, ISet<string> codes)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                if (element.TryGetProperty("code", out var codeElement) && codeElement.ValueKind == JsonValueKind.String)
+                {
+                    var value = codeElement.GetString();
+                    if (!string.IsNullOrWhiteSpace(value))
+                        codes.Add(value);
+                }
+
+                if (element.TryGetProperty("innerError", out var innerElement))
+                {
+                    CollectGraphErrorCodes(innerElement, codes);
+                }
+
+                foreach (var property in element.EnumerateObject())
+                {
+                    if (string.Equals(property.Name, "code", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(property.Name, "innerError", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    CollectGraphErrorCodes(property.Value, codes);
+                }
+
+                break;
+
+            case JsonValueKind.Array:
+                foreach (var item in element.EnumerateArray())
+                {
+                    CollectGraphErrorCodes(item, codes);
+                }
+
+                break;
+        }
+    }
+
     private static (string? Code, string? Message, string? RawResponse) GetGraphErrorInfo(ServiceException ex)
     {
         string? code = null;
@@ -480,10 +527,53 @@ namespace BoardMgmt.Application.Meetings.Commands
             }
         }
 
-        rawResponse = ex.GetType().GetProperty("RawResponseBody")?.GetValue(ex) as string
-            ?? ex.GetType().GetProperty("ResponseBody")?.GetValue(ex) as string;
+        rawResponse = TryGetExceptionStringProperty(ex, "RawResponseBody")
+            ?? TryGetExceptionStringProperty(ex, "ResponseBody")
+            ?? TryGetExceptionStringProperty(ex, "ResponseContent");
+
+        if ((string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(message)) && !string.IsNullOrWhiteSpace(rawResponse))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(rawResponse);
+                if (doc.RootElement.ValueKind == JsonValueKind.Object &&
+                    doc.RootElement.TryGetProperty("error", out var errorElement) &&
+                    errorElement.ValueKind == JsonValueKind.Object)
+                {
+                    if (string.IsNullOrWhiteSpace(code) &&
+                        errorElement.TryGetProperty("code", out var codeElement) &&
+                        codeElement.ValueKind == JsonValueKind.String)
+                    {
+                        code = codeElement.GetString();
+                    }
+
+                    if (string.IsNullOrWhiteSpace(message) &&
+                        errorElement.TryGetProperty("message", out var messageElement) &&
+                        messageElement.ValueKind == JsonValueKind.String)
+                    {
+                        message = messageElement.GetString();
+                    }
+                }
+            }
+            catch (JsonException)
+            {
+                // Ignore parsing issues and leave the values unset.
+            }
+        }
 
         return (code, message, rawResponse);
+    }
+
+    private static string? TryGetExceptionStringProperty(ServiceException ex, string propertyName)
+    {
+        var prop = ex.GetType().GetProperty(propertyName);
+        if (prop is null)
+            return null;
+
+        if (prop.GetValue(ex) is string value)
+            return value;
+
+        return null;
     }
 
     private static string? TrySummarizeGraphRawResponse(string rawResponse)
