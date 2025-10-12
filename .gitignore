@@ -1,7 +1,6 @@
 ## =========================
 ## .NET / Visual Studio
 ## =========================
-# Build results
 [Bb]in/
 [Oo]bj/
 [Dd]ebug*/
@@ -86,3 +85,31 @@ src/environments/environment*.ts
 ## =========================
 .DS_Store
 Thumbs.db
+
+
+## =========================
+## Graph / Zoom credentials
+## =========================
+# Sensitive configuration files
+appsettings.Development.json
+appsettings.Graph.json
+appsettings.Zoom.json
+appsettings.Local.json
+
+# Local secrets or token caches
+GraphTokens.json
+ZoomTokens.json
+zoom_token_cache.json
+msgraph_token_cache.json
+graph_oauth.json
+zoom_oauth.json
+
+# Any temporary secret folders
+/secrets/
+/private/
+/config/private/
+/config/local/
+
+# Ignore any exported Graph/Zoom logs
+*.graph.log
+*.zoom.log
