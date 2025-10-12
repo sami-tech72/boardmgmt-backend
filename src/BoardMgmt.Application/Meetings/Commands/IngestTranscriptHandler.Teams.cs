@@ -57,14 +57,28 @@ namespace BoardMgmt.Application.Meetings.Commands
         {
             throw new InvalidOperationException($"Microsoft 365 reported that the transcript is not available yet. Wait for processing to finish and try again. Details: {GetGraphErrorDetail(ex)}", ex);
         }
+        catch (ServiceException ex) when (IsTransientGraphServerError(ex))
+        {
+            throw new InvalidOperationException($"Microsoft 365 reported an internal error while retrieving the Teams transcript. Wait for processing to finish and try again. Details: {GetGraphErrorDetail(ex)}", ex);
+        }
 
         if (transcript is null)
             throw new InvalidOperationException("No transcript found for this Teams meeting. Ensure transcription was enabled.");
 
-        await using var stream = await DownloadTeamsTranscriptContentAsync(mailbox!, onlineMeetingId, transcript.Id, ct)
+        Stream? stream;
+        try
+        {
+            stream = await DownloadTeamsTranscriptContentAsync(mailbox!, onlineMeetingId, transcript.Id, ct);
+        }
+        catch (ServiceException ex) when (IsTransientGraphServerError(ex))
+        {
+            throw new InvalidOperationException($"Microsoft 365 reported an internal error while downloading the Teams transcript content. Wait for processing to finish and try again. Details: {GetGraphErrorDetail(ex)}", ex);
+        }
+
+        await using var contentStream = stream
             ?? throw new InvalidOperationException("Teams transcript download returned no content stream.");
 
-        using var reader = new StreamReader(stream);
+        using var reader = new StreamReader(contentStream);
         var vtt = await reader.ReadToEndAsync(ct);
         if (string.IsNullOrWhiteSpace(vtt))
             throw new InvalidOperationException("Teams returned an empty transcript content.");
@@ -407,6 +421,20 @@ namespace BoardMgmt.Application.Meetings.Commands
 
     private static bool IsBadRequest(ServiceException ex)
         => ex.ResponseStatusCode == (int)HttpStatusCode.BadRequest;
+
+    private static bool IsTransientGraphServerError(ServiceException ex)
+    {
+        if (ex.ResponseStatusCode is int statusCode && statusCode >= 500 && statusCode < 600)
+            return true;
+
+        foreach (var code in GetGraphErrorCodes(ex))
+        {
+            if (IsRetryableGraphErrorCode(code))
+                return true;
+        }
+
+        return false;
+    }
 
     private static string GetGraphErrorDetail(ServiceException ex)
     {
