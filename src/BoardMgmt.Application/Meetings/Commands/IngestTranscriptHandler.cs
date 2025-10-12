@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+
 using BoardMgmt.Application.Calendars;
 using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Application.Common.Email;
@@ -11,7 +12,7 @@ using BoardMgmt.Application.Common.Options;
 using BoardMgmt.Application.Common.Parsing; // SimpleVtt
 using BoardMgmt.Domain.Entities;
 using MediatR;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore; // ✅ needed for ExecuteDeleteAsync
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.Graph;
@@ -35,6 +36,7 @@ namespace BoardMgmt.Application.Meetings.Commands
         private readonly IEmailSender _email = email;
         private readonly AppOptions _app = app.Value ?? new AppOptions();
         private readonly ILogger<IngestTranscriptHandler> _logger = logger;
+
         // Provider-specific ingestion workflows live in the partial class files next to this one:
         //   • IngestTranscriptHandler.Teams.cs → Microsoft 365 / Teams
         //   • IngestTranscriptHandler.Zoom.cs  → Zoom
@@ -74,17 +76,25 @@ namespace BoardMgmt.Application.Meetings.Commands
             var cues = SimpleVtt.Parse(vtt).ToList();
             const int MaxAttempts = 3;
 
-            return await SaveVttWithRetryAsync(meeting, provider, providerTranscriptId, cues, ct, attempt: 1, maxAttempts: MaxAttempts);
+            return await SaveVttWithRetryAsync(
+                meeting,
+                provider,
+                providerTranscriptId,
+                cues,
+                attempt: 1,
+                maxAttempts: MaxAttempts,
+                ct);
         }
 
+        // ✅ CancellationToken moved to the end; call sites updated
         private async Task<int> SaveVttWithRetryAsync(
             Meeting meeting,
             string provider,
             string providerTranscriptId,
             IReadOnlyList<SimpleVtt.Cue> cues,
-            CancellationToken ct,
             int attempt,
-            int maxAttempts)
+            int maxAttempts,
+            CancellationToken ct)
         {
             if (attempt > 1 && _db is DbContext dbContext)
             {
@@ -101,28 +111,12 @@ namespace BoardMgmt.Application.Meetings.Commands
                 {
                     if (existing.Utterances.Count > 0)
                     {
-                        var oldUtterances = existing.Utterances.ToList();
+                        // ✅ Set-based delete (EF Core 7+)
+                        await _db.Set<TranscriptUtterance>()
+                            .Where(u => u.TranscriptId == existing.Id)
+                            .ExecuteDeleteAsync(ct);
 
-                        if (_db is DbContext dbContextOld)
-                        {
-                            await _db.Set<TranscriptUtterance>()
-                                .Where(u => u.TranscriptId == existing.Id)
-                                .ExecuteDeleteAsync(ct);
-
-                            foreach (var utterance in oldUtterances)
-                            {
-                                var entry = dbContextOld.Entry(utterance);
-                                if (entry?.State is EntityState.Added or EntityState.Modified or EntityState.Unchanged)
-                                {
-                                    entry.State = EntityState.Detached;
-                                }
-                            }
-                        }
-                        else
-                        {
-                            _db.Set<TranscriptUtterance>().RemoveRange(oldUtterances);
-                        }
-
+                        // Make sure the in-memory navigation is cleared as well
                         existing.Utterances.Clear();
                     }
 
@@ -175,7 +169,14 @@ namespace BoardMgmt.Application.Meetings.Commands
                     attempt,
                     maxAttempts);
 
-                return await SaveVttWithRetryAsync(meeting, provider, providerTranscriptId, cues, ct, attempt + 1, maxAttempts);
+                return await SaveVttWithRetryAsync(
+                    meeting,
+                    provider,
+                    providerTranscriptId,
+                    cues,
+                    attempt + 1,
+                    maxAttempts,
+                    ct);
             }
         }
 
