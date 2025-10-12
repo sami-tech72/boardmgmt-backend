@@ -308,7 +308,39 @@ namespace BoardMgmt.Application.Meetings.Commands
             return true;
         }
 
-        return false;
+        static bool MatchesRetryableGraphErrorCode(ServiceException exception)
+        {
+            if (exception.Error is null)
+            {
+                return false;
+            }
+
+            if (IsRetryableGraphErrorCode(exception.Error.Code))
+            {
+                return true;
+            }
+
+            var inner = exception.Error.InnerError;
+            while (inner is not null)
+            {
+                if (IsRetryableGraphErrorCode(inner.Code))
+                {
+                    return true;
+                }
+
+                inner = inner.InnerError;
+            }
+
+            return false;
+        }
+
+        static bool IsRetryableGraphErrorCode(string? code)
+            => !string.IsNullOrWhiteSpace(code)
+                && (code.Equals("UnknownError", StringComparison.OrdinalIgnoreCase)
+                    || code.Equals("generalException", StringComparison.OrdinalIgnoreCase)
+                    || code.Equals("serverError", StringComparison.OrdinalIgnoreCase));
+
+        return MatchesRetryableGraphErrorCode(ex);
     }
 
     private async Task<string> ResolveTeamsOnlineMeetingIdAsync(string mailbox, Meeting meeting, CancellationToken ct)
