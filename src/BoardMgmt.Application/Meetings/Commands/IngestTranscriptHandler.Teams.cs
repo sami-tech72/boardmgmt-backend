@@ -303,6 +303,11 @@ namespace BoardMgmt.Application.Meetings.Commands
             return true;
         }
 
+        if (ex.ResponseStatusCode >= 500 && ex.ResponseStatusCode < 600)
+        {
+            return true;
+        }
+
         return false;
     }
 
