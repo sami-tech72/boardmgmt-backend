@@ -104,29 +104,21 @@ namespace BoardMgmt.Application.Meetings.Commands
             try
             {
                 var existing = await _db.Set<Transcript>()
+                    .Include(t => t.Utterances)
                     .FirstOrDefaultAsync(t => t.MeetingId == meeting.Id && t.Provider == provider, ct);
 
                 if (existing != null)
                 {
-                    if (_db is DbContext dbContext)
+                    if (existing.Utterances.Count > 0)
                     {
-                        await dbContext.Set<TranscriptUtterance>()
-                            .Where(u => u.TranscriptId == existing.Id)
-                            .ExecuteDeleteAsync(ct);
-                    }
-                    else
-                    {
-                        var existingUtterances = await _db.Set<TranscriptUtterance>()
-                            .Where(u => u.TranscriptId == existing.Id)
-                            .ToListAsync(ct);
 
-                        if (existingUtterances.Count > 0)
-                        {
-                            _db.Set<TranscriptUtterance>().RemoveRange(existingUtterances);
-                        }
+                        _logger.LogWarning("if", existing.Utterances.Count);
+                        // EF Core 6.x does not support ExecuteDeleteAsync, so remove the tracked entities manually.
+                        _db.Set<TranscriptUtterance>().RemoveRange(existing.Utterances);
+                        _logger.LogWarning("if 2");
+                        existing.Utterances.Clear();
+                        _logger.LogWarning("if 3");
                     }
-
-                    existing.Utterances.Clear();
 
                     existing.ProviderTranscriptId = providerTranscriptId;
                     existing.CreatedUtc = DateTimeOffset.UtcNow;
