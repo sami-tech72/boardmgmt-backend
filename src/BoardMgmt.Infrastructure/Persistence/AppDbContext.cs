@@ -119,6 +119,7 @@ namespace BoardMgmt.Infrastructure.Persistence
                 e.HasMany(m => m.AgendaItems).WithOne().HasForeignKey(ai => ai.MeetingId).OnDelete(DeleteBehavior.Cascade);
                 e.HasMany(m => m.Documents).WithOne().HasForeignKey(d => d.MeetingId).OnDelete(DeleteBehavior.Cascade);
                 e.HasMany(m => m.Attendees).WithOne(a => a.Meeting).HasForeignKey(a => a.MeetingId).OnDelete(DeleteBehavior.Cascade);
+                e.HasMany(m => m.Transcripts).WithOne(t => t.Meeting).HasForeignKey(t => t.MeetingId).OnDelete(DeleteBehavior.Cascade);
 
                 e.HasIndex(m => new { m.ScheduledAt, m.Status });
             });
@@ -398,7 +399,7 @@ namespace BoardMgmt.Infrastructure.Persistence
                 e.HasIndex(x => new { x.MeetingId, x.Provider }).IsUnique();
 
                 e.HasOne(x => x.Meeting)
-                 .WithMany() // or .WithOne()? We are not adding collection on Meeting to keep your entity light
+                 .WithMany(m => m.Transcripts)
                  .HasForeignKey(x => x.MeetingId)
                  .OnDelete(DeleteBehavior.Cascade);
             });
