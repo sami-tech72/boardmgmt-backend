@@ -456,8 +456,33 @@ namespace BoardMgmt.Application.Meetings.Commands
             throw;
         }
 
-        if (TryResolveOnlineMeetingIdFromJoinUrls(meeting, graphEvent, meetingResource, out var joinId))
-            return joinId!;
+        if (TryResolveJoinMeetingIdFromJoinUrls(meeting, graphEvent, meetingResource, out var joinMeetingId) &&
+            !string.IsNullOrWhiteSpace(joinMeetingId))
+        {
+            var resolvedFromJoinId = await ResolveOnlineMeetingIdFromJoinMeetingIdAsync(mailbox, joinMeetingId!, ct);
+            if (!string.IsNullOrWhiteSpace(resolvedFromJoinId))
+                return resolvedFromJoinId!;
+
+            _logger.LogWarning(
+                "Unable to resolve Teams online meeting id using joinMeetingId. Mailbox={Mailbox} JoinMeetingId={JoinMeetingId}",
+                mailbox,
+                joinMeetingId);
+        }
+
+        var joinUrl = meeting.OnlineJoinUrl
+            ?? GetJoinUrlFromEvent(graphEvent)
+            ?? GetJoinUrlFromOnlineMeeting(meetingResource);
+
+        if (!string.IsNullOrWhiteSpace(joinUrl))
+        {
+            var resolvedFromJoinUrl = await ResolveOnlineMeetingIdFromJoinWebUrlAsync(mailbox, joinUrl!, ct);
+            if (!string.IsNullOrWhiteSpace(resolvedFromJoinUrl))
+                return resolvedFromJoinUrl!;
+
+            _logger.LogWarning(
+                "Unable to resolve Teams online meeting id using joinWebUrl. Mailbox={Mailbox}",
+                mailbox);
+        }
 
         throw new InvalidOperationException("Teams meeting is missing an online meeting id. Ensure the event is a Teams meeting with transcription enabled.");
     }
@@ -856,7 +881,7 @@ namespace BoardMgmt.Application.Meetings.Commands
         return false;
     }
 
-    private static bool TryResolveOnlineMeetingIdFromJoinUrls(
+    private static bool TryResolveJoinMeetingIdFromJoinUrls(
         Meeting meeting,
         Event? graphEvent,
         OnlineMeeting? meetingResource,
@@ -875,6 +900,60 @@ namespace BoardMgmt.Application.Meetings.Commands
 
         return false;
     }
+
+    private async Task<string?> ResolveOnlineMeetingIdFromJoinMeetingIdAsync(
+        string mailbox,
+        string joinMeetingId,
+        CancellationToken ct)
+        => await ResolveOnlineMeetingIdWithFilterAsync(
+            mailbox,
+            $"joinMeetingIdSettings/joinMeetingId eq '{EscapeODataString(joinMeetingId)}'",
+            ct,
+            new { mailbox, joinMeetingId });
+
+    private async Task<string?> ResolveOnlineMeetingIdFromJoinWebUrlAsync(
+        string mailbox,
+        string joinWebUrl,
+        CancellationToken ct)
+        => await ResolveOnlineMeetingIdWithFilterAsync(
+            mailbox,
+            $"joinWebUrl eq '{EscapeODataString(joinWebUrl)}'",
+            ct,
+            new { mailbox });
+
+    private async Task<string?> ResolveOnlineMeetingIdWithFilterAsync(
+        string mailbox,
+        string filter,
+        CancellationToken ct,
+        object logData)
+    {
+        try
+        {
+            var response = await _graph.Users[mailbox]
+                .OnlineMeetings
+                .GetAsync(request =>
+                {
+                    request.Headers.Add("ConsistencyLevel", "eventual");
+                    request.QueryParameters.Filter = filter;
+                    request.QueryParameters.Select = new[] { "id" };
+                    request.QueryParameters.Top = 1;
+                }, ct);
+
+            var match = response?.Value?.FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(match?.Id))
+                return match.Id;
+
+            return null;
+        }
+        catch (ServiceException ex)
+        {
+            LogGraphServiceException(ex, "Teams Graph API error while resolving online meeting id from filter", logData);
+            throw;
+        }
+    }
+
+    private static string EscapeODataString(string value)
+        => value.Replace("'", "''");
 
     private static bool TryExtractOnlineMeetingId(string? source, out string? id)
     {
