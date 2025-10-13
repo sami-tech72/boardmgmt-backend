@@ -8,6 +8,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using BoardMgmt.Domain.Calendars;
 using BoardMgmt.Domain.Entities;
 using Microsoft.Extensions.Logging;
 using Microsoft.Graph;
@@ -107,7 +108,7 @@ namespace BoardMgmt.Application.Meetings.Commands
             if (string.IsNullOrWhiteSpace(vtt))
                 throw new InvalidOperationException("Teams returned an empty transcript content.");
 
-            return await SaveVtt(meeting, "Microsoft365", transcript.Id, vtt, ct);
+            return await SaveVtt(meeting, CalendarProviders.Microsoft365, transcript.Id, vtt, ct);
         }
 
         private async Task<TeamsTranscriptMetadata?> GetTeamsTranscriptMetadataAsync(

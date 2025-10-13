@@ -4,6 +4,7 @@ using System.Text.Json;
 using BoardMgmt.Application.Meetings.Commands;
 using BoardMgmt.Domain.Entities;
 using BoardMgmt.Application.Common.Interfaces;
+using BoardMgmt.Domain.Calendars;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -155,7 +156,7 @@ namespace BoardMgmt.WebApi.Controllers
             if (!string.IsNullOrWhiteSpace(onlineMeetingId))
             {
                 var found = await _db.Set<Meeting>()
-                    .Where(m => m.ExternalCalendar == "Microsoft365" &&
+                    .Where(m => m.ExternalCalendar == CalendarProviders.Microsoft365 &&
                                 m.ExternalEventId == onlineMeetingId) // <-- add this nullable column if not present
                     .Select(m => m.Id)
                     .FirstOrDefaultAsync(ct);
@@ -167,7 +168,7 @@ namespace BoardMgmt.WebApi.Controllers
             // recent Teams meeting that has not been ingested yet (heuristic).
             // You can improve this by also checking ExternalEventId + mailbox.
             var recent = await _db.Set<Meeting>()
-                .Where(m => m.ExternalCalendar == "Microsoft365" &&
+                .Where(m => m.ExternalCalendar == CalendarProviders.Microsoft365 &&
                             (m.EndAt ?? m.ScheduledAt.AddHours(2)) > DateTimeOffset.UtcNow.AddHours(-12))
                 .OrderByDescending(m => m.ScheduledAt)
                 .Select(m => m.Id)

@@ -9,6 +9,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using BoardMgmt.Domain.Calendars;
 using BoardMgmt.Domain.Entities;
 using Microsoft.Extensions.Logging;
 
@@ -149,7 +150,7 @@ namespace BoardMgmt.Application.Meetings.Commands
         if (string.IsNullOrWhiteSpace(vtt))
             throw new InvalidOperationException("Zoom returned an empty transcript content.");
 
-        return await SaveVtt(meeting, "Zoom", fileId, vtt, ct);
+        return await SaveVtt(meeting, CalendarProviders.Zoom, fileId, vtt, ct);
     }
 
     private async Task<string> DownloadZoomTranscriptAsync(HttpClient http, string token, string downloadUrl, CancellationToken ct)

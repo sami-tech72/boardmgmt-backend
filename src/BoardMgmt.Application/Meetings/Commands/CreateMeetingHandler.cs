@@ -27,7 +27,9 @@ public class CreateMeetingHandler : IRequestHandler<CreateMeetingCommand, Guid>
 
     public async Task<Guid> Handle(CreateMeetingCommand request, CancellationToken ct)
     {
-        if (!CalendarProviders.IsSupported(request.Provider))
+        var provider = CalendarProviders.Normalize(request.Provider);
+
+        if (!CalendarProviders.IsSupported(provider))
             throw new ArgumentOutOfRangeException(nameof(request.Provider), $"Unknown calendar provider: {request.Provider}");
 
 
@@ -40,7 +42,7 @@ public class CreateMeetingHandler : IRequestHandler<CreateMeetingCommand, Guid>
             EndAt = request.EndAt,
             Location = string.IsNullOrWhiteSpace(request.Location) ? "TBD" : request.Location.Trim(),
             Status = MeetingStatus.Scheduled,
-            ExternalCalendar = request.Provider, // "Microsoft365" or "Zoom"
+            ExternalCalendar = provider!, // "Microsoft365" or "Zoom"
             ExternalCalendarMailbox = request.HostIdentity, // M365 mailbox or Zoom host email (optional)
             HostIdentity = request.HostIdentity
         };
@@ -77,7 +79,7 @@ public class CreateMeetingHandler : IRequestHandler<CreateMeetingCommand, Guid>
 
 
         // Create in chosen provider
-        var svc = _calSelector.For(request.Provider);
+        var svc = _calSelector.For(provider!);
         var (eventId, joinUrl) = await svc.CreateEventAsync(entity, ct);
         entity.ExternalEventId = eventId;
         entity.OnlineJoinUrl = joinUrl;

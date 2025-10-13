@@ -11,6 +11,7 @@ using Microsoft.Graph;
 using Microsoft.Graph.Models;
 using Microsoft.Kiota.Abstractions; // ApiException (Graph v5 / Kiota)
 using BoardMgmt.Application.Calendars;
+using BoardMgmt.Domain.Calendars;
 using BoardMgmt.Domain.Entities;
 
 namespace BoardMgmt.Infrastructure.Calendars;
@@ -177,7 +178,7 @@ public sealed class Microsoft365CalendarService : ICalendarService
             ParseUtc(e.Start),
             ParseUtc(e.End),
             ExtractJoinUrl(e),
-            "Microsoft365"
+            CalendarProviders.Microsoft365
         )).ToList();
     }
 
@@ -201,7 +202,7 @@ public sealed class Microsoft365CalendarService : ICalendarService
             ParseUtc(e.Start),
             ParseUtc(e.End),
             ExtractJoinUrl(e),
-            "Microsoft365"
+            CalendarProviders.Microsoft365
         )).ToList();
     }
 
