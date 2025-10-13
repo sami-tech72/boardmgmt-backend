@@ -41,14 +41,36 @@ public sealed class Microsoft365CalendarService : ICalendarService
         _logger = logger;
     }
 
+    private string ResolveMailbox(string? preferred, string context)
+    {
+        var candidate = string.IsNullOrWhiteSpace(preferred)
+            ? _opts.MailboxAddress
+            : preferred;
+
+        var normalized = MailboxIdentifier.Normalize(candidate);
+
+        if (string.IsNullOrWhiteSpace(normalized))
+            throw new InvalidOperationException($"Microsoft 365 mailbox address is required for {context}.");
+
+        if (!string.IsNullOrWhiteSpace(candidate)
+            && !string.Equals(candidate, normalized, StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogDebug(
+                "Normalized Microsoft 365 mailbox identifier for {Context}: {Original} -> {Normalized}",
+                context,
+                candidate,
+                normalized);
+        }
+
+        return normalized!;
+    }
+
     // ---------------- ICalendarService ----------------
 
     public async Task<(string eventId, string? joinUrl)> CreateEventAsync(Meeting m, CancellationToken ct = default)
     {
         var end = m.EndAt ?? m.ScheduledAt.AddHours(1);
-        var mailbox = string.IsNullOrWhiteSpace(m.ExternalCalendarMailbox)
-            ? _opts.MailboxAddress
-            : m.ExternalCalendarMailbox;
+        var mailbox = ResolveMailbox(m.ExternalCalendarMailbox, "event creation");
 
         // Ensure the meeting keeps track of the mailbox that actually hosts the
         // Teams event.  The transcript ingest workflow relies on
@@ -104,9 +126,7 @@ public sealed class Microsoft365CalendarService : ICalendarService
         if (string.IsNullOrWhiteSpace(m.ExternalEventId)) return (false, null);
 
         var end = m.EndAt ?? m.ScheduledAt.AddHours(1);
-        var mailbox = string.IsNullOrWhiteSpace(m.ExternalCalendarMailbox)
-            ? _opts.MailboxAddress
-            : m.ExternalCalendarMailbox;
+        var mailbox = ResolveMailbox(m.ExternalCalendarMailbox, "event update");
 
         // Mirror the create logic so updates continue to persist whichever
         // mailbox we ultimately act against.  This protects against meetings
@@ -157,9 +177,7 @@ public sealed class Microsoft365CalendarService : ICalendarService
     {
         if (string.IsNullOrWhiteSpace(eventId)) return;
 
-        var resolvedMailbox = string.IsNullOrWhiteSpace(mailbox)
-            ? _opts.MailboxAddress
-            : mailbox!;
+        var resolvedMailbox = ResolveMailbox(mailbox, "event cancellation");
 
         await RunGraph(
             () => _graph.Users[resolvedMailbox].Events[eventId].DeleteAsync(cancellationToken: ct),
@@ -169,9 +187,10 @@ public sealed class Microsoft365CalendarService : ICalendarService
     public async Task<IReadOnlyList<CalendarEventDto>> ListUpcomingAsync(int take = 20, CancellationToken ct = default)
     {
         var now = DateTimeOffset.UtcNow;
+        var mailbox = ResolveMailbox(null, "listing upcoming events");
 
         var resp = await RunGraph<EventCollectionResponse>(
-            () => _graph.Users[_opts.MailboxAddress].CalendarView.GetAsync(cfg =>
+            () => _graph.Users[mailbox].CalendarView.GetAsync(cfg =>
             {
                 cfg.QueryParameters.StartDateTime = now.ToString("o");
                 cfg.QueryParameters.EndDateTime = now.AddDays(30).ToString("o");
@@ -194,8 +213,10 @@ public sealed class Microsoft365CalendarService : ICalendarService
 
     public async Task<IReadOnlyList<CalendarEventDto>> ListRangeAsync(DateTimeOffset startUtc, DateTimeOffset endUtc, CancellationToken ct = default)
     {
+        var mailbox = ResolveMailbox(null, "listing range of events");
+
         var resp = await RunGraph<EventCollectionResponse>(
-            () => _graph.Users[_opts.MailboxAddress].CalendarView.GetAsync(cfg =>
+            () => _graph.Users[mailbox].CalendarView.GetAsync(cfg =>
             {
                 cfg.QueryParameters.StartDateTime = startUtc.ToString("o");
                 cfg.QueryParameters.EndDateTime = endUtc.ToString("o");
