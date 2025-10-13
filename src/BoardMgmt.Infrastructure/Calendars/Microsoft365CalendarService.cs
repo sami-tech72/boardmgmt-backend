@@ -296,7 +296,7 @@ public sealed class Microsoft365CalendarService : ICalendarService
     private static bool TryGetNestedString(IDictionary<string, object?>? data, string key, string nestedKey, out string? value)
     {
         value = null;
-        if (data is null || !data.TryGetValue(key, out var nested) || nested is null)
+        if (!TryGetValueCaseInsensitive(data, key, out var nested) || nested is null)
             return false;
 
         switch (nested)
@@ -304,14 +304,10 @@ public sealed class Microsoft365CalendarService : ICalendarService
             case IDictionary<string, object?> dict:
                 return TryGetString(dict, nestedKey, out value);
             case JsonElement element when element.ValueKind == JsonValueKind.Object:
-                if (element.TryGetProperty(nestedKey, out var nestedEl) && nestedEl.ValueKind == JsonValueKind.String)
+                if (TryGetString(element, nestedKey, out var nestedValue))
                 {
-                    var str = nestedEl.GetString();
-                    if (!string.IsNullOrWhiteSpace(str))
-                    {
-                        value = str;
-                        return true;
-                    }
+                    value = nestedValue;
+                    return true;
                 }
                 break;
         }
@@ -322,9 +318,67 @@ public sealed class Microsoft365CalendarService : ICalendarService
     private static bool TryGetString(IDictionary<string, object?>? data, string key, out string? value)
     {
         value = null;
-        if (data is null || !data.TryGetValue(key, out var raw) || raw is null)
+        if (!TryGetValueCaseInsensitive(data, key, out var raw) || raw is null)
             return false;
 
+        return TryConvertToString(raw, out value);
+    }
+
+    private static bool TryGetString(JsonElement element, string key, out string? value)
+    {
+        value = null;
+        if (element.ValueKind != JsonValueKind.Object)
+            return false;
+
+        if (!element.TryGetProperty(key, out var nestedEl))
+        {
+            foreach (var property in element.EnumerateObject())
+            {
+                if (string.Equals(property.Name, key, StringComparison.OrdinalIgnoreCase))
+                {
+                    nestedEl = property.Value;
+                    break;
+                }
+            }
+        }
+
+        if (nestedEl.ValueKind == JsonValueKind.String)
+        {
+            var str = nestedEl.GetString();
+            if (!string.IsNullOrWhiteSpace(str))
+            {
+                value = str;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryGetValueCaseInsensitive(IDictionary<string, object?>? data, string key, out object? value)
+    {
+        value = null;
+        if (data is null)
+            return false;
+
+        if (data.TryGetValue(key, out value))
+            return true;
+
+        foreach (var kvp in data)
+        {
+            if (string.Equals(kvp.Key, key, StringComparison.OrdinalIgnoreCase))
+            {
+                value = kvp.Value;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryConvertToString(object? raw, out string? value)
+    {
+        value = null;
         switch (raw)
         {
             case string str when !string.IsNullOrWhiteSpace(str):
@@ -341,6 +395,43 @@ public sealed class Microsoft365CalendarService : ICalendarService
         }
 
         return false;
+    }
+
+    private static string? ExtractOnlineMeetingId(OnlineMeeting? meeting)
+    {
+        if (!string.IsNullOrWhiteSpace(meeting?.Id))
+            return meeting!.Id;
+
+        if (TryGetString(meeting?.AdditionalData, "id", out var id) && !string.IsNullOrWhiteSpace(id))
+            return id;
+
+        if (TryGetString(meeting?.AdditionalData, "onlineMeetingId", out var onlineMeetingId) && !string.IsNullOrWhiteSpace(onlineMeetingId))
+            return onlineMeetingId;
+
+        if (TryGetString(meeting?.AdditionalData, "meetingId", out var meetingId) && !string.IsNullOrWhiteSpace(meetingId))
+            return meetingId;
+
+        return null;
+    }
+
+    private static string? ExtractOnlineMeetingId(Event? ev)
+    {
+        if (TryGetString(ev?.AdditionalData, "onlineMeetingId", out var rootId) && !string.IsNullOrWhiteSpace(rootId))
+            return rootId;
+
+        if (TryGetNestedString(ev?.AdditionalData, "onlineMeeting", "id", out var nestedId) && !string.IsNullOrWhiteSpace(nestedId))
+            return nestedId;
+
+        if (TryGetNestedString(ev?.AdditionalData, "onlineMeeting", "onlineMeetingId", out var nestedMeetingId) && !string.IsNullOrWhiteSpace(nestedMeetingId))
+            return nestedMeetingId;
+
+        if (TryGetString(ev?.OnlineMeeting?.AdditionalData, "id", out var directId) && !string.IsNullOrWhiteSpace(directId))
+            return directId;
+
+        if (TryGetString(ev?.AdditionalData, "meetingId", out var meetingId) && !string.IsNullOrWhiteSpace(meetingId))
+            return meetingId;
+
+        return null;
     }
 
     private async Task<OnlineMeeting?> EnsureTeamsMeetingDefaultsAsync(string mailbox, string eventId, Event? graphEvent, CancellationToken ct)
@@ -508,24 +599,17 @@ public sealed class Microsoft365CalendarService : ICalendarService
                 }, ct);
         }
 
-        if (TryGetString(fetchedEvent?.AdditionalData, "onlineMeetingId", out var rootId) && !string.IsNullOrWhiteSpace(rootId))
-            return (rootId, null);
-
-        if (TryGetNestedString(fetchedEvent?.AdditionalData, "onlineMeeting", "id", out var nestedId) && !string.IsNullOrWhiteSpace(nestedId))
-            return (nestedId, null);
-
-        if (TryGetString(fetchedEvent?.OnlineMeeting?.AdditionalData, "id", out var directId) && !string.IsNullOrWhiteSpace(directId))
-            return (directId, null);
-
-        if (TryGetNestedString(fetchedEvent?.AdditionalData, "onlineMeeting", "onlineMeetingId", out var nestedMeetingId) && !string.IsNullOrWhiteSpace(nestedMeetingId))
-            return (nestedMeetingId, null);
+        var eventMeetingId = ExtractOnlineMeetingId(fetchedEvent);
+        if (!string.IsNullOrWhiteSpace(eventMeetingId))
+            return (eventMeetingId, null);
 
         try
         {
             var meeting = await GetEventOnlineMeetingAsync(mailbox, eventId, ct);
 
-            if (!string.IsNullOrWhiteSpace(meeting?.Id))
-                return (meeting!.Id, meeting);
+            var meetingId = ExtractOnlineMeetingId(meeting) ?? ExtractOnlineMeetingId(fetchedEvent);
+            if (!string.IsNullOrWhiteSpace(meetingId))
+                return (meetingId, meeting);
 
             return (null, meeting);
         }
