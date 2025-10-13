@@ -36,6 +36,9 @@ public class Meeting : AuditableEntity
     [MaxLength(200)]
     public string? ExternalEventId { get; set; }
 
+    [MaxLength(200)]
+    public string? ExternalOnlineMeetingId { get; set; }
+
     [MaxLength(1000)]
     public string? OnlineJoinUrl { get; set; }
 

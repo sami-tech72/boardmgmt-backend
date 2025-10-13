@@ -149,15 +149,15 @@ namespace BoardMgmt.WebApi.Controllers
         }
 
         // Strategy to map Graph notification -> your Meeting row.
-        // Best: store OnlineMeetingId on your Meeting when you create the event.
-        // Fallback shown below uses ExternalEventId + Mailbox if you persisted them.
+        // We store ExternalOnlineMeetingId on Meeting when events are created/updated,
+        // so incoming notifications can be matched directly.
         private async Task<Guid> ResolveOurMeetingIdAsync(string? onlineMeetingId, CancellationToken ct)
         {
             if (!string.IsNullOrWhiteSpace(onlineMeetingId))
             {
                 var found = await _db.Set<Meeting>()
                     .Where(m => m.ExternalCalendar == CalendarProviders.Microsoft365 &&
-                                m.ExternalEventId == onlineMeetingId) // <-- add this nullable column if not present
+                                m.ExternalOnlineMeetingId == onlineMeetingId)
                     .Select(m => m.Id)
                     .FirstOrDefaultAsync(ct);
 

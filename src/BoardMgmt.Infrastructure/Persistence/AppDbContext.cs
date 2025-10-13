@@ -122,6 +122,8 @@ namespace BoardMgmt.Infrastructure.Persistence
                 e.HasMany(m => m.Transcripts).WithOne(t => t.Meeting).HasForeignKey(t => t.MeetingId).OnDelete(DeleteBehavior.Cascade);
 
                 e.HasIndex(m => new { m.ScheduledAt, m.Status });
+                e.Property(m => m.ExternalOnlineMeetingId).HasMaxLength(200);
+                e.HasIndex(m => m.ExternalOnlineMeetingId);
             });
 
             b.Entity<MeetingAttendee>(e =>

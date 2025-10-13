@@ -119,7 +119,7 @@ namespace BoardMgmt.Application.Meetings.Commands
             try
             {
                 return await ExecuteTranscriptRequestWithFallbackAsync(
-                    () => _graph.Users["91bcfab9-1941-4d1e-8791-75f86d81f95f"]
+                    () => _graph.Users[mailbox]
                         .OnlineMeetings[onlineMeetingId]
                         .Transcripts
                         .ToGetRequestInformation(),
@@ -278,7 +278,7 @@ namespace BoardMgmt.Application.Meetings.Commands
             try
             {
                 return await ExecuteTranscriptRequestWithFallbackAsync(
-                    () => _graph.Users["91bcfab9-1941-4d1e-8791-75f86d81f95f"]
+                    () => _graph.Users[mailbox]
                         .OnlineMeetings[onlineMeetingId]
                         .Transcripts[transcriptId]
                         .Content
@@ -416,6 +416,9 @@ namespace BoardMgmt.Application.Meetings.Commands
 
         private async Task<string> ResolveTeamsOnlineMeetingIdAsync(string mailbox, Meeting meeting, CancellationToken ct)
         {
+            if (!string.IsNullOrWhiteSpace(meeting.ExternalOnlineMeetingId))
+                return meeting.ExternalOnlineMeetingId!;
+
             if (string.IsNullOrWhiteSpace(meeting.ExternalEventId))
                 throw new InvalidOperationException("Meeting.ExternalEventId not set.");
 
@@ -429,7 +432,7 @@ namespace BoardMgmt.Application.Meetings.Commands
                 if (!string.IsNullOrWhiteSpace(meetingResource?.Id))
                     return meetingResource!.Id;
 
-                graphEvent = await _graph.Users["91bcfab9-1941-4d1e-8791-75f86d81f95f"]
+                graphEvent = await _graph.Users[mailbox]
                     .Events[meeting.ExternalEventId]
                     .GetAsync(cfg =>
                     {
