@@ -127,6 +127,7 @@ namespace BoardMgmt.Application.Meetings.Commands
                             .ToGetRequestInformation();
 
                         request.PathParameters["user%2Did"] = mailbox;
+                        request.PathParameters["onlineMeeting%2Did"] = onlineMeetingId;
                         return request;
                     },
                     async requestInfo =>
@@ -293,6 +294,8 @@ namespace BoardMgmt.Application.Meetings.Commands
                             .ToGetRequestInformation();
 
                         request.PathParameters["user%2Did"] = mailbox;
+                        request.PathParameters["onlineMeeting%2Did"] = onlineMeetingId;
+                        request.PathParameters["teamsTranscript%2Did"] = transcriptId;
                         return request;
                     },
                     requestInfo => _graph.RequestAdapter.SendPrimitiveAsync<Stream>(
