@@ -147,12 +147,16 @@ public sealed class Microsoft365CalendarService : ICalendarService
         return (true, joinUrl);
     }
 
-    public async Task CancelEventAsync(string eventId, CancellationToken ct = default)
+    public async Task CancelEventAsync(string eventId, string? mailbox = null, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(eventId)) return;
 
+        var resolvedMailbox = string.IsNullOrWhiteSpace(mailbox)
+            ? _opts.MailboxAddress
+            : mailbox!;
+
         await RunGraph(
-            () => _graph.Users[_opts.MailboxAddress].Events[eventId].DeleteAsync(cancellationToken: ct),
+            () => _graph.Users[resolvedMailbox].Events[eventId].DeleteAsync(cancellationToken: ct),
             "DELETE /users/{mailbox}/events/{id}", ct);
     }
 
@@ -562,7 +566,7 @@ public sealed class Microsoft365CalendarService : ICalendarService
                     {
                         var position = stream.Position;
                         using var seekableReader = new StreamReader(stream, leaveOpen: true);
-                         text = seekableReader.ReadToEnd();
+                        var text = seekableReader.ReadToEnd();
                         stream.Seek(position, SeekOrigin.Begin);
                         return text;
                     }
