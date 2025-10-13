@@ -84,6 +84,7 @@ public sealed class Microsoft365CalendarService : ICalendarService
         // Refetch with $select=onlineMeeting,onlineMeetingUrl (short retry for consistency)
         var fetched = await GetEventWithOnlineMeetingAsync(mailbox!, id, ct);
         var meeting = await EnsureTeamsMeetingDefaultsAsync(mailbox!, id, fetched, ct);
+        ApplyOnlineMeetingMetadata(m, fetched, meeting);
         var joinUrl = await ResolveJoinUrlAsync(mailbox!, id, fetched, meeting, ct);
 
         if (string.IsNullOrWhiteSpace(joinUrl))
@@ -137,6 +138,7 @@ public sealed class Microsoft365CalendarService : ICalendarService
 
         var refreshed = await GetEventWithOnlineMeetingAsync(mailbox!, m.ExternalEventId!, ct);
         var meeting = await EnsureTeamsMeetingDefaultsAsync(mailbox!, m.ExternalEventId!, refreshed, ct);
+        ApplyOnlineMeetingMetadata(m, refreshed, meeting);
 
         var joinUrl = await ResolveJoinUrlAsync(mailbox!, m.ExternalEventId!, refreshed, meeting, ct);
         if (string.IsNullOrWhiteSpace(joinUrl))
@@ -624,6 +626,19 @@ public sealed class Microsoft365CalendarService : ICalendarService
         }
 
         return (null, null);
+    }
+
+    private static void ApplyOnlineMeetingMetadata(Meeting meetingEntity, Event? graphEvent, OnlineMeeting? onlineMeeting)
+    {
+        if (meetingEntity is null)
+        {
+            return;
+        }
+
+        var onlineMeetingId = ExtractOnlineMeetingId(onlineMeeting) ?? ExtractOnlineMeetingId(graphEvent);
+        meetingEntity.ExternalOnlineMeetingId = string.IsNullOrWhiteSpace(onlineMeetingId)
+            ? null
+            : onlineMeetingId;
     }
 
     private async Task<string?> ResolveJoinUrlAsync(string mailbox, string eventId, Event? ev, OnlineMeeting? meeting, CancellationToken ct)
