@@ -1,4 +1,5 @@
-﻿using BoardMgmt.Domain.Entities;
+﻿using BoardMgmt.Domain.Calendars;
+using BoardMgmt.Domain.Entities;
 
 namespace BoardMgmt.Application.Calendars;
 
@@ -21,7 +22,7 @@ public sealed record CalendarEventDto(
     DateTimeOffset StartUtc,
     DateTimeOffset EndUtc,
     string? JoinUrl,
-    string? Provider = "Microsoft365" // default string; services should override with actual provider
+    string? Provider = CalendarProviders.Microsoft365 // default string; services should override with actual provider
 );
 
 

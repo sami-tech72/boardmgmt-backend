@@ -13,6 +13,7 @@ using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Application.Common.Email;
 using BoardMgmt.Application.Common.Options;
 using BoardMgmt.Application.Common.Parsing; // SimpleVtt
+using BoardMgmt.Domain.Calendars;
 using BoardMgmt.Domain.Entities;
 
 using MediatR;
@@ -55,13 +56,21 @@ namespace BoardMgmt.Application.Meetings.Commands
             if (string.IsNullOrWhiteSpace(meeting.ExternalCalendar))
                 throw new InvalidOperationException("Meeting.ExternalCalendar not set.");
 
+            var provider = CalendarProviders.Normalize(meeting.ExternalCalendar);
+
+            if (!CalendarProviders.IsSupported(provider))
+                throw new InvalidOperationException($"Unsupported provider: {meeting.ExternalCalendar}");
+
+            if (meeting.ExternalCalendar != provider)
+                meeting.ExternalCalendar = provider;
+
             if (string.IsNullOrWhiteSpace(meeting.ExternalEventId))
                 throw new InvalidOperationException("Meeting.ExternalEventId not set.");
 
-            var count = meeting.ExternalCalendar switch
+            var count = provider switch
             {
-                "Microsoft365" => await IngestTeams(meeting, ct),
-                "Zoom" => await IngestZoom(meeting, ct),
+                CalendarProviders.Microsoft365 => await IngestTeams(meeting, ct),
+                CalendarProviders.Zoom => await IngestZoom(meeting, ct),
                 _ => throw new InvalidOperationException($"Unsupported provider: {meeting.ExternalCalendar}")
             };
 

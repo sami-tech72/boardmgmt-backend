@@ -5,6 +5,7 @@ using BoardMgmt.Application.Common.Email;
 using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Application.Common.Interfaces.Repositories;
 using BoardMgmt.Application.Common.Options;
+using BoardMgmt.Domain.Calendars;
 using BoardMgmt.Domain.Entities;
 using BoardMgmt.Domain.Identity;
 using BoardMgmt.Infrastructure.Auth;
@@ -183,8 +184,8 @@ namespace BoardMgmt.Infrastructure
             // Selector registration (map provider keys to services)
             services.AddSingleton<ICalendarServiceSelector>(sp => new CalendarServiceSelector(new[]
             {
-                new KeyValuePair<string, ICalendarService>("Microsoft365", sp.GetRequiredService<Microsoft365CalendarService>()),
-                new KeyValuePair<string, ICalendarService>("Zoom", sp.GetRequiredService<ZoomCalendarService>())
+                new KeyValuePair<string, ICalendarService>(CalendarProviders.Microsoft365, sp.GetRequiredService<Microsoft365CalendarService>()),
+                new KeyValuePair<string, ICalendarService>(CalendarProviders.Zoom, sp.GetRequiredService<ZoomCalendarService>())
             }));
 
 

@@ -1,6 +1,7 @@
 ﻿using BoardMgmt.Application.Calendars;
 using BoardMgmt.Application.Calendars.Commands;
 using BoardMgmt.Application.Calendars.Queries;
+using BoardMgmt.Domain.Calendars;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -50,17 +51,19 @@ public sealed class CalendarController : ControllerBase
             }
         }
 
-        if (string.Equals(provider, "Zoom", StringComparison.OrdinalIgnoreCase))
+        var normalizedProvider = CalendarProviders.Normalize(provider);
+
+        if (normalizedProvider == CalendarProviders.Zoom)
         {
-            await Add("Zoom");
+            await Add(CalendarProviders.Zoom);
         }
-        else if (string.Equals(provider, "Microsoft365", StringComparison.OrdinalIgnoreCase))
+        else if (normalizedProvider == CalendarProviders.Microsoft365)
         {
-            await Add("Microsoft365");
+            await Add(CalendarProviders.Microsoft365);
         }
         else // All
         {
-            await Task.WhenAll(Add("Microsoft365"), Add("Zoom"));
+            await Task.WhenAll(Add(CalendarProviders.Microsoft365), Add(CalendarProviders.Zoom));
         }
 
         if (warnings.Count > 0)
