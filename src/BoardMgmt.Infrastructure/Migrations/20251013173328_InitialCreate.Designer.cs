@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace BoardMgmt.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20251012064259_InitialCreate")]
+    [Migration("20251013173328_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -661,6 +661,10 @@ namespace BoardMgmt.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<string>("ExternalOnlineMeetingId")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
                     b.Property<string>("HostIdentity")
                         .HasColumnType("nvarchar(max)");
 
@@ -694,6 +698,8 @@ namespace BoardMgmt.Infrastructure.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ExternalOnlineMeetingId");
 
                     b.HasIndex("ScheduledAt", "Status");
 
