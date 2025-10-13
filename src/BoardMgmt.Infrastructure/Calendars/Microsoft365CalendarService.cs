@@ -24,6 +24,10 @@ public sealed class Microsoft365CalendarService : ICalendarService
         "https://teams\\.microsoft\\.com/l/meetup-join/[^\\s\"\\<]+",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    private static readonly Regex TeamsMeetingIdFromJoinUrlRegex = new(
+        @"meetup-join/([^/?]+)/",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     private readonly ILogger<Microsoft365CalendarService> _logger;
     private bool? _supportsOnlineMeetingExpand;
 
@@ -636,9 +640,33 @@ public sealed class Microsoft365CalendarService : ICalendarService
         }
 
         var onlineMeetingId = ExtractOnlineMeetingId(onlineMeeting) ?? ExtractOnlineMeetingId(graphEvent);
+
+        if (string.IsNullOrWhiteSpace(onlineMeetingId))
+        {
+            var joinUrl = ExtractJoinUrl(graphEvent, onlineMeeting);
+            onlineMeetingId = ExtractOnlineMeetingIdFromJoinUrl(joinUrl);
+        }
+
         meetingEntity.ExternalOnlineMeetingId = string.IsNullOrWhiteSpace(onlineMeetingId)
             ? null
             : onlineMeetingId;
+    }
+
+    private static string? ExtractOnlineMeetingIdFromJoinUrl(string? joinUrl)
+    {
+        if (string.IsNullOrWhiteSpace(joinUrl))
+            return null;
+
+        var match = TeamsMeetingIdFromJoinUrlRegex.Match(joinUrl);
+        if (!match.Success)
+            return null;
+
+        var encodedMeetingId = match.Groups[1].Value;
+        if (string.IsNullOrWhiteSpace(encodedMeetingId))
+            return null;
+
+        var decodedMeetingId = Uri.UnescapeDataString(encodedMeetingId);
+        return string.IsNullOrWhiteSpace(decodedMeetingId) ? null : decodedMeetingId;
     }
 
     private async Task<string?> ResolveJoinUrlAsync(string mailbox, string eventId, Event? ev, OnlineMeeting? meeting, CancellationToken ct)
