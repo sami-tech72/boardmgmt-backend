@@ -119,10 +119,16 @@ namespace BoardMgmt.Application.Meetings.Commands
             try
             {
                 return await ExecuteTranscriptRequestWithFallbackAsync(
-                    () => _graph.Users[mailbox]
-                        .OnlineMeetings[onlineMeetingId]
-                        .Transcripts
-                        .ToGetRequestInformation(),
+                    () =>
+                    {
+                        var request = _graph.Users[mailbox]
+                            .OnlineMeetings[onlineMeetingId]
+                            .Transcripts
+                            .ToGetRequestInformation();
+
+                        request.PathParameters["user%2Did"] = mailbox;
+                        return request;
+                    },
                     async requestInfo =>
                     {
                         var json = await _graph.RequestAdapter.SendPrimitiveAsync<string>(
@@ -278,11 +284,17 @@ namespace BoardMgmt.Application.Meetings.Commands
             try
             {
                 return await ExecuteTranscriptRequestWithFallbackAsync(
-                    () => _graph.Users[mailbox]
-                        .OnlineMeetings[onlineMeetingId]
-                        .Transcripts[transcriptId]
-                        .Content
-                        .ToGetRequestInformation(),
+                    () =>
+                    {
+                        var request = _graph.Users[mailbox]
+                            .OnlineMeetings[onlineMeetingId]
+                            .Transcripts[transcriptId]
+                            .Content
+                            .ToGetRequestInformation();
+
+                        request.PathParameters["user%2Did"] = mailbox;
+                        return request;
+                    },
                     requestInfo => _graph.RequestAdapter.SendPrimitiveAsync<Stream>(
                         requestInfo,
                         GraphErrorMapping,
