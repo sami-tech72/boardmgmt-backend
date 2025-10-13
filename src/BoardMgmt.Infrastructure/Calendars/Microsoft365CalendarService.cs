@@ -17,6 +17,9 @@ namespace BoardMgmt.Infrastructure.Calendars;
 
 public sealed class Microsoft365CalendarService : ICalendarService
 {
+    private const string TeamsProvisioningHelpMessage =
+        "Microsoft 365 reported that the organizer's Teams account is not fully provisioned for online meetings. Ask the organizer to sign in to Microsoft Teams at least once and ensure a Teams license and meeting policy that allows online meetings are assigned. See https://learn.microsoft.com/en-us/answers/questions/2126422/unable-to-create-or-fetch-teams-online-meetings-vi for additional troubleshooting steps.";
+
     private readonly GraphServiceClient _graph;
     private readonly GraphOptions _opts;
     private static readonly Regex TeamsJoinUrlRegex = new(
@@ -40,110 +43,124 @@ public sealed class Microsoft365CalendarService : ICalendarService
 
     public async Task<(string eventId, string? joinUrl)> CreateEventAsync(Meeting m, CancellationToken ct = default)
     {
-        var end = m.EndAt ?? m.ScheduledAt.AddHours(1);
-        var mailbox = string.IsNullOrWhiteSpace(m.ExternalCalendarMailbox)
-            ? _opts.MailboxAddress
-            : m.ExternalCalendarMailbox;
-
-        // Ensure the meeting keeps track of the mailbox that actually hosts the
-        // Teams event.  The transcript ingest workflow relies on
-        // Meeting.ExternalCalendarMailbox being populated; if the caller did not
-        // provide a HostIdentity when creating the meeting we still fall back to
-        // the configured default mailbox.  Persisting it here means later
-        // handlers (such as IngestTranscriptHandler) can safely resolve the
-        // online meeting without requiring additional context.
-        m.ExternalCalendarMailbox = mailbox;
-
-        var ev = new Event
+        try
         {
-            Subject = m.Title,
-            Body = new ItemBody { ContentType = BodyType.Html, Content = m.Description ?? string.Empty },
-            Start = new DateTimeTimeZone { DateTime = m.ScheduledAt.UtcDateTime.ToString("o"), TimeZone = "UTC" },
-            End = new DateTimeTimeZone { DateTime = end.UtcDateTime.ToString("o"), TimeZone = "UTC" },
-            Location = new Location { DisplayName = string.IsNullOrWhiteSpace(m.Location) ? "TBD" : m.Location },
+            var end = m.EndAt ?? m.ScheduledAt.AddHours(1);
+            var mailbox = string.IsNullOrWhiteSpace(m.ExternalCalendarMailbox)
+                ? _opts.MailboxAddress
+                : m.ExternalCalendarMailbox;
 
-            // Teams meeting
-            IsOnlineMeeting = true,
-            OnlineMeetingProvider = OnlineMeetingProviderType.TeamsForBusiness,
+            // Ensure the meeting keeps track of the mailbox that actually hosts the
+            // Teams event.  The transcript ingest workflow relies on
+            // Meeting.ExternalCalendarMailbox being populated; if the caller did not
+            // provide a HostIdentity when creating the meeting we still fall back to
+            // the configured default mailbox.  Persisting it here means later
+            // handlers (such as IngestTranscriptHandler) can safely resolve the
+            // online meeting without requiring additional context.
+            m.ExternalCalendarMailbox = mailbox;
 
-            Attendees = m.Attendees.Select(a => new Attendee
+            var ev = new Event
             {
-                Type = a.IsRequired ? AttendeeType.Required : AttendeeType.Optional,
-                EmailAddress = new EmailAddress { Address = a.Email ?? string.Empty, Name = a.Name }
-            }).ToList()
-        };
+                Subject = m.Title,
+                Body = new ItemBody { ContentType = BodyType.Html, Content = m.Description ?? string.Empty },
+                Start = new DateTimeTimeZone { DateTime = m.ScheduledAt.UtcDateTime.ToString("o"), TimeZone = "UTC" },
+                End = new DateTimeTimeZone { DateTime = end.UtcDateTime.ToString("o"), TimeZone = "UTC" },
+                Location = new Location { DisplayName = string.IsNullOrWhiteSpace(m.Location) ? "TBD" : m.Location },
 
-        // Create
-        var created = await RunGraph<Event>(
-            () => _graph.Users[mailbox].Events.PostAsync(ev, cancellationToken: ct),
-            "POST /users/{mailbox}/events", ct);
+                // Teams meeting
+                IsOnlineMeeting = true,
+                OnlineMeetingProvider = OnlineMeetingProviderType.TeamsForBusiness,
 
-        var id = created?.Id ?? throw new InvalidOperationException("Graph didn't return Event Id.");
+                Attendees = m.Attendees.Select(a => new Attendee
+                {
+                    Type = a.IsRequired ? AttendeeType.Required : AttendeeType.Optional,
+                    EmailAddress = new EmailAddress { Address = a.Email ?? string.Empty, Name = a.Name }
+                }).ToList()
+            };
 
-        // Refetch with $select=onlineMeeting,onlineMeetingUrl (short retry for consistency)
-        var fetched = await GetEventWithOnlineMeetingAsync(mailbox!, id, ct);
-        var meeting = await EnsureTeamsMeetingDefaultsAsync(mailbox!, id, fetched, ct);
-        var joinUrl = await ResolveJoinUrlAsync(mailbox!, id, fetched, meeting, ct);
+            // Create
+            var created = await RunGraph<Event>(
+                () => _graph.Users[mailbox].Events.PostAsync(ev, cancellationToken: ct),
+                "POST /users/{mailbox}/events", ct);
 
-        if (string.IsNullOrWhiteSpace(joinUrl))
-        {
-            _logger.LogWarning("Teams meeting link was not generated for newly created event {EventId}.", id);
+            var id = created?.Id ?? throw new InvalidOperationException("Graph didn't return Event Id.");
+
+            // Refetch with $select=onlineMeeting,onlineMeetingUrl (short retry for consistency)
+            var fetched = await GetEventWithOnlineMeetingAsync(mailbox!, id, ct);
+            var meeting = await EnsureTeamsMeetingDefaultsAsync(mailbox!, id, fetched, ct);
+            var joinUrl = await ResolveJoinUrlAsync(mailbox!, id, fetched, meeting, ct);
+
+            if (string.IsNullOrWhiteSpace(joinUrl))
+            {
+                _logger.LogWarning("Teams meeting link was not generated for newly created event {EventId}.", id);
+            }
+
+            return (id, joinUrl);
         }
-
-        return (id, joinUrl);
+        catch (ApiException ex) when (IsTeamsOnlineMeetingProvisioningIncomplete(ex))
+        {
+            throw new InvalidOperationException(TeamsProvisioningHelpMessage, ex);
+        }
     }
 
     public async Task<(bool ok, string? joinUrl)> UpdateEventAsync(Meeting m, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(m.ExternalEventId)) return (false, null);
 
-        var end = m.EndAt ?? m.ScheduledAt.AddHours(1);
-        var mailbox = string.IsNullOrWhiteSpace(m.ExternalCalendarMailbox)
-            ? _opts.MailboxAddress
-            : m.ExternalCalendarMailbox;
-
-        // Mirror the create logic so updates continue to persist whichever
-        // mailbox we ultimately act against.  This protects against meetings
-        // created before the create logic populated the mailbox and ensures
-        // subsequent transcript ingestion has the data it needs.
-        m.ExternalCalendarMailbox = mailbox;
-
-        var patch = new Event
+        try
         {
-            Subject = m.Title,
-            Body = new ItemBody { ContentType = BodyType.Html, Content = m.Description ?? string.Empty },
-            Start = new DateTimeTimeZone { DateTime = m.ScheduledAt.UtcDateTime.ToString("o"), TimeZone = "UTC" },
-            End = new DateTimeTimeZone { DateTime = end.UtcDateTime.ToString("o"), TimeZone = "UTC" },
-            Location = new Location { DisplayName = string.IsNullOrWhiteSpace(m.Location) ? "TBD" : m.Location },
+            var end = m.EndAt ?? m.ScheduledAt.AddHours(1);
+            var mailbox = string.IsNullOrWhiteSpace(m.ExternalCalendarMailbox)
+                ? _opts.MailboxAddress
+                : m.ExternalCalendarMailbox;
 
-            // Ensure/keep Teams meeting
-            IsOnlineMeeting = true,
-            OnlineMeetingProvider = OnlineMeetingProviderType.TeamsForBusiness,
+            // Mirror the create logic so updates continue to persist whichever
+            // mailbox we ultimately act against.  This protects against meetings
+            // created before the create logic populated the mailbox and ensures
+            // subsequent transcript ingestion has the data it needs.
+            m.ExternalCalendarMailbox = mailbox;
 
-            Attendees = m.Attendees.Select(a => new Attendee
+            var patch = new Event
             {
-                Type = a.IsRequired ? AttendeeType.Required : AttendeeType.Optional,
-                EmailAddress = new EmailAddress { Address = a.Email ?? string.Empty, Name = a.Name }
-            }).ToList()
-        };
+                Subject = m.Title,
+                Body = new ItemBody { ContentType = BodyType.Html, Content = m.Description ?? string.Empty },
+                Start = new DateTimeTimeZone { DateTime = m.ScheduledAt.UtcDateTime.ToString("o"), TimeZone = "UTC" },
+                End = new DateTimeTimeZone { DateTime = end.UtcDateTime.ToString("o"), TimeZone = "UTC" },
+                Location = new Location { DisplayName = string.IsNullOrWhiteSpace(m.Location) ? "TBD" : m.Location },
 
-        await RunGraph(
-            () => _graph.Users[mailbox].Events[m.ExternalEventId].PatchAsync(
-                patch,
-                requestConfiguration => requestConfiguration.Headers.Add("If-Match", "*"),
-                cancellationToken: ct),
-            "PATCH /users/{mailbox}/events/{id}", ct);
+                // Ensure/keep Teams meeting
+                IsOnlineMeeting = true,
+                OnlineMeetingProvider = OnlineMeetingProviderType.TeamsForBusiness,
 
-        var refreshed = await GetEventWithOnlineMeetingAsync(mailbox!, m.ExternalEventId!, ct);
-        var meeting = await EnsureTeamsMeetingDefaultsAsync(mailbox!, m.ExternalEventId!, refreshed, ct);
+                Attendees = m.Attendees.Select(a => new Attendee
+                {
+                    Type = a.IsRequired ? AttendeeType.Required : AttendeeType.Optional,
+                    EmailAddress = new EmailAddress { Address = a.Email ?? string.Empty, Name = a.Name }
+                }).ToList()
+            };
 
-        var joinUrl = await ResolveJoinUrlAsync(mailbox!, m.ExternalEventId!, refreshed, meeting, ct);
-        if (string.IsNullOrWhiteSpace(joinUrl))
-        {
-            _logger.LogWarning("Teams meeting link was not generated for updated event {EventId}.", m.ExternalEventId);
+            await RunGraph(
+                () => _graph.Users[mailbox].Events[m.ExternalEventId].PatchAsync(
+                    patch,
+                    requestConfiguration => requestConfiguration.Headers.Add("If-Match", "*"),
+                    cancellationToken: ct),
+                "PATCH /users/{mailbox}/events/{id}", ct);
+
+            var refreshed = await GetEventWithOnlineMeetingAsync(mailbox!, m.ExternalEventId!, ct);
+            var meeting = await EnsureTeamsMeetingDefaultsAsync(mailbox!, m.ExternalEventId!, refreshed, ct);
+
+            var joinUrl = await ResolveJoinUrlAsync(mailbox!, m.ExternalEventId!, refreshed, meeting, ct);
+            if (string.IsNullOrWhiteSpace(joinUrl))
+            {
+                _logger.LogWarning("Teams meeting link was not generated for updated event {EventId}.", m.ExternalEventId);
+            }
+
+            return (true, joinUrl);
         }
-
-        return (true, joinUrl);
+        catch (ApiException ex) when (IsTeamsOnlineMeetingProvisioningIncomplete(ex))
+        {
+            throw new InvalidOperationException(TeamsProvisioningHelpMessage, ex);
+        }
     }
 
     public async Task CancelEventAsync(string eventId, CancellationToken ct = default)
@@ -583,6 +600,144 @@ public sealed class Microsoft365CalendarService : ICalendarService
         }
 
         return string.Empty;
+    }
+
+    private static bool IsTeamsOnlineMeetingProvisioningIncomplete(ApiException ex)
+    {
+        var responseBody = GetResponseBody(ex);
+        var codes = GetGraphErrorCodes(responseBody);
+        if (codes.Count > 0 &&
+            !codes.Contains("UnknownError") &&
+            !codes.Contains("generalException"))
+        {
+            return false;
+        }
+
+        var parts = new[]
+        {
+            TryExtractGraphErrorMessage(responseBody),
+            ex.Message,
+            responseBody
+        };
+
+        var combined = string.Join(" ", parts.Where(s => !string.IsNullOrWhiteSpace(s))).ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(combined))
+            return false;
+
+        if (combined.Contains("teams") && combined.Contains("license"))
+            return true;
+
+        if (combined.Contains("teams") && combined.Contains("enabled"))
+            return true;
+
+        if (combined.Contains("enable teams"))
+            return true;
+
+        if ((combined.Contains("online meeting") || combined.Contains("onlinemeeting")) &&
+            (combined.Contains("not available") || combined.Contains("not enabled") || combined.Contains("disabled")))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private static string? TryExtractGraphErrorMessage(string? body)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+            return null;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            var root = doc.RootElement;
+
+            if (root.ValueKind == JsonValueKind.Object &&
+                root.TryGetProperty("error", out var errorElement) &&
+                errorElement.ValueKind == JsonValueKind.Object)
+            {
+                root = errorElement;
+            }
+
+            if (root.ValueKind == JsonValueKind.Object &&
+                root.TryGetProperty("message", out var messageElement))
+            {
+                if (messageElement.ValueKind == JsonValueKind.String)
+                    return messageElement.GetString();
+
+                if (messageElement.ValueKind == JsonValueKind.Object &&
+                    messageElement.TryGetProperty("value", out var valueElement) &&
+                    valueElement.ValueKind == JsonValueKind.String)
+                {
+                    return valueElement.GetString();
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            // Ignore parsing issues and fall back to null.
+        }
+
+        return null;
+    }
+
+    private static IReadOnlyCollection<string> GetGraphErrorCodes(string? body)
+    {
+        var codes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(body))
+            return codes;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            CollectGraphErrorCodes(doc.RootElement, codes);
+        }
+        catch (JsonException)
+        {
+            // Ignore parsing issues and return whatever we have so far.
+        }
+
+        return codes;
+    }
+
+    private static void CollectGraphErrorCodes(JsonElement element, ISet<string> codes)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                if (element.TryGetProperty("code", out var codeElement) && codeElement.ValueKind == JsonValueKind.String)
+                {
+                    var value = codeElement.GetString();
+                    if (!string.IsNullOrWhiteSpace(value))
+                        codes.Add(value!);
+                }
+
+                if (element.TryGetProperty("innerError", out var innerElement))
+                {
+                    CollectGraphErrorCodes(innerElement, codes);
+                }
+
+                foreach (var property in element.EnumerateObject())
+                {
+                    if (string.Equals(property.Name, "code", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(property.Name, "innerError", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    CollectGraphErrorCodes(property.Value, codes);
+                }
+
+                break;
+
+            case JsonValueKind.Array:
+                foreach (var item in element.EnumerateArray())
+                {
+                    CollectGraphErrorCodes(item, codes);
+                }
+
+                break;
+        }
     }
 
     private async Task<(string? meetingId, OnlineMeeting? meeting)> ResolveOnlineMeetingAsync(string mailbox, string eventId, Event? ev, CancellationToken ct)
