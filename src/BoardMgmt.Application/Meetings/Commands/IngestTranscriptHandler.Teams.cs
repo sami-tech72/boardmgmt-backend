@@ -445,6 +445,14 @@ namespace BoardMgmt.Application.Meetings.Commands
         catch (ServiceException ex)
         {
             LogGraphServiceException(ex, "Teams Graph API error while resolving online meeting id", new { mailbox, meeting.ExternalEventId });
+
+            if (IsTeamsOnlineMeetingProvisioningIncomplete(ex))
+            {
+                throw new InvalidOperationException(
+                    "Microsoft 365 reported that the organizer's Teams account is not fully provisioned for online meetings. Ask the organizer to sign in to Microsoft Teams at least once and ensure a Teams license and meeting policy that allows online meetings are assigned. See https://learn.microsoft.com/en-us/answers/questions/2126422/unable-to-create-or-fetch-teams-online-meetings-vi for additional troubleshooting steps.",
+                    ex);
+            }
+
             throw;
         }
 
@@ -475,6 +483,14 @@ namespace BoardMgmt.Application.Meetings.Commands
         catch (ServiceException ex)
         {
             LogGraphServiceException(ex, "Failed to retrieve Teams online meeting", new { mailbox, eventId });
+
+            if (IsTeamsOnlineMeetingProvisioningIncomplete(ex))
+            {
+                throw new InvalidOperationException(
+                    "Microsoft 365 reported that the organizer's Teams account is not fully provisioned for online meetings. Ask the organizer to sign in to Microsoft Teams at least once and ensure a Teams license and meeting policy that allows online meetings are assigned. See https://learn.microsoft.com/en-us/answers/questions/2126422/unable-to-create-or-fetch-teams-online-meetings-vi for additional troubleshooting steps.",
+                    ex);
+            }
+
             throw;
         }
     }
@@ -545,6 +561,38 @@ namespace BoardMgmt.Application.Meetings.Commands
         }
 
         return string.Join("; ", details.Distinct(StringComparer.Ordinal));
+    }
+
+    private static bool IsTeamsOnlineMeetingProvisioningIncomplete(ServiceException ex)
+    {
+        var codes = GetGraphErrorCodes(ex);
+        if (!codes.Contains("UnknownError") && !codes.Contains("generalException"))
+            return false;
+
+        var (_, message, rawResponse) = GetGraphErrorInfo(ex);
+        var parts = new List<string?> { message, rawResponse, ex.Message };
+        var combined = string.Join(" ", parts.Where(s => !string.IsNullOrWhiteSpace(s)))
+            .ToLowerInvariant();
+
+        if (string.IsNullOrWhiteSpace(combined))
+            return false;
+
+        if (combined.Contains("teams") && combined.Contains("license"))
+            return true;
+
+        if (combined.Contains("teams") && combined.Contains("enabled"))
+            return true;
+
+        if (combined.Contains("enable teams"))
+            return true;
+
+        if ((combined.Contains("online meeting") || combined.Contains("onlinemeeting")) &&
+            (combined.Contains("not available") || combined.Contains("not enabled") || combined.Contains("disabled")))
+        {
+            return true;
+        }
+
+        return false;
     }
 
     private static IReadOnlyCollection<string> GetGraphErrorCodes(ServiceException ex)
