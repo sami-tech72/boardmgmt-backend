@@ -27,7 +27,7 @@ namespace BoardMgmt.Application.Meetings.Commands
                 !string.IsNullOrWhiteSpace(entity.ExternalEventId))
             {
                 var svc = _calSelector.For(entity.ExternalCalendar);
-                await svc.CancelEventAsync(entity.ExternalEventId, ct); // ✅ correct method
+                await svc.CancelEventAsync(entity.ExternalEventId, entity.ExternalCalendarMailbox, ct); // ✅ correct method
             }
 
             _db.Meetings.Remove(entity);

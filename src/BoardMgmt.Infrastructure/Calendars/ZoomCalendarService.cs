@@ -140,9 +140,11 @@ public sealed class ZoomCalendarService : ICalendarService
     // ---------------------------
     // Delete
     // ---------------------------
-    public async Task CancelEventAsync(string eventId, CancellationToken ct = default)
+    public async Task CancelEventAsync(string eventId, string? mailbox = null, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(eventId)) return;
+
+        _ = mailbox; // Zoom API identifies meetings solely by the meeting id.
 
         var token = await GetAccessTokenAsync(ct);
         using var req = new HttpRequestMessage(
