@@ -205,6 +205,12 @@ namespace BoardMgmt.Application.Meetings.Commands
                         return selected;
                     });
             }
+            catch (ServiceException ex) when (IsNotFound(ex))
+            {
+                throw new InvalidOperationException(
+                    $"Microsoft 365 could not find a transcript for this Teams meeting. Ensure transcription was enabled and the meeting belongs to the mailbox '{mailbox}'. Details: {GetGraphErrorDetail(ex)}",
+                    ex);
+            }
             catch (ServiceException ex)
             {
                 LogGraphServiceException(ex, "Failed to list Teams transcripts", new { mailbox, onlineMeetingId });
@@ -314,6 +320,12 @@ namespace BoardMgmt.Application.Meetings.Commands
                         requestInfo,
                         GraphErrorMapping,
                         cancellationToken: ct));
+            }
+            catch (ServiceException ex) when (IsNotFound(ex))
+            {
+                throw new InvalidOperationException(
+                    $"Microsoft 365 reported that the transcript content is no longer available. Try reprocessing the meeting or verify transcript retention settings. Details: {GetGraphErrorDetail(ex)}",
+                    ex);
             }
             catch (ServiceException ex)
             {
@@ -542,6 +554,9 @@ namespace BoardMgmt.Application.Meetings.Commands
 
         private static bool IsBadRequest(ServiceException ex)
             => ex.ResponseStatusCode == (int)HttpStatusCode.BadRequest;
+
+        private static bool IsNotFound(ServiceException ex)
+            => ex.ResponseStatusCode == (int)HttpStatusCode.NotFound;
 
         private static bool IsTransientGraphServerError(ServiceException ex)
         {
