@@ -32,6 +32,16 @@ public class CreateMeetingHandler : IRequestHandler<CreateMeetingCommand, Guid>
         if (!CalendarProviders.IsSupported(provider))
             throw new ArgumentOutOfRangeException(nameof(request.Provider), $"Unknown calendar provider: {request.Provider}");
 
+        string? hostIdentity = string.IsNullOrWhiteSpace(request.HostIdentity)
+            ? null
+            : request.HostIdentity!.Trim();
+
+        string? normalizedMailbox = hostIdentity;
+
+        if (string.Equals(provider, CalendarProviders.Microsoft365, StringComparison.OrdinalIgnoreCase))
+        {
+            normalizedMailbox = MailboxIdentifier.Normalize(hostIdentity);
+        }
 
         var entity = new Meeting
         {
@@ -43,8 +53,8 @@ public class CreateMeetingHandler : IRequestHandler<CreateMeetingCommand, Guid>
             Location = string.IsNullOrWhiteSpace(request.Location) ? "TBD" : request.Location.Trim(),
             Status = MeetingStatus.Scheduled,
             ExternalCalendar = provider!, // "Microsoft365" or "Zoom"
-            ExternalCalendarMailbox = request.HostIdentity, // M365 mailbox or Zoom host email (optional)
-            HostIdentity = request.HostIdentity
+            ExternalCalendarMailbox = normalizedMailbox,
+            HostIdentity = normalizedMailbox ?? hostIdentity
         };
 
 
