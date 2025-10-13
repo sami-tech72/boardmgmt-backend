@@ -245,7 +245,11 @@ public sealed class Microsoft365CalendarService : ICalendarService
             catch (ApiException ex) when (tryExpand && IsOnlineMeetingExpandUnsupported(ex))
             {
                 _supportsOnlineMeetingExpand = false;
-                _logger.LogInformation("Microsoft Graph rejected $expand=onlineMeeting; retrying without expand.");
+                _logger.LogInformation(
+                    ex,
+                    "Microsoft Graph rejected $expand=onlineMeeting; retrying without expand. status={Status} message={Message}",
+                    ex.ResponseStatusCode,
+                    ex.Message);
                 continue;
             }
 
