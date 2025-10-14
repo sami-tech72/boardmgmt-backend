@@ -217,7 +217,8 @@ namespace BoardMgmt.Application.Meetings.Commands
                             transcripts.Count);
 
                         return selected;
-                    });
+                    },
+                    shouldRetryResult: result => result is null);
             }
             catch (ServiceException ex) when (IsNotFound(ex))
             {
@@ -342,7 +343,8 @@ namespace BoardMgmt.Application.Meetings.Commands
                     requestInfo => _graph.RequestAdapter.SendPrimitiveAsync<Stream>(
                         requestInfo,
                         GraphErrorMapping,
-                        cancellationToken: ct));
+                        cancellationToken: ct),
+                    shouldRetryResult: stream => stream is null);
             }
             catch (ServiceException ex) when (IsNotFound(ex))
             {
@@ -359,9 +361,11 @@ namespace BoardMgmt.Application.Meetings.Commands
 
         private async Task<T?> ExecuteTranscriptRequestWithFallbackAsync<T>(
             Func<RequestInformation> buildRequest,
-            Func<RequestInformation, Task<T?>> sendAsync)
+            Func<RequestInformation, Task<T?>> sendAsync,
+            Func<T?, bool>? shouldRetryResult = null)
         {
             ServiceException? fallbackTrigger = null;
+            var retriedDueToEmptyResult = false;
 
             foreach (var baseUrl in TranscriptApiBaseUrls)
             {
@@ -370,7 +374,17 @@ namespace BoardMgmt.Application.Meetings.Commands
 
                 try
                 {
-                    return await sendAsync(requestInfo);
+                    var result = await sendAsync(requestInfo);
+
+                    if (baseUrl == GraphV1BaseUrl && shouldRetryResult is not null && shouldRetryResult(result))
+                    {
+                        retriedDueToEmptyResult = true;
+                        _logger.LogDebug(
+                            "Retrying Teams transcript request using beta endpoint because v1.0 returned an empty result.");
+                        continue;
+                    }
+
+                    return result;
                 }
                 catch (ServiceException ex) when (baseUrl == GraphV1BaseUrl && ShouldRetryTranscriptRequest(ex))
                 {
@@ -387,6 +401,11 @@ namespace BoardMgmt.Application.Meetings.Commands
             if (fallbackTrigger is not null)
             {
                 throw fallbackTrigger;
+            }
+
+            if (retriedDueToEmptyResult)
+            {
+                return default;
             }
 
             return default;
