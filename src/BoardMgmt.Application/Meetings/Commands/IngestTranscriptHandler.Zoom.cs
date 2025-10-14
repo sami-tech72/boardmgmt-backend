@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -145,12 +146,57 @@ namespace BoardMgmt.Application.Meetings.Commands
 
         var fileId = trFile.GetProperty("id").GetString()!;
         var downloadUrl = trFile.GetProperty("download_url").GetString()!;
+        var createdUtc = TryGetZoomRecordingCreatedUtc(trFile);
 
         var vtt = await DownloadZoomTranscriptAsync(http, token, downloadUrl, ct);
         if (string.IsNullOrWhiteSpace(vtt))
             throw new InvalidOperationException("Zoom returned an empty transcript content.");
 
-        return await SaveVtt(meeting, CalendarProviders.Zoom, fileId, vtt, ct);
+        return await SaveVtt(
+            meeting,
+            CalendarProviders.Zoom,
+            fileId,
+            vtt,
+            ct,
+            providerCreatedUtc: createdUtc);
+    }
+
+    private static DateTimeOffset? TryGetZoomRecordingCreatedUtc(JsonElement trFile)
+    {
+        if (trFile.TryGetProperty("recording_start", out var startEl)
+            && TryParseZoomDateTime(startEl.GetString(), out var start))
+        {
+            return start;
+        }
+
+        if (trFile.TryGetProperty("recording_end", out var endEl)
+            && TryParseZoomDateTime(endEl.GetString(), out var end))
+        {
+            return end;
+        }
+
+        if (trFile.TryGetProperty("status", out var statusEl)
+            && string.Equals(statusEl.GetString(), "completed", StringComparison.OrdinalIgnoreCase)
+            && trFile.TryGetProperty("date_created", out var createdEl)
+            && TryParseZoomDateTime(createdEl.GetString(), out var created))
+        {
+            return created;
+        }
+
+        return null;
+    }
+
+    private static bool TryParseZoomDateTime(string? value, out DateTimeOffset result)
+    {
+        if (!string.IsNullOrWhiteSpace(value)
+            && DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed))
+        {
+            result = parsed;
+            return true;
+        }
+
+        result = default;
+        return false;
     }
 
     private async Task<string> DownloadZoomTranscriptAsync(HttpClient http, string token, string downloadUrl, CancellationToken ct)

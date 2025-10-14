@@ -80,7 +80,13 @@ namespace BoardMgmt.Application.Meetings.Commands
         // --------------------------------------------------------------------
         // Persist VTT → Transcript + TranscriptUtterance (idempotent replace)
         // --------------------------------------------------------------------
-        public async Task<int> SaveVtt(Meeting meeting, string provider, string providerTranscriptId, string vtt, CancellationToken ct)
+        public async Task<int> SaveVtt(
+            Meeting meeting,
+            string provider,
+            string providerTranscriptId,
+            string vtt,
+            CancellationToken ct,
+            DateTimeOffset? providerCreatedUtc = null)
         {
             var cues = SimpleVtt.Parse(vtt).ToList();
             const int MaxAttempts = 3;
@@ -92,6 +98,7 @@ namespace BoardMgmt.Application.Meetings.Commands
                 cues,
                 attempt: 1,
                 maxAttempts: MaxAttempts,
+                providerCreatedUtc: providerCreatedUtc,
                 ct);
         }
 
@@ -102,6 +109,7 @@ namespace BoardMgmt.Application.Meetings.Commands
             IReadOnlyList<SimpleVtt.Cue> cues,
             int attempt,
             int maxAttempts,
+            DateTimeOffset? providerCreatedUtc,
             CancellationToken ct)
         {
             if (_db is not DbContext db)
@@ -138,15 +146,19 @@ namespace BoardMgmt.Application.Meetings.Commands
                                     MeetingId = meeting.Id,
                                     Provider = provider,
                                     ProviderTranscriptId = providerTranscriptId,
-                                    CreatedUtc = DateTimeOffset.UtcNow
+                                    CreatedUtc = providerCreatedUtc ?? DateTimeOffset.UtcNow
                                 };
                                 db.Set<Transcript>().Add(transcript);
                                 await db.SaveChangesAsync(ct); // ensure Id
                             }
                             else
                             {
-                                // Keep CreatedUtc stable; only update external id
+                                // Keep CreatedUtc stable unless the provider shares a better timestamp; always refresh external id
                                 transcript.ProviderTranscriptId = providerTranscriptId;
+                                if (providerCreatedUtc.HasValue && transcript.CreatedUtc != providerCreatedUtc.Value)
+                                {
+                                    transcript.CreatedUtc = providerCreatedUtc.Value;
+                                }
                                 await db.SaveChangesAsync(ct);
                             }
 
