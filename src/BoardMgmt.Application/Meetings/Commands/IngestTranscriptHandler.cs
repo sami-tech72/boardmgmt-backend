@@ -1,5 +1,4 @@
-﻿// File: Application/Meetings/Commands/IngestTranscriptHandler.cs
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Data; // IsolationLevel
 using System.Linq;

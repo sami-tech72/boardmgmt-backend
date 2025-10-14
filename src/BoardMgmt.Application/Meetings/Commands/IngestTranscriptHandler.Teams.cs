@@ -26,14 +26,31 @@ namespace BoardMgmt.Application.Meetings.Commands
         private static readonly string[] TranscriptApiBaseUrls = { GraphV1BaseUrl, GraphBetaBaseUrl };
 
         private static readonly Dictionary<string, ParsableFactory<IParsable>> GraphErrorMapping = new()
-    {
-        {"4XX", ODataError.CreateFromDiscriminatorValue},
-        {"5XX", ODataError.CreateFromDiscriminatorValue}
-    };
+        {
+            {"4XX", ODataError.CreateFromDiscriminatorValue},
+            {"5XX", ODataError.CreateFromDiscriminatorValue}
+        };
 
         private static readonly Regex TeamsMeetingIdRegex = new(
             @"19(?:%3a|:)meeting[^\s/?""'<>]+",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        // ------------- NEW: UPN/email → userId (GUID) -----------------
+        private async Task<string> ResolveUserIdAsync(string mailboxOrUpn, CancellationToken ct)
+        {
+            if (Guid.TryParse(mailboxOrUpn, out _))
+                return mailboxOrUpn;
+
+            var user = await _graph.Users[mailboxOrUpn].GetAsync(cfg =>
+            {
+                cfg.QueryParameters.Select = new[] { "id" };
+            }, ct);
+
+            if (string.IsNullOrWhiteSpace(user?.Id))
+                throw new InvalidOperationException($"Could not resolve user id for '{mailboxOrUpn}'.");
+
+            return user!.Id!;
+        }
 
         private async Task<int> IngestTeams(Meeting meeting, CancellationToken ct)
         {
@@ -43,26 +60,27 @@ namespace BoardMgmt.Application.Meetings.Commands
                     ? meeting.HostIdentity
                     : _app.MailboxAddress;
 
-            var mailbox = MailboxIdentifier.Normalize(rawMailbox);
+            var normalized = MailboxIdentifier.Normalize(rawMailbox);
 
-            if (string.IsNullOrWhiteSpace(mailbox))
+            if (string.IsNullOrWhiteSpace(normalized))
                 throw new InvalidOperationException(
                     "Meeting.ExternalCalendarMailbox is required for Teams transcript ingestion (set HostIdentity when creating the meeting or configure a default mailbox).");
 
             if (!string.IsNullOrWhiteSpace(rawMailbox)
-                && !string.Equals(rawMailbox, mailbox, StringComparison.OrdinalIgnoreCase))
+                && !string.Equals(rawMailbox, normalized, StringComparison.OrdinalIgnoreCase))
             {
                 _logger.LogDebug(
                     "Normalized Teams mailbox identifier from {Original} to {Normalized} while ingesting transcript for meeting {MeetingId}.",
-                    rawMailbox,
-                    mailbox,
-                    meeting.Id);
+                    rawMailbox, normalized, meeting.Id);
             }
+
+            // ALWAYS work with the AAD object id for /onlineMeetings & /transcripts
+            var userId = await ResolveUserIdAsync(normalized!, ct);
 
             string onlineMeetingId;
             try
             {
-                onlineMeetingId = await ResolveTeamsOnlineMeetingIdAsync(mailbox!, meeting, ct);
+                onlineMeetingId = await ResolveTeamsOnlineMeetingIdAsync(userId, meeting, ct); // pass userId
             }
             catch (ServiceException ex) when (IsTransientGraphServerError(ex))
             {
@@ -80,7 +98,7 @@ namespace BoardMgmt.Application.Meetings.Commands
             TeamsTranscriptMetadata? transcript;
             try
             {
-                transcript = await GetTeamsTranscriptMetadataAsync(mailbox!, onlineMeetingId, ct);
+                transcript = await GetTeamsTranscriptMetadataAsync(userId, onlineMeetingId, ct);
             }
             catch (ServiceException ex) when (IsBadRequest(ex))
             {
@@ -101,7 +119,7 @@ namespace BoardMgmt.Application.Meetings.Commands
             Stream? stream;
             try
             {
-                stream = await DownloadTeamsTranscriptContentAsync(mailbox!, onlineMeetingId, transcript.Id, ct);
+                stream = await DownloadTeamsTranscriptContentAsync(userId, onlineMeetingId, transcript.Id, ct);
             }
             catch (ServiceException ex) when (IsTransientGraphServerError(ex))
             {
@@ -124,7 +142,7 @@ namespace BoardMgmt.Application.Meetings.Commands
         }
 
         private async Task<TeamsTranscriptMetadata?> GetTeamsTranscriptMetadataAsync(
-            string mailbox,
+            string userId,
             string onlineMeetingId,
             CancellationToken ct)
         {
@@ -133,12 +151,12 @@ namespace BoardMgmt.Application.Meetings.Commands
                 return await ExecuteTranscriptRequestWithFallbackAsync(
                     () =>
                     {
-                        var request = _graph.Users[mailbox]
+                        var request = _graph.Users[userId]
                             .OnlineMeetings[onlineMeetingId]
                             .Transcripts
                             .ToGetRequestInformation();
 
-                        request.PathParameters["user%2Did"] = mailbox;
+                        request.PathParameters["user%2Did"] = userId;                 // GUID
                         request.PathParameters["onlineMeeting%2Did"] = onlineMeetingId;
                         return request;
                     },
@@ -160,20 +178,14 @@ namespace BoardMgmt.Application.Meetings.Commands
 
                         foreach (var element in valueElement.EnumerateArray())
                         {
-                            if (element.ValueKind != JsonValueKind.Object)
-                                continue;
-
+                            if (element.ValueKind != JsonValueKind.Object) continue;
                             var metadata = TryParseTeamsTranscriptMetadata(element);
-                            if (metadata is not null)
-                                transcripts.Add(metadata);
+                            if (metadata is not null) transcripts.Add(metadata);
                         }
 
                         if (transcripts.Count == 0)
                         {
-                            _logger.LogInformation(
-                                "Teams transcript list returned no entries. Mailbox={Mailbox} OnlineMeetingId={OnlineMeetingId}",
-                                mailbox,
-                                onlineMeetingId);
+                            _logger.LogInformation("Teams transcript list returned no entries. UserId={UserId} OnlineMeetingId={OnlineMeetingId}", userId, onlineMeetingId);
                             return null;
                         }
 
@@ -182,18 +194,9 @@ namespace BoardMgmt.Application.Meetings.Commands
                             .OrderByDescending(t => t.CreatedUtc ?? DateTimeOffset.MinValue)
                             .ToList();
 
-                        TeamsTranscriptMetadata selected;
-
-                        if (ready.Count > 0)
-                        {
-                            selected = ready[0];
-                        }
-                        else
-                        {
-                            selected = transcripts
-                                .OrderByDescending(t => t.CreatedUtc ?? DateTimeOffset.MinValue)
-                                .First();
-                        }
+                        var selected = ready.Count > 0
+                            ? ready[0]
+                            : transcripts.OrderByDescending(t => t.CreatedUtc ?? DateTimeOffset.MinValue).First();
 
                         _logger.LogInformation(
                             "Selected Teams transcript {TranscriptId}. Status={Status} CreatedUtc={CreatedUtc}. TotalTranscripts={Count}",
@@ -208,12 +211,12 @@ namespace BoardMgmt.Application.Meetings.Commands
             catch (ServiceException ex) when (IsNotFound(ex))
             {
                 throw new InvalidOperationException(
-                    $"Microsoft 365 could not find a transcript for this Teams meeting. Ensure transcription was enabled and the meeting belongs to the mailbox '{mailbox}'. Details: {GetGraphErrorDetail(ex)}",
+                    $"Microsoft 365 could not find a transcript for this Teams meeting. Details: {GetGraphErrorDetail(ex)}",
                     ex);
             }
             catch (ServiceException ex)
             {
-                LogGraphServiceException(ex, "Failed to list Teams transcripts", new { mailbox, onlineMeetingId });
+                LogGraphServiceException(ex, "Failed to list Teams transcripts", new { userId, onlineMeetingId });
                 throw;
             }
         }
@@ -295,7 +298,7 @@ namespace BoardMgmt.Application.Meetings.Commands
         private sealed record TeamsTranscriptMetadata(string Id, DateTimeOffset? CreatedUtc, string? Status);
 
         private async Task<Stream?> DownloadTeamsTranscriptContentAsync(
-            string mailbox,
+            string userId,
             string onlineMeetingId,
             string transcriptId,
             CancellationToken ct)
@@ -305,13 +308,13 @@ namespace BoardMgmt.Application.Meetings.Commands
                 return await ExecuteTranscriptRequestWithFallbackAsync(
                     () =>
                     {
-                        var request = _graph.Users[mailbox]
+                        var request = _graph.Users[userId]
                             .OnlineMeetings[onlineMeetingId]
                             .Transcripts[transcriptId]
                             .Content
                             .ToGetRequestInformation();
 
-                        request.PathParameters["user%2Did"] = mailbox;
+                        request.PathParameters["user%2Did"] = userId;
                         request.PathParameters["onlineMeeting%2Did"] = onlineMeetingId;
                         request.PathParameters["teamsTranscript%2Did"] = transcriptId;
                         return request;
@@ -329,7 +332,7 @@ namespace BoardMgmt.Application.Meetings.Commands
             }
             catch (ServiceException ex)
             {
-                LogGraphServiceException(ex, "Failed to download Teams transcript content", new { mailbox, onlineMeetingId, transcriptId });
+                LogGraphServiceException(ex, "Failed to download Teams transcript content", new { userId, onlineMeetingId, transcriptId });
                 throw;
             }
         }
@@ -371,36 +374,16 @@ namespace BoardMgmt.Application.Meetings.Commands
 
         private static bool ShouldRetryTranscriptRequest(ServiceException ex)
         {
-            if (ex.ResponseStatusCode == (int)HttpStatusCode.NotFound)
-            {
-                return true;
-            }
+            if (ex.ResponseStatusCode == (int)HttpStatusCode.NotFound) return true;
+            if (ex.ResponseStatusCode == (int)HttpStatusCode.BadRequest) return true;
 
-            if (ex.ResponseStatusCode == (int)HttpStatusCode.BadRequest)
-            {
+            if (ex.ResponseStatusCode == (int)HttpStatusCode.Forbidden && IsPreviewAccessDenied(ex))
                 return true;
-            }
 
-            if (ex.ResponseStatusCode == (int)HttpStatusCode.Forbidden)
-            {
-                if (IsPreviewAccessDenied(ex))
-                {
-                    return true;
-                }
-            }
-
-            if (ex.ResponseStatusCode >= 500 && ex.ResponseStatusCode < 600)
-            {
-                return true;
-            }
+            if (ex.ResponseStatusCode >= 500 && ex.ResponseStatusCode < 600) return true;
 
             foreach (var code in GetGraphErrorCodes(ex))
-            {
-                if (IsRetryableGraphErrorCode(code))
-                {
-                    return true;
-                }
-            }
+                if (IsRetryableGraphErrorCode(code)) return true;
 
             return false;
         }
@@ -415,36 +398,22 @@ namespace BoardMgmt.Application.Meetings.Commands
         {
             var (code, message, rawResponse) = GetGraphErrorInfo(ex);
 
-            if (ContainsPreviewKeyword(message))
-            {
-                return true;
-            }
+            if (ContainsPreviewKeyword(message)) return true;
 
             if (string.Equals(code, "AccessDenied", StringComparison.OrdinalIgnoreCase))
             {
-                if (ContainsPreviewKeyword(rawResponse))
-                {
-                    return true;
-                }
-
-                if (ContainsPreviewKeyword(message))
-                {
-                    return true;
-                }
+                if (ContainsPreviewKeyword(rawResponse)) return true;
+                if (ContainsPreviewKeyword(message)) return true;
             }
 
-            if (ContainsPreviewKeyword(rawResponse))
-            {
-                return true;
-            }
+            if (ContainsPreviewKeyword(rawResponse)) return true;
 
             return false;
         }
 
         private static bool ContainsPreviewKeyword(string? value)
         {
-            if (string.IsNullOrWhiteSpace(value))
-                return false;
+            if (string.IsNullOrWhiteSpace(value)) return false;
 
             return value.IndexOf("preview", StringComparison.OrdinalIgnoreCase) >= 0
                 || value.IndexOf("beta", StringComparison.OrdinalIgnoreCase) >= 0
@@ -453,7 +422,7 @@ namespace BoardMgmt.Application.Meetings.Commands
                 || value.IndexOf("use the /beta endpoint", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
-        private async Task<string> ResolveTeamsOnlineMeetingIdAsync(string mailbox, Meeting meeting, CancellationToken ct)
+        private async Task<string> ResolveTeamsOnlineMeetingIdAsync(string userId, Meeting meeting, CancellationToken ct)
         {
             if (!string.IsNullOrWhiteSpace(meeting.ExternalOnlineMeetingId))
                 return meeting.ExternalOnlineMeetingId!;
@@ -466,12 +435,11 @@ namespace BoardMgmt.Application.Meetings.Commands
 
             try
             {
-                meetingResource = await GetEventOnlineMeetingAsync(mailbox!, meeting.ExternalEventId!, ct);
-
+                meetingResource = await GetEventOnlineMeetingAsync(userId, meeting.ExternalEventId!, ct);
                 if (!string.IsNullOrWhiteSpace(meetingResource?.Id))
                     return meetingResource!.Id;
 
-                graphEvent = await _graph.Users[mailbox]
+                graphEvent = await _graph.Users[userId]
                     .Events[meeting.ExternalEventId]
                     .GetAsync(cfg =>
                     {
@@ -483,16 +451,16 @@ namespace BoardMgmt.Application.Meetings.Commands
             }
             catch (ServiceException ex) when (ex.ResponseStatusCode == (int)HttpStatusCode.NotFound)
             {
-                throw new InvalidOperationException("Teams meeting not found when resolving online meeting id. Verify the mailbox and meeting id.", ex);
+                throw new InvalidOperationException("Teams meeting not found when resolving online meeting id. Verify the user and meeting id.", ex);
             }
             catch (ServiceException ex)
             {
-                LogGraphServiceException(ex, "Teams Graph API error while resolving online meeting id", new { mailbox, meeting.ExternalEventId });
+                LogGraphServiceException(ex, "Teams Graph API error while resolving online meeting id", new { userId, meeting.ExternalEventId });
 
                 if (IsTeamsOnlineMeetingProvisioningIncomplete(ex))
                 {
                     throw new InvalidOperationException(
-                        "Microsoft 365 reported that the organizer's Teams account is not fully provisioned for online meetings. Ask the organizer to sign in to Microsoft Teams at least once and ensure a Teams license and meeting policy that allows online meetings are assigned. See https://learn.microsoft.com/en-us/answers/questions/2126422/unable-to-create-or-fetch-teams-online-meetings-vi for additional troubleshooting steps.",
+                        "Microsoft 365 reported that the organizer's Teams account is not fully provisioned for online meetings. Ask the organizer to sign in to Microsoft Teams at least once and ensure a Teams license and meeting policy that allows online meetings are assigned.",
                         ex);
                 }
 
@@ -505,7 +473,7 @@ namespace BoardMgmt.Application.Meetings.Commands
             throw new InvalidOperationException("Teams meeting is missing an online meeting id. Ensure the event is a Teams meeting with transcription enabled.");
         }
 
-        private Task<OnlineMeeting?> GetEventOnlineMeetingAsync(string mailbox, string eventId, CancellationToken ct)
+        private Task<OnlineMeeting?> GetEventOnlineMeetingAsync(string userId, string eventId, CancellationToken ct)
         {
             var requestInfo = new RequestInformation
             {
@@ -513,7 +481,7 @@ namespace BoardMgmt.Application.Meetings.Commands
                 UrlTemplate = "{+baseurl}/users/{user%2Did}/events/{event%2Did}/onlineMeeting",
             };
 
-            requestInfo.PathParameters["user%2Did"] = mailbox;
+            requestInfo.PathParameters["user%2Did"] = userId;   // GUID only
             requestInfo.PathParameters["event%2Did"] = eventId;
 
             try
@@ -525,12 +493,12 @@ namespace BoardMgmt.Application.Meetings.Commands
             }
             catch (ServiceException ex)
             {
-                LogGraphServiceException(ex, "Failed to retrieve Teams online meeting", new { mailbox, eventId });
+                LogGraphServiceException(ex, "Failed to retrieve Teams online meeting", new { userId, eventId });
 
                 if (IsTeamsOnlineMeetingProvisioningIncomplete(ex))
                 {
                     throw new InvalidOperationException(
-                        "Microsoft 365 reported that the organizer's Teams account is not fully provisioned for online meetings. Ask the organizer to sign in to Microsoft Teams at least once and ensure a Teams license and meeting policy that allows online meetings are assigned. See https://learn.microsoft.com/en-us/answers/questions/2126422/unable-to-create-or-fetch-teams-online-meetings-vi for additional troubleshooting steps.",
+                        "Microsoft 365 reported that the organizer's Teams account is not fully provisioned for online meetings.",
                         ex);
                 }
 
@@ -560,14 +528,10 @@ namespace BoardMgmt.Application.Meetings.Commands
 
         private static bool IsTransientGraphServerError(ServiceException ex)
         {
-            if (ex.ResponseStatusCode is int statusCode && statusCode >= 500 && statusCode < 600)
-                return true;
+            if (ex.ResponseStatusCode is int statusCode && statusCode >= 500 && statusCode < 600) return true;
 
             foreach (var code in GetGraphErrorCodes(ex))
-            {
-                if (IsRetryableGraphErrorCode(code))
-                    return true;
-            }
+                if (IsRetryableGraphErrorCode(code)) return true;
 
             return false;
         }
@@ -578,32 +542,22 @@ namespace BoardMgmt.Application.Meetings.Commands
 
             var (errorCode, errorMessage, rawResponse) = GetGraphErrorInfo(ex);
 
-            if (!string.IsNullOrWhiteSpace(errorCode))
-                details.Add($"Code: {errorCode}");
-
-            if (!string.IsNullOrWhiteSpace(errorMessage))
-                details.Add($"Message: {errorMessage}");
-
-            if (!string.IsNullOrWhiteSpace(ex.Message))
-                details.Add(ex.Message);
+            if (!string.IsNullOrWhiteSpace(errorCode)) details.Add($"Code: {errorCode}");
+            if (!string.IsNullOrWhiteSpace(errorMessage)) details.Add($"Message: {errorMessage}");
+            if (!string.IsNullOrWhiteSpace(ex.Message)) details.Add(ex.Message);
 
             if (!string.IsNullOrWhiteSpace(rawResponse))
             {
                 var summary = TrySummarizeGraphRawResponse(rawResponse!);
-                if (!string.IsNullOrWhiteSpace(summary))
-                    details.Add(summary!);
+                if (!string.IsNullOrWhiteSpace(summary)) details.Add(summary!);
             }
 
             if (details.Count == 0)
             {
-                if (ex.ResponseStatusCode is int statusCode)
-                {
-                    details.Add($"Status {(HttpStatusCode)statusCode} ({statusCode})");
-                }
+                if (ex.ResponseStatusCode is int status)
+                    details.Add($"Status {(HttpStatusCode)status} ({status})");
                 else
-                {
                     details.Add("Unknown Graph error");
-                }
             }
 
             return string.Join("; ", details.Distinct(StringComparer.Ordinal));
@@ -617,38 +571,28 @@ namespace BoardMgmt.Application.Meetings.Commands
 
             var (_, message, rawResponse) = GetGraphErrorInfo(ex);
             var parts = new List<string?> { message, rawResponse, ex.Message };
-            var combined = string.Join(" ", parts.Where(s => !string.IsNullOrWhiteSpace(s)))
-                .ToLowerInvariant();
+            var combined = string.Join(" ", parts.Where(s => !string.IsNullOrWhiteSpace(s))).ToLowerInvariant();
 
-            if (string.IsNullOrWhiteSpace(combined))
-                return false;
+            if (string.IsNullOrWhiteSpace(combined)) return false;
 
-            if (combined.Contains("teams") && combined.Contains("license"))
-                return true;
-
-            if (combined.Contains("teams") && combined.Contains("enabled"))
-                return true;
-
-            if (combined.Contains("enable teams"))
-                return true;
+            if (combined.Contains("teams") && combined.Contains("license")) return true;
+            if (combined.Contains("teams") && combined.Contains("enabled")) return true;
+            if (combined.Contains("enable teams")) return true;
 
             if ((combined.Contains("online meeting") || combined.Contains("onlinemeeting")) &&
                 (combined.Contains("not available") || combined.Contains("not enabled") || combined.Contains("disabled")))
-            {
                 return true;
-            }
 
             return false;
         }
 
         private static IReadOnlyCollection<string> GetGraphErrorCodes(ServiceException ex)
         {
-            var codes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var codes = new HashSet<String>(StringComparer.OrdinalIgnoreCase);
 
             var (code, _, rawResponse) = GetGraphErrorInfo(ex);
 
-            if (!string.IsNullOrWhiteSpace(code))
-                codes.Add(code!);
+            if (!string.IsNullOrWhiteSpace(code)) codes.Add(code!);
 
             if (!string.IsNullOrWhiteSpace(rawResponse))
             {
@@ -659,7 +603,7 @@ namespace BoardMgmt.Application.Meetings.Commands
                 }
                 catch (JsonException)
                 {
-                    // Ignore parsing issues and fall back to the raw response body.
+                    // Ignore parsing issues.
                 }
             }
 
@@ -674,34 +618,25 @@ namespace BoardMgmt.Application.Meetings.Commands
                     if (element.TryGetProperty("code", out var codeElement) && codeElement.ValueKind == JsonValueKind.String)
                     {
                         var value = codeElement.GetString();
-                        if (!string.IsNullOrWhiteSpace(value))
-                            codes.Add(value);
+                        if (!string.IsNullOrWhiteSpace(value)) codes.Add(value!);
                     }
 
                     if (element.TryGetProperty("innerError", out var innerElement))
-                    {
                         CollectGraphErrorCodes(innerElement, codes);
-                    }
 
                     foreach (var property in element.EnumerateObject())
                     {
                         if (string.Equals(property.Name, "code", StringComparison.OrdinalIgnoreCase) ||
                             string.Equals(property.Name, "innerError", StringComparison.OrdinalIgnoreCase))
-                        {
                             continue;
-                        }
 
                         CollectGraphErrorCodes(property.Value, codes);
                     }
-
                     break;
 
                 case JsonValueKind.Array:
                     foreach (var item in element.EnumerateArray())
-                    {
                         CollectGraphErrorCodes(item, codes);
-                    }
-
                     break;
             }
         }
@@ -751,10 +686,7 @@ namespace BoardMgmt.Application.Meetings.Commands
                         }
                     }
                 }
-                catch (JsonException)
-                {
-                    // Ignore parsing issues and leave the values unset.
-                }
+                catch (JsonException) { }
             }
 
             return (code, message, rawResponse);
@@ -763,19 +695,14 @@ namespace BoardMgmt.Application.Meetings.Commands
         private static string? TryGetExceptionStringProperty(ServiceException ex, string propertyName)
         {
             var prop = ex.GetType().GetProperty(propertyName);
-            if (prop is null)
-                return null;
-
-            if (prop.GetValue(ex) is string value)
-                return value;
-
+            if (prop is null) return null;
+            if (prop.GetValue(ex) is string value) return value;
             return null;
         }
 
         private static string? TrySummarizeGraphRawResponse(string rawResponse)
         {
-            if (string.IsNullOrWhiteSpace(rawResponse))
-                return null;
+            if (string.IsNullOrWhiteSpace(rawResponse)) return null;
 
             try
             {
@@ -795,7 +722,6 @@ namespace BoardMgmt.Application.Meetings.Commands
                         var inner = ExtractInnerErrorDetail(errorEl);
 
                         var parts = new List<string>();
-
                         if (!string.IsNullOrWhiteSpace(code) || !string.IsNullOrWhiteSpace(message))
                         {
                             var baseDetail = string.IsNullOrWhiteSpace(code)
@@ -803,23 +729,15 @@ namespace BoardMgmt.Application.Meetings.Commands
                                 : string.IsNullOrWhiteSpace(message)
                                     ? code
                                     : $"{code}: {message}";
-
-                            if (!string.IsNullOrWhiteSpace(baseDetail))
-                                parts.Add(baseDetail!);
+                            if (!string.IsNullOrWhiteSpace(baseDetail)) parts.Add(baseDetail!);
                         }
+                        if (!string.IsNullOrWhiteSpace(inner)) parts.Add(inner!);
 
-                        if (!string.IsNullOrWhiteSpace(inner))
-                            parts.Add(inner!);
-
-                        if (parts.Count > 0)
-                            return string.Join("; ", parts);
+                        if (parts.Count > 0) return string.Join("; ", parts);
                     }
                 }
             }
-            catch (JsonException)
-            {
-                // Ignore parsing issues and fall back to the raw response body.
-            }
+            catch (JsonException) { }
 
             return rawResponse.Length > 256
                 ? rawResponse[..256] + "…"
@@ -848,9 +766,7 @@ namespace BoardMgmt.Application.Meetings.Commands
                     properties.Add($"{property.Name}: {value}");
             }
 
-            return properties.Count == 0
-                ? null
-                : "InnerError => " + string.Join(", ", properties);
+            return properties.Count == 0 ? null : "InnerError => " + string.Join(", ", properties);
         }
 
         private static bool TryGetOnlineMeetingId(Event? graphEvent, out string? id)
@@ -881,16 +797,12 @@ namespace BoardMgmt.Application.Meetings.Commands
                 string? candidate = null;
 
                 if (el.TryGetProperty("id", out var nestedIdEl) && nestedIdEl.ValueKind == JsonValueKind.String)
-                {
                     candidate = nestedIdEl.GetString();
-                }
 
                 if (string.IsNullOrWhiteSpace(candidate) &&
                     el.TryGetProperty("onlineMeetingId", out var nestedMeetingIdEl) &&
                     nestedMeetingIdEl.ValueKind == JsonValueKind.String)
-                {
                     candidate = nestedMeetingIdEl.GetString();
-                }
 
                 if (!string.IsNullOrWhiteSpace(candidate))
                 {
@@ -910,14 +822,9 @@ namespace BoardMgmt.Application.Meetings.Commands
         {
             id = null;
 
-            if (TryExtractOnlineMeetingId(meeting.OnlineJoinUrl, out id))
-                return true;
-
-            if (TryExtractOnlineMeetingId(GetJoinUrlFromEvent(graphEvent), out id))
-                return true;
-
-            if (TryExtractOnlineMeetingId(GetJoinUrlFromOnlineMeeting(meetingResource), out id))
-                return true;
+            if (TryExtractOnlineMeetingId(meeting.OnlineJoinUrl, out id)) return true;
+            if (TryExtractOnlineMeetingId(GetJoinUrlFromEvent(graphEvent), out id)) return true;
+            if (TryExtractOnlineMeetingId(GetJoinUrlFromOnlineMeeting(meetingResource), out id)) return true;
 
             return false;
         }
@@ -925,21 +832,18 @@ namespace BoardMgmt.Application.Meetings.Commands
         private static bool TryExtractOnlineMeetingId(string? source, out string? id)
         {
             id = null;
-            if (string.IsNullOrWhiteSpace(source))
-                return false;
+            if (string.IsNullOrWhiteSpace(source)) return false;
 
             var decoded = WebUtility.HtmlDecode(source);
             var match = TeamsMeetingIdRegex.Match(decoded ?? source);
-            if (!match.Success)
-                return false;
+            if (!match.Success) return false;
 
             var raw = match.Value;
 
             try
             {
                 var unescaped = Uri.UnescapeDataString(raw);
-                if (string.IsNullOrWhiteSpace(unescaped))
-                    return false;
+                if (string.IsNullOrWhiteSpace(unescaped)) return false;
 
                 id = unescaped;
                 return true;
@@ -960,9 +864,7 @@ namespace BoardMgmt.Application.Meetings.Commands
 
             if (graphEvent?.OnlineMeeting?.AdditionalData != null &&
                 TryExtractAdditionalString(graphEvent.OnlineMeeting.AdditionalData, "joinUrl", out var inlineJoinUrl))
-            {
                 return inlineJoinUrl;
-            }
 
             if (!string.IsNullOrWhiteSpace(graphEvent?.OnlineMeetingUrl))
                 return graphEvent!.OnlineMeetingUrl;
@@ -974,9 +876,7 @@ namespace BoardMgmt.Application.Meetings.Commands
 
                 if (graphEvent.AdditionalData.TryGetValue("onlineMeeting", out var nested) &&
                     TryReadJoinUrlFromAdditionalData(nested, out var nestedJoinUrl))
-                {
                     return nestedJoinUrl;
-                }
             }
 
             return null;
@@ -984,8 +884,7 @@ namespace BoardMgmt.Application.Meetings.Commands
 
         private static string? GetJoinUrlFromOnlineMeeting(OnlineMeeting? meetingResource)
         {
-            if (meetingResource is null)
-                return null;
+            if (meetingResource is null) return null;
 
             if (!string.IsNullOrWhiteSpace(meetingResource.JoinWebUrl))
                 return meetingResource.JoinWebUrl;
@@ -1003,9 +902,7 @@ namespace BoardMgmt.Application.Meetings.Commands
 
                 if (meetingResource.AdditionalData.TryGetValue("joinInformation", out var nested) &&
                     TryReadJoinUrlFromAdditionalData(nested, out var joinInfoContent))
-                {
                     return joinInfoContent;
-                }
             }
 
             return null;
@@ -1014,8 +911,7 @@ namespace BoardMgmt.Application.Meetings.Commands
         private static bool TryExtractAdditionalString(IDictionary<string, object?> data, string key, out string? value)
         {
             value = null;
-            if (!data.TryGetValue(key, out var raw) || raw is null)
-                return false;
+            if (!data.TryGetValue(key, out var raw) || raw is null) return false;
 
             if (raw is string str && !string.IsNullOrWhiteSpace(str))
             {
@@ -1044,9 +940,11 @@ namespace BoardMgmt.Application.Meetings.Commands
                 case IDictionary<string, object?> dict when TryExtractAdditionalString(dict, "joinUrl", out var joinUrl):
                     value = joinUrl;
                     return true;
+
                 case IDictionary<string, object?> dict when TryExtractAdditionalString(dict, "content", out var content):
                     value = content;
                     return true;
+
                 case JsonElement element when element.ValueKind == JsonValueKind.Object:
                     if (element.TryGetProperty("joinUrl", out var joinUrlEl) && joinUrlEl.ValueKind == JsonValueKind.String)
                     {
