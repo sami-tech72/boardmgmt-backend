@@ -95,10 +95,10 @@ namespace BoardMgmt.Application.Meetings.Commands
                     ex);
             }
 
-            TeamsTranscriptMetadata? transcript;
+            TeamsTranscriptMetadata? transcriptMetadata;
             try
             {
-                transcript = await GetTeamsTranscriptMetadataAsync(userId, onlineMeetingId, ct);
+                transcriptMetadata = await GetTeamsTranscriptMetadataAsync(userId, onlineMeetingId, ct);
             }
             catch (ServiceException ex) when (IsBadRequest(ex))
             {
@@ -113,7 +113,7 @@ namespace BoardMgmt.Application.Meetings.Commands
                 throw new InvalidOperationException($"Microsoft 365 returned an unexpected error while retrieving the Teams transcript metadata. Details: {GetGraphErrorDetail(ex)}", ex);
             }
 
-            if (transcript is null)
+            if (transcriptMetadata is null)
             {
                 _logger.LogInformation(
                     "No Teams transcript metadata was available for meeting {MeetingId}; skipping ingestion.",
@@ -124,7 +124,7 @@ namespace BoardMgmt.Application.Meetings.Commands
             Stream? stream;
             try
             {
-                stream = await DownloadTeamsTranscriptContentAsync(userId, onlineMeetingId, transcript.Id, ct);
+                stream = await DownloadTeamsTranscriptContentAsync(userId, onlineMeetingId, transcriptMetadata.Id, ct);
             }
             catch (ServiceException ex) when (IsTransientGraphServerError(ex))
             {
@@ -143,7 +143,13 @@ namespace BoardMgmt.Application.Meetings.Commands
             if (string.IsNullOrWhiteSpace(vtt))
                 throw new InvalidOperationException("Teams returned an empty transcript content.");
 
-            return await SaveVtt(meeting, CalendarProviders.Microsoft365, transcript.Id, vtt, ct);
+            return await SaveVtt(
+                meeting,
+                CalendarProviders.Microsoft365,
+                transcriptMetadata.Id,
+                vtt,
+                ct,
+                providerCreatedUtc: transcriptMetadata.CreatedUtc);
         }
 
         private async Task<TeamsTranscriptMetadata?> GetTeamsTranscriptMetadataAsync(
