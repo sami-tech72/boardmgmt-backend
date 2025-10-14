@@ -157,6 +157,7 @@ namespace BoardMgmt.Application.Meetings.Commands
             string onlineMeetingId,
             CancellationToken ct)
         {
+            _logger.LogInformation("Starting Teams transcript metadata retrieval for UserId={UserId}, OnlineMeetingId={OnlineMeetingId}", userId, onlineMeetingId);
             try
             {
                 return await ExecuteTranscriptRequestWithFallbackAsync(
@@ -169,21 +170,30 @@ namespace BoardMgmt.Application.Meetings.Commands
 
                         request.PathParameters["user%2Did"] = userId;                 // GUID
                         request.PathParameters["onlineMeeting%2Did"] = onlineMeetingId;
+                        _logger.LogInformation("Built Graph transcript request: {Url}", request.URI);
                         return request;
                     },
                     async requestInfo =>
                     {
+                        _logger.LogInformation("Sending Graph request to list Teams transcripts for UserId={UserId}, OnlineMeetingId={OnlineMeetingId}", userId, onlineMeetingId);
                         var json = await _graph.RequestAdapter.SendPrimitiveAsync<string>(
                             requestInfo,
                             GraphErrorMapping,
                             cancellationToken: ct);
 
                         if (string.IsNullOrWhiteSpace(json))
+                        {
+                            _logger.LogWarning("Graph returned an empty transcript response for UserId={UserId}, OnlineMeetingId={OnlineMeetingId}", userId, onlineMeetingId);
                             return null;
+                        }
 
+                        _logger.LogInformation("Raw Teams transcript JSON response:\n{Json}", json);
                         using var doc = JsonDocument.Parse(json);
                         if (!doc.RootElement.TryGetProperty("value", out var valueElement) || valueElement.ValueKind != JsonValueKind.Array)
+                        {
+                            _logger.LogWarning("No 'value' array found in transcript response for UserId={UserId}, OnlineMeetingId={OnlineMeetingId}", userId, onlineMeetingId);
                             return null;
+                        }
 
                         var transcripts = new List<TeamsTranscriptMetadata>();
 
@@ -193,7 +203,8 @@ namespace BoardMgmt.Application.Meetings.Commands
                             var metadata = TryParseTeamsTranscriptMetadata(element);
                             if (metadata is not null) transcripts.Add(metadata);
                         }
-
+                        _logger.LogInformation("Parsed {Count} Teams transcript entries for UserId={UserId}, OnlineMeetingId={OnlineMeetingId}: {@Transcripts}",
+                        transcripts.Count, userId, onlineMeetingId, transcripts);
                         if (transcripts.Count == 0)
                         {
                             _logger.LogInformation("Teams transcript list returned no entries. UserId={UserId} OnlineMeetingId={OnlineMeetingId}", userId, onlineMeetingId);
@@ -222,6 +233,7 @@ namespace BoardMgmt.Application.Meetings.Commands
             }
             catch (ServiceException ex) when (IsNotFound(ex))
             {
+                _logger.LogWarning(ex, "Microsoft 365 could not find a transcript for this Teams meeting. UserId={UserId}, OnlineMeetingId={OnlineMeetingId}", userId, onlineMeetingId);
                 throw new InvalidOperationException(
                     $"Microsoft 365 could not find a transcript for this Teams meeting. Details: {GetGraphErrorDetail(ex)}",
                     ex);
@@ -240,6 +252,11 @@ namespace BoardMgmt.Application.Meetings.Commands
                 LogGraphServiceException(ex, "Failed to list Teams transcripts", new { userId, onlineMeetingId });
                 throw;
             }
+            catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error while retrieving Teams transcript metadata. UserId={UserId}, OnlineMeetingId={OnlineMeetingId}", userId, onlineMeetingId);
+            throw;
+        }
         }
 
         private TeamsTranscriptMetadata? TryParseTeamsTranscriptMetadata(JsonElement element)
