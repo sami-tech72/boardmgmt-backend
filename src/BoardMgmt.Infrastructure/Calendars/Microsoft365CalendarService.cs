@@ -537,26 +537,63 @@ public sealed class Microsoft365CalendarService : ICalendarService
         return resolvedMeeting;
     }
 
+    //private static OnlineMeeting BuildOnlineMeetingDefaultsPatch(bool includeTranscription)
+    //{
+    //    var additionalData = new Dictionary<string, object?>
+    //    {
+    //        ["allowRecording"] = true,
+    //        ["recordAutomatically"] = true,
+    //        // Allow transcription so Teams can generate transcripts once the meeting starts.
+    //        ["allowTranscription"] = true
+    //    };
+
+    //    if (includeTranscription)
+    //    {
+    //        additionalData["isTranscriptionEnabled"] = true;
+    //    }
+
+    //    return new OnlineMeeting
+    //    {
+    //        AdditionalData = additionalData
+    //    };
+    //}
+
     private static OnlineMeeting BuildOnlineMeetingDefaultsPatch(bool includeTranscription)
     {
         var additionalData = new Dictionary<string, object?>
         {
-            ["allowRecording"] = true,
-            ["recordAutomatically"] = true,
-            // Allow transcription so Teams can generate transcripts once the meeting starts.
-            ["allowTranscription"] = true
+            // Recording / transcription capabilities
+            ["allowRecording"] = true,           // allow recording
+            ["recordAutomatically"] = true,      // start recording automatically when meeting starts
+            ["allowTranscription"] = true,       // allow transcription in this meeting
+
+            // Who can present => who can start recording/transcription without needing organizer
+            // Valid values include: "everyone", "organization", "roleIsPresenter", "organizer"
+            ["allowedPresenters"] = "everyone",
+
+            // Lobby bypass (no waiting)
+            ["lobbyBypassSettings"] = new Dictionary<string, object?>
+            {
+                ["scope"] = "everyone",          // let everyone bypass the lobby
+                ["isDialInBypassEnabled"] = true // dial-in callers also bypass
+            },
+
+            // Optional: turn off entry/exit announcements
+            ["isEntryExitAnnounced"] = false
         };
 
-        if (includeTranscription)
-        {
-            additionalData["isTranscriptionEnabled"] = true;
-        }
+        // NOTE:
+        // Do NOT set "isTranscriptionEnabled" here. It's not supported in v1.0.
+        // Actual "auto-transcribe" depends on the meeting option "Record and transcribe automatically"
+        // which must be enabled from Teams meeting options / meeting template.
 
         return new OnlineMeeting
         {
             AdditionalData = additionalData
         };
     }
+
+
 
     private static bool IsMissingTranscriptPermission(ApiException ex)
     {

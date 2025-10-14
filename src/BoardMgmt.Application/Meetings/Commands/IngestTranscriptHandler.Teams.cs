@@ -52,8 +52,109 @@ namespace BoardMgmt.Application.Meetings.Commands
             return user!.Id!;
         }
 
+        //private async Task<int> IngestTeams(Meeting meeting, CancellationToken ct)
+        //{
+        //    var rawMailbox = !string.IsNullOrWhiteSpace(meeting.ExternalCalendarMailbox)
+        //        ? meeting.ExternalCalendarMailbox
+        //        : !string.IsNullOrWhiteSpace(meeting.HostIdentity)
+        //            ? meeting.HostIdentity
+        //            : _app.MailboxAddress;
+
+        //    var normalized = MailboxIdentifier.Normalize(rawMailbox);
+
+        //    if (string.IsNullOrWhiteSpace(normalized))
+        //        throw new InvalidOperationException(
+        //            "Meeting.ExternalCalendarMailbox is required for Teams transcript ingestion (set HostIdentity when creating the meeting or configure a default mailbox).");
+
+        //    if (!string.IsNullOrWhiteSpace(rawMailbox)
+        //        && !string.Equals(rawMailbox, normalized, StringComparison.OrdinalIgnoreCase))
+        //    {
+        //        _logger.LogDebug(
+        //            "Normalized Teams mailbox identifier from {Original} to {Normalized} while ingesting transcript for meeting {MeetingId}.",
+        //            rawMailbox, normalized, meeting.Id);
+        //    }
+
+        //    // ALWAYS work with the AAD object id for /onlineMeetings & /transcripts
+        //    var userId = await ResolveUserIdAsync(normalized!, ct);
+
+        //    string onlineMeetingId;
+        //    try
+        //    {
+        //        onlineMeetingId = await ResolveTeamsOnlineMeetingIdAsync(userId, meeting, ct); // pass userId
+        //    }
+        //    catch (ServiceException ex) when (IsTransientGraphServerError(ex))
+        //    {
+        //        throw new InvalidOperationException(
+        //            $"Microsoft 365 reported an internal error while retrieving the Teams meeting details. Wait for processing to finish and try again. Details: {GetGraphErrorDetail(ex)}",
+        //            ex);
+        //    }
+        //    catch (ServiceException ex)
+        //    {
+        //        throw new InvalidOperationException(
+        //            $"Microsoft 365 returned an unexpected error while retrieving the Teams meeting details. Details: {GetGraphErrorDetail(ex)}",
+        //            ex);
+        //    }
+
+        //    TeamsTranscriptMetadata? transcriptMetadata;
+        //    try
+        //    {
+        //        transcriptMetadata = await GetTeamsTranscriptMetadataAsync(userId, onlineMeetingId, ct);
+        //    }
+        //    catch (ServiceException ex) when (IsBadRequest(ex))
+        //    {
+        //        throw new InvalidOperationException($"Microsoft 365 reported that the transcript is not available yet. Wait for processing to finish and try again. Details: {GetGraphErrorDetail(ex)}", ex);
+        //    }
+        //    catch (ServiceException ex) when (IsTransientGraphServerError(ex))
+        //    {
+        //        throw new InvalidOperationException($"Microsoft 365 reported an internal error while retrieving the Teams transcript. Wait for processing to finish and try again. Details: {GetGraphErrorDetail(ex)}", ex);
+        //    }
+        //    catch (ServiceException ex)
+        //    {
+        //        throw new InvalidOperationException($"Microsoft 365 returned an unexpected error while retrieving the Teams transcript metadata. Details: {GetGraphErrorDetail(ex)}", ex);
+        //    }
+
+        //    if (transcriptMetadata is null)
+        //    {
+        //        _logger.LogInformation(
+        //            "No Teams transcript metadata was available for meeting {MeetingId}; skipping ingestion.",
+        //            meeting.Id);
+        //        return 0;
+        //    }
+
+        //    Stream? stream;
+        //    try
+        //    {
+        //        stream = await DownloadTeamsTranscriptContentAsync(userId, onlineMeetingId, transcriptMetadata.Id, ct);
+        //    }
+        //    catch (ServiceException ex) when (IsTransientGraphServerError(ex))
+        //    {
+        //        throw new InvalidOperationException($"Microsoft 365 reported an internal error while downloading the Teams transcript content. Wait for processing to finish and try again. Details: {GetGraphErrorDetail(ex)}", ex);
+        //    }
+        //    catch (ServiceException ex)
+        //    {
+        //        throw new InvalidOperationException($"Microsoft 365 returned an unexpected error while downloading the Teams transcript content. Details: {GetGraphErrorDetail(ex)}", ex);
+        //    }
+
+        //    await using var contentStream = stream
+        //        ?? throw new InvalidOperationException("Teams transcript download returned no content stream.");
+
+        //    using var reader = new StreamReader(contentStream);
+        //    var vtt = await reader.ReadToEndAsync(ct);
+        //    if (string.IsNullOrWhiteSpace(vtt))
+        //        throw new InvalidOperationException("Teams returned an empty transcript content.");
+
+        //    return await SaveVtt(
+        //        meeting,
+        //        CalendarProviders.Microsoft365,
+        //        transcriptMetadata.Id,
+        //        vtt,
+        //        ct,
+        //        providerCreatedUtc: transcriptMetadata.CreatedUtc);
+        //}
+
         private async Task<int> IngestTeams(Meeting meeting, CancellationToken ct)
         {
+            // Resolve mailbox/UPN then resolve to AAD object id (GUID) for /onlineMeetings & /transcripts
             var rawMailbox = !string.IsNullOrWhiteSpace(meeting.ExternalCalendarMailbox)
                 ? meeting.ExternalCalendarMailbox
                 : !string.IsNullOrWhiteSpace(meeting.HostIdentity)
@@ -61,103 +162,218 @@ namespace BoardMgmt.Application.Meetings.Commands
                     : _app.MailboxAddress;
 
             var normalized = MailboxIdentifier.Normalize(rawMailbox);
-
             if (string.IsNullOrWhiteSpace(normalized))
                 throw new InvalidOperationException(
                     "Meeting.ExternalCalendarMailbox is required for Teams transcript ingestion (set HostIdentity when creating the meeting or configure a default mailbox).");
 
-            if (!string.IsNullOrWhiteSpace(rawMailbox)
-                && !string.Equals(rawMailbox, normalized, StringComparison.OrdinalIgnoreCase))
+            if (!string.IsNullOrWhiteSpace(rawMailbox) &&
+                !string.Equals(rawMailbox, normalized, StringComparison.OrdinalIgnoreCase))
             {
                 _logger.LogDebug(
-                    "Normalized Teams mailbox identifier from {Original} to {Normalized} while ingesting transcript for meeting {MeetingId}.",
+                    "Normalized Teams mailbox from {Original} to {Normalized} for meeting {MeetingId}.",
                     rawMailbox, normalized, meeting.Id);
             }
 
-            // ALWAYS work with the AAD object id for /onlineMeetings & /transcripts
             var userId = await ResolveUserIdAsync(normalized!, ct);
 
             string onlineMeetingId;
             try
             {
-                onlineMeetingId = await ResolveTeamsOnlineMeetingIdAsync(userId, meeting, ct); // pass userId
+                onlineMeetingId = await ResolveTeamsOnlineMeetingIdAsync(userId, meeting, ct);
             }
             catch (ServiceException ex) when (IsTransientGraphServerError(ex))
             {
                 throw new InvalidOperationException(
-                    $"Microsoft 365 reported an internal error while retrieving the Teams meeting details. Wait for processing to finish and try again. Details: {GetGraphErrorDetail(ex)}",
-                    ex);
+                    $"Microsoft 365 internal error while resolving meeting. Try again later. Details: {GetGraphErrorDetail(ex)}", ex);
             }
             catch (ServiceException ex)
             {
                 throw new InvalidOperationException(
-                    $"Microsoft 365 returned an unexpected error while retrieving the Teams meeting details. Details: {GetGraphErrorDetail(ex)}",
-                    ex);
+                    $"Microsoft 365 error while resolving meeting. Details: {GetGraphErrorDetail(ex)}", ex);
             }
 
-            TeamsTranscriptMetadata? transcriptMetadata;
-            try
+            // ---- Poll for a READY transcript (bounded) ----
+            TeamsTranscriptMetadata? transcript = null;
+            var attempts = 0;
+            var delay = TimeSpan.FromSeconds(15);         // start @15s
+            var maxAttempts = 12;                         // ~ up to 5–6 min with backoff
+
+            while (attempts < maxAttempts && transcript is null)
             {
-                transcriptMetadata = await GetTeamsTranscriptMetadataAsync(userId, onlineMeetingId, ct);
-            }
-            catch (ServiceException ex) when (IsBadRequest(ex))
-            {
-                throw new InvalidOperationException($"Microsoft 365 reported that the transcript is not available yet. Wait for processing to finish and try again. Details: {GetGraphErrorDetail(ex)}", ex);
-            }
-            catch (ServiceException ex) when (IsTransientGraphServerError(ex))
-            {
-                throw new InvalidOperationException($"Microsoft 365 reported an internal error while retrieving the Teams transcript. Wait for processing to finish and try again. Details: {GetGraphErrorDetail(ex)}", ex);
-            }
-            catch (ServiceException ex)
-            {
-                throw new InvalidOperationException($"Microsoft 365 returned an unexpected error while retrieving the Teams transcript metadata. Details: {GetGraphErrorDetail(ex)}", ex);
+                transcript = await GetTeamsTranscriptMetadataAsync(userId, onlineMeetingId, ct);
+
+                if (transcript is null)
+                {
+                    attempts++;
+                    if (attempts >= maxAttempts) break;
+
+                    _logger.LogInformation("Transcript not ready; retrying in {Delay}s (attempt {Attempt}/{Max}).",
+                        delay.TotalSeconds, attempts + 1, maxAttempts);
+
+                    await Task.Delay(delay, ct);
+                    // simple backoff up to ~60s
+                    if (delay < TimeSpan.FromMinutes(1)) delay += delay;
+                }
             }
 
-            if (transcriptMetadata is null)
+            if (transcript is null)
             {
                 _logger.LogInformation(
-                    "No Teams transcript metadata was available for meeting {MeetingId}; skipping ingestion.",
-                    meeting.Id);
+                    "No READY transcript found after polling window. MeetingId={MeetingId} UserId={UserId} OnlineMeetingId={OnlineMeetingId}",
+                    meeting.Id, userId, onlineMeetingId);
                 return 0;
             }
 
+            // ---- Download content only when ready ----
             Stream? stream;
             try
             {
-                stream = await DownloadTeamsTranscriptContentAsync(userId, onlineMeetingId, transcriptMetadata.Id, ct);
+                stream = await DownloadTeamsTranscriptContentAsync(userId, onlineMeetingId, transcript.Id, ct);
             }
             catch (ServiceException ex) when (IsTransientGraphServerError(ex))
             {
-                throw new InvalidOperationException($"Microsoft 365 reported an internal error while downloading the Teams transcript content. Wait for processing to finish and try again. Details: {GetGraphErrorDetail(ex)}", ex);
+                throw new InvalidOperationException(
+                    $"Microsoft 365 internal error while downloading transcript. Try again later. Details: {GetGraphErrorDetail(ex)}", ex);
             }
             catch (ServiceException ex)
             {
-                throw new InvalidOperationException($"Microsoft 365 returned an unexpected error while downloading the Teams transcript content. Details: {GetGraphErrorDetail(ex)}", ex);
+                throw new InvalidOperationException(
+                    $"Microsoft 365 error while downloading transcript. Details: {GetGraphErrorDetail(ex)}", ex);
             }
 
-            await using var contentStream = stream
-                ?? throw new InvalidOperationException("Teams transcript download returned no content stream.");
-
-            using var reader = new StreamReader(contentStream);
+            await using var content = stream ?? throw new InvalidOperationException("Transcript download returned null stream.");
+            using var reader = new StreamReader(content);
             var vtt = await reader.ReadToEndAsync(ct);
+
             if (string.IsNullOrWhiteSpace(vtt))
-                throw new InvalidOperationException("Teams returned an empty transcript content.");
+                throw new InvalidOperationException("Teams returned an empty transcript (not ready or purged).");
 
             return await SaveVtt(
                 meeting,
                 CalendarProviders.Microsoft365,
-                transcriptMetadata.Id,
+                transcript.Id,
                 vtt,
                 ct,
-                providerCreatedUtc: transcriptMetadata.CreatedUtc);
+                providerCreatedUtc: transcript.CreatedUtc);
         }
 
+
+        //private async Task<TeamsTranscriptMetadata?> GetTeamsTranscriptMetadataAsync(
+        //    string userId,
+        //    string onlineMeetingId,
+        //    CancellationToken ct)
+        //{
+        //    _logger.LogInformation("Starting Teams transcript metadata retrieval for UserId={UserId}, OnlineMeetingId={OnlineMeetingId}", userId, onlineMeetingId);
+        //    try
+        //    {
+        //        return await ExecuteTranscriptRequestWithFallbackAsync(
+        //            () =>
+        //            {
+        //                var request = _graph.Users[userId]
+        //                    .OnlineMeetings[onlineMeetingId]
+        //                    .Transcripts
+        //                    .ToGetRequestInformation();
+
+        //                request.PathParameters["user%2Did"] = userId;                 // GUID
+        //                request.PathParameters["onlineMeeting%2Did"] = onlineMeetingId;
+        //                _logger.LogInformation("Built Graph transcript request: {Url}", request.URI);
+        //                return request;
+        //            },
+        //            async requestInfo =>
+        //            {
+        //                _logger.LogInformation("Sending Graph request to list Teams transcripts for UserId={UserId}, OnlineMeetingId={OnlineMeetingId}", userId, onlineMeetingId);
+        //                var json = await _graph.RequestAdapter.SendPrimitiveAsync<string>(
+        //                    requestInfo,
+        //                    GraphErrorMapping,
+        //                    cancellationToken: ct);
+
+        //                if (string.IsNullOrWhiteSpace(json))
+        //                {
+        //                    _logger.LogWarning("Graph returned an empty transcript response for UserId={UserId}, OnlineMeetingId={OnlineMeetingId}", userId, onlineMeetingId);
+        //                    return null;
+        //                }
+
+        //                _logger.LogInformation("Raw Teams transcript JSON response:\n{Json}", json);
+        //                using var doc = JsonDocument.Parse(json);
+        //                if (!doc.RootElement.TryGetProperty("value", out var valueElement) || valueElement.ValueKind != JsonValueKind.Array)
+        //                {
+        //                    _logger.LogWarning("No 'value' array found in transcript response for UserId={UserId}, OnlineMeetingId={OnlineMeetingId}", userId, onlineMeetingId);
+        //                    return null;
+        //                }
+
+        //                var transcripts = new List<TeamsTranscriptMetadata>();
+
+        //                foreach (var element in valueElement.EnumerateArray())
+        //                {
+        //                    if (element.ValueKind != JsonValueKind.Object) continue;
+        //                    var metadata = TryParseTeamsTranscriptMetadata(element);
+        //                    if (metadata is not null) transcripts.Add(metadata);
+        //                }
+        //                _logger.LogInformation("Parsed {Count} Teams transcript entries for UserId={UserId}, OnlineMeetingId={OnlineMeetingId}: {@Transcripts}",
+        //                transcripts.Count, userId, onlineMeetingId, transcripts);
+        //                if (transcripts.Count == 0)
+        //                {
+        //                    _logger.LogInformation("Teams transcript list returned no entries. UserId={UserId} OnlineMeetingId={OnlineMeetingId}", userId, onlineMeetingId);
+        //                    return null;
+        //                }
+
+        //                var ready = transcripts
+        //                    .Where(t => IsTranscriptReady(t.Status))
+        //                    .OrderByDescending(t => t.CreatedUtc ?? DateTimeOffset.MinValue)
+        //                    .ToList();
+
+        //                var selected = ready.Count > 0
+        //                    ? ready[0]
+        //                    : transcripts.OrderByDescending(t => t.CreatedUtc ?? DateTimeOffset.MinValue).First();
+
+        //                _logger.LogInformation(
+        //                    "Selected Teams transcript {TranscriptId}. Status={Status} CreatedUtc={CreatedUtc}. TotalTranscripts={Count}",
+        //                    selected.Id,
+        //                    string.IsNullOrWhiteSpace(selected.Status) ? "(unknown)" : selected.Status,
+        //                    selected.CreatedUtc?.ToString("O") ?? "(unknown)",
+        //                    transcripts.Count);
+
+        //                return selected;
+        //            },
+        //            shouldRetryResult: result => result is null);
+        //    }
+        //    catch (ServiceException ex) when (IsNotFound(ex))
+        //    {
+        //        _logger.LogWarning(ex, "Microsoft 365 could not find a transcript for this Teams meeting. UserId={UserId}, OnlineMeetingId={OnlineMeetingId}", userId, onlineMeetingId);
+        //        throw new InvalidOperationException(
+        //            $"Microsoft 365 could not find a transcript for this Teams meeting. Details: {GetGraphErrorDetail(ex)}",
+        //            ex);
+        //    }
+        //    catch (ServiceException ex) when (IsTranscriptUnavailable(ex))
+        //    {
+        //        _logger.LogInformation(
+        //            ex,
+        //            "Teams transcript metadata is not available. Treating as no transcript. UserId={UserId} OnlineMeetingId={OnlineMeetingId}",
+        //            userId,
+        //            onlineMeetingId);
+        //        return null;
+        //    }
+        //    catch (ServiceException ex)
+        //    {
+        //        LogGraphServiceException(ex, "Failed to list Teams transcripts", new { userId, onlineMeetingId });
+        //        throw;
+        //    }
+        //    catch (Exception ex)
+        //{
+        //    _logger.LogError(ex, "Unexpected error while retrieving Teams transcript metadata. UserId={UserId}, OnlineMeetingId={OnlineMeetingId}", userId, onlineMeetingId);
+        //    throw;
+        //}
+        //}
+
         private async Task<TeamsTranscriptMetadata?> GetTeamsTranscriptMetadataAsync(
-            string userId,
-            string onlineMeetingId,
-            CancellationToken ct)
+    string userId,
+    string onlineMeetingId,
+    CancellationToken ct)
         {
-            _logger.LogInformation("Starting Teams transcript metadata retrieval for UserId={UserId}, OnlineMeetingId={OnlineMeetingId}", userId, onlineMeetingId);
+            _logger.LogInformation(
+                "Starting Teams transcript metadata retrieval for UserId={UserId}, OnlineMeetingId={OnlineMeetingId}",
+                userId, onlineMeetingId);
+
             try
             {
                 return await ExecuteTranscriptRequestWithFallbackAsync(
@@ -170,12 +386,16 @@ namespace BoardMgmt.Application.Meetings.Commands
 
                         request.PathParameters["user%2Did"] = userId;                 // GUID
                         request.PathParameters["onlineMeeting%2Did"] = onlineMeetingId;
+
                         _logger.LogInformation("Built Graph transcript request: {Url}", request.URI);
                         return request;
                     },
                     async requestInfo =>
                     {
-                        _logger.LogInformation("Sending Graph request to list Teams transcripts for UserId={UserId}, OnlineMeetingId={OnlineMeetingId}", userId, onlineMeetingId);
+                        _logger.LogInformation(
+                            "Sending Graph request to list Teams transcripts for UserId={UserId}, OnlineMeetingId={OnlineMeetingId}",
+                            userId, onlineMeetingId);
+
                         var json = await _graph.RequestAdapter.SendPrimitiveAsync<string>(
                             requestInfo,
                             GraphErrorMapping,
@@ -183,68 +403,77 @@ namespace BoardMgmt.Application.Meetings.Commands
 
                         if (string.IsNullOrWhiteSpace(json))
                         {
-                            _logger.LogWarning("Graph returned an empty transcript response for UserId={UserId}, OnlineMeetingId={OnlineMeetingId}", userId, onlineMeetingId);
+                            _logger.LogInformation(
+                                "Graph returned empty transcript list. UserId={UserId} OnlineMeetingId={OnlineMeetingId}",
+                                userId, onlineMeetingId);
                             return null;
                         }
 
-                        _logger.LogInformation("Raw Teams transcript JSON response:\n{Json}", json);
                         using var doc = JsonDocument.Parse(json);
-                        if (!doc.RootElement.TryGetProperty("value", out var valueElement) || valueElement.ValueKind != JsonValueKind.Array)
+                        if (!doc.RootElement.TryGetProperty("value", out var valueEl) ||
+                            valueEl.ValueKind != JsonValueKind.Array)
                         {
-                            _logger.LogWarning("No 'value' array found in transcript response for UserId={UserId}, OnlineMeetingId={OnlineMeetingId}", userId, onlineMeetingId);
+                            _logger.LogInformation(
+                                "Transcript response had no 'value' array. UserId={UserId} OnlineMeetingId={OnlineMeetingId}",
+                                userId, onlineMeetingId);
                             return null;
                         }
 
-                        var transcripts = new List<TeamsTranscriptMetadata>();
-
-                        foreach (var element in valueElement.EnumerateArray())
+                        var all = new List<TeamsTranscriptMetadata>();
+                        foreach (var el in valueEl.EnumerateArray())
                         {
-                            if (element.ValueKind != JsonValueKind.Object) continue;
-                            var metadata = TryParseTeamsTranscriptMetadata(element);
-                            if (metadata is not null) transcripts.Add(metadata);
+                            if (el.ValueKind != JsonValueKind.Object) continue;
+                            var meta = TryParseTeamsTranscriptMetadata(el);
+                            if (meta is not null) all.Add(meta);
                         }
-                        _logger.LogInformation("Parsed {Count} Teams transcript entries for UserId={UserId}, OnlineMeetingId={OnlineMeetingId}: {@Transcripts}",
-                        transcripts.Count, userId, onlineMeetingId, transcripts);
-                        if (transcripts.Count == 0)
+
+                        if (all.Count == 0)
                         {
-                            _logger.LogInformation("Teams transcript list returned no entries. UserId={UserId} OnlineMeetingId={OnlineMeetingId}", userId, onlineMeetingId);
+                            _logger.LogInformation(
+                                "Teams transcript list returned 0 entries. UserId={UserId} OnlineMeetingId={OnlineMeetingId}",
+                                userId, onlineMeetingId);
                             return null;
                         }
 
-                        var ready = transcripts
+                        // Only choose a transcript that is READY
+                        var ready = all
                             .Where(t => IsTranscriptReady(t.Status))
                             .OrderByDescending(t => t.CreatedUtc ?? DateTimeOffset.MinValue)
                             .ToList();
 
-                        var selected = ready.Count > 0
-                            ? ready[0]
-                            : transcripts.OrderByDescending(t => t.CreatedUtc ?? DateTimeOffset.MinValue).First();
+                        if (ready.Count == 0)
+                        {
+                            _logger.LogInformation(
+                                "Found {Count} transcripts but none is ready yet. UserId={UserId} OnlineMeetingId={OnlineMeetingId}",
+                                all.Count, userId, onlineMeetingId);
+                            return null;
+                        }
 
+                        var selected = ready[0];
                         _logger.LogInformation(
-                            "Selected Teams transcript {TranscriptId}. Status={Status} CreatedUtc={CreatedUtc}. TotalTranscripts={Count}",
+                            "Selected READY transcript {TranscriptId} (Status={Status}, CreatedUtc={CreatedUtc}). TotalReady={ReadyCount} TotalAll={AllCount}",
                             selected.Id,
                             string.IsNullOrWhiteSpace(selected.Status) ? "(unknown)" : selected.Status,
                             selected.CreatedUtc?.ToString("O") ?? "(unknown)",
-                            transcripts.Count);
+                            ready.Count, all.Count);
 
                         return selected;
                     },
-                    shouldRetryResult: result => result is null);
+                    shouldRetryResult: result => result is null // if null, our caller will poll
+                );
             }
             catch (ServiceException ex) when (IsNotFound(ex))
             {
-                _logger.LogWarning(ex, "Microsoft 365 could not find a transcript for this Teams meeting. UserId={UserId}, OnlineMeetingId={OnlineMeetingId}", userId, onlineMeetingId);
-                throw new InvalidOperationException(
-                    $"Microsoft 365 could not find a transcript for this Teams meeting. Details: {GetGraphErrorDetail(ex)}",
-                    ex);
+                _logger.LogWarning(ex,
+                    "Microsoft 365 could not find a transcript entry. UserId={UserId} OnlineMeetingId={OnlineMeetingId}",
+                    userId, onlineMeetingId);
+                return null;
             }
             catch (ServiceException ex) when (IsTranscriptUnavailable(ex))
             {
-                _logger.LogInformation(
-                    ex,
-                    "Teams transcript metadata is not available. Treating as no transcript. UserId={UserId} OnlineMeetingId={OnlineMeetingId}",
-                    userId,
-                    onlineMeetingId);
+                _logger.LogInformation(ex,
+                    "Transcript metadata unavailable; treating as not ready. UserId={UserId} OnlineMeetingId={OnlineMeetingId}",
+                    userId, onlineMeetingId);
                 return null;
             }
             catch (ServiceException ex)
@@ -253,11 +482,14 @@ namespace BoardMgmt.Application.Meetings.Commands
                 throw;
             }
             catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unexpected error while retrieving Teams transcript metadata. UserId={UserId}, OnlineMeetingId={OnlineMeetingId}", userId, onlineMeetingId);
-            throw;
+            {
+                _logger.LogError(ex,
+                    "Unexpected error while retrieving transcript metadata. UserId={UserId} OnlineMeetingId={OnlineMeetingId}",
+                    userId, onlineMeetingId);
+                throw;
+            }
         }
-        }
+
 
         private TeamsTranscriptMetadata? TryParseTeamsTranscriptMetadata(JsonElement element)
         {
@@ -351,7 +583,8 @@ namespace BoardMgmt.Application.Meetings.Commands
                             .Transcripts[transcriptId]
                             .Content
                             .ToGetRequestInformation();
-
+                        request.QueryParameters["$format"] = "text/vtt";
+                        request.Headers.Add("Accept", "text/vtt");
                         request.PathParameters["user%2Did"] = userId;
                         request.PathParameters["onlineMeeting%2Did"] = onlineMeetingId;
                         request.PathParameters["teamsTranscript%2Did"] = transcriptId;
