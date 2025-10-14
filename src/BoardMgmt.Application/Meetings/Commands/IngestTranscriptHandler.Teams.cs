@@ -424,34 +424,50 @@ namespace BoardMgmt.Application.Meetings.Commands
 
         private async Task<string> ResolveTeamsOnlineMeetingIdAsync(string userId, Meeting meeting, CancellationToken ct)
         {
-            if (!string.IsNullOrWhiteSpace(meeting.ExternalOnlineMeetingId))
-                return meeting.ExternalOnlineMeetingId!;
-
-            if (string.IsNullOrWhiteSpace(meeting.ExternalEventId))
-                throw new InvalidOperationException("Meeting.ExternalEventId not set.");
-
             Event? graphEvent = null;
             OnlineMeeting? meetingResource = null;
 
             try
             {
+                // 1) If you already have a direct way to fetch the OnlineMeeting (your own helper)
                 meetingResource = await GetEventOnlineMeetingAsync(userId, meeting.ExternalEventId!, ct);
                 if (!string.IsNullOrWhiteSpace(meetingResource?.Id))
                     return meetingResource!.Id;
 
+                // 2) Fetch Event with onlineMeeting projection (gives us JoinUrl, not the Id)
                 graphEvent = await _graph.Users[userId]
-                    .Events[meeting.ExternalEventId]
+                    .Events[meeting.ExternalEventId!]
                     .GetAsync(cfg =>
                     {
                         cfg.QueryParameters.Select = new[] { "onlineMeeting" };
                     }, ct);
 
-                if (TryGetOnlineMeetingId(graphEvent, out var inlineId))
+                _logger.LogInformation(
+                    "Fetched graphEvent for user {UserId}, event {EventId}: {GraphEventJson}",
+                    userId,
+                    meeting.ExternalEventId,
+                    JsonSerializer.Serialize(graphEvent, new JsonSerializerOptions
+                    {
+                        WriteIndented = true,
+                        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+                    }));
+
+                // 3) If your inline extractor finds an Id (rare), use it
+                if (TryGetOnlineMeetingId(graphEvent, out var inlineId) && !string.IsNullOrWhiteSpace(inlineId))
                     return inlineId!;
+
+                // 4) Prefer resolving by JoinUrl -> /users/{id}/onlineMeetings?$filter=JoinWebUrl eq '...'
+                var joinUrl = graphEvent?.OnlineMeeting?.JoinUrl ?? meetingResource?.JoinWebUrl;
+                if (!string.IsNullOrWhiteSpace(joinUrl))
+                {
+                    var byJoinUrl = await FindOnlineMeetingByJoinUrlAsync(userId, joinUrl!, ct);
+                    if (!string.IsNullOrWhiteSpace(byJoinUrl?.Id))
+                        return byJoinUrl!.Id!;
+                }
             }
             catch (ServiceException ex) when (ex.ResponseStatusCode == (int)HttpStatusCode.NotFound)
             {
-                throw new InvalidOperationException("Teams meeting not found when resolving online meeting id. Verify the user and meeting id.", ex);
+                throw new InvalidOperationException("Teams meeting not found when resolving online meeting id. Verify the user and event id.", ex);
             }
             catch (ServiceException ex)
             {
@@ -460,18 +476,78 @@ namespace BoardMgmt.Application.Meetings.Commands
                 if (IsTeamsOnlineMeetingProvisioningIncomplete(ex))
                 {
                     throw new InvalidOperationException(
-                        "Microsoft 365 reported that the organizer's Teams account is not fully provisioned for online meetings. Ask the organizer to sign in to Microsoft Teams at least once and ensure a Teams license and meeting policy that allows online meetings are assigned.",
+                        "Microsoft 365 reported the organizer's Teams account isn't fully provisioned. Ask the organizer to sign in to Teams at least once and ensure the license/policy allows online meetings.",
                         ex);
                 }
 
                 throw;
             }
 
-            if (TryResolveOnlineMeetingIdFromJoinUrls(meeting, graphEvent, meetingResource, out var joinId))
-                return joinId!;
+            // 5) As a last resort, try extracting the meeting identifier from join URLs you already hold
+            if (TryResolveOnlineMeetingIdFromJoinUrls(meeting, graphEvent, meetingResource, out var parsedId) &&
+                !string.IsNullOrWhiteSpace(parsedId))
+                return parsedId!;
 
-            throw new InvalidOperationException("Teams meeting is missing an online meeting id. Ensure the event is a Teams meeting with transcription enabled.");
+            throw new InvalidOperationException("Unable to resolve the Teams OnlineMeeting.Id. Ensure the event is a Teams meeting and transcripts are enabled.");
         }
+
+        /// <summary>
+        /// Uses Graph to locate the OnlineMeeting via its Join URL:
+        /// GET /users/{userId}/onlineMeetings?$filter=JoinWebUrl eq '{joinUrl}'
+        /// </summary>
+        private async Task<OnlineMeeting?> FindOnlineMeetingByJoinUrlAsync(
+    string userId, string joinUrl, CancellationToken ct)
+        {
+            if (string.IsNullOrWhiteSpace(joinUrl)) return null;
+
+            static string EscapeForOData(string s) => s.Replace("'", "''");
+
+            var candidates = new List<string> { joinUrl };
+            try
+            {
+                var u = new Uri(joinUrl);
+                var noQuery = u.GetLeftPart(UriPartial.Path);
+                if (!string.Equals(noQuery, joinUrl, StringComparison.Ordinal))
+                    candidates.Add(noQuery);
+            }
+            catch { /* ignore */ }
+
+            foreach (var c in candidates)
+            {
+                var filter = $"joinWebUrl eq '{EscapeForOData(c)}'";
+                try
+                {
+                    // DO NOT set Select or Top here.
+                    var resp = await _graph.Users[userId].OnlineMeetings.GetAsync(cfg =>
+                    {
+                        cfg.QueryParameters.Filter = filter;
+                        // cfg.QueryParameters.Select = ...  <-- leave this OUT
+                        // cfg.QueryParameters.Top = ...     <-- leave this OUT
+                    }, ct);
+
+                    var hit = resp?.Value?.FirstOrDefault();
+                    if (hit != null)
+                    {
+                        _logger.LogInformation("Resolved OnlineMeeting via joinWebUrl. Id={Id}", hit.Id);
+                        return hit;
+                    }
+
+                    _logger.LogWarning("No OnlineMeeting found for filter: {Filter}", filter);
+                }
+                catch (ServiceException ex)
+                {
+                    // You’ll now get proper OData error details here.
+                    _logger.LogWarning(ex, "OnlineMeetings query failed for filter: {Filter}", filter);
+
+                    // If your environment is *still* rejecting query options, it’s likely not Graph
+                    // but a proxy / API gateway / local OData endpoint intercepting the request.
+                    // See notes below to bypass that path.
+                }
+            }
+
+            return null;
+        }
+
 
         private Task<OnlineMeeting?> GetEventOnlineMeetingAsync(string userId, string eventId, CancellationToken ct)
         {
