@@ -114,7 +114,12 @@ namespace BoardMgmt.Application.Meetings.Commands
             }
 
             if (transcript is null)
-                throw new InvalidOperationException("No transcript found for this Teams meeting. Ensure transcription was enabled.");
+            {
+                _logger.LogInformation(
+                    "No Teams transcript metadata was available for meeting {MeetingId}; skipping ingestion.",
+                    meeting.Id);
+                return 0;
+            }
 
             Stream? stream;
             try
@@ -213,6 +218,15 @@ namespace BoardMgmt.Application.Meetings.Commands
                 throw new InvalidOperationException(
                     $"Microsoft 365 could not find a transcript for this Teams meeting. Details: {GetGraphErrorDetail(ex)}",
                     ex);
+            }
+            catch (ServiceException ex) when (IsTranscriptUnavailable(ex))
+            {
+                _logger.LogInformation(
+                    ex,
+                    "Teams transcript metadata is not available. Treating as no transcript. UserId={UserId} OnlineMeetingId={OnlineMeetingId}",
+                    userId,
+                    onlineMeetingId);
+                return null;
             }
             catch (ServiceException ex)
             {
@@ -601,6 +615,29 @@ namespace BoardMgmt.Application.Meetings.Commands
 
         private static bool IsNotFound(ServiceException ex)
             => ex.ResponseStatusCode == (int)HttpStatusCode.NotFound;
+
+        private static bool IsTranscriptUnavailable(ServiceException ex)
+        {
+            if (IsNotFound(ex)) return true;
+
+            var (code, message, rawResponse) = GetGraphErrorInfo(ex);
+
+            if (!string.IsNullOrWhiteSpace(code) &&
+                (string.Equals(code, "invalidOperation", StringComparison.OrdinalIgnoreCase)
+                 || string.Equals(code, "invalid_operation", StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
+
+            if (ContainsNoTranscriptMessage(message)) return true;
+            if (ContainsNoTranscriptMessage(rawResponse)) return true;
+
+            return false;
+
+            static bool ContainsNoTranscriptMessage(string? value)
+                => !string.IsNullOrWhiteSpace(value)
+                   && value.IndexOf("no transcript", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
 
         private static bool IsTransientGraphServerError(ServiceException ex)
         {
