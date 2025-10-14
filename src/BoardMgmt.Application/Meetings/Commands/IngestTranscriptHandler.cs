@@ -52,15 +52,13 @@ namespace BoardMgmt.Application.Meetings.Commands
                 .FirstOrDefaultAsync(m => m.Id == request.MeetingId, ct)
                 ?? throw new InvalidOperationException("Meeting not found.");
 
-            if (string.IsNullOrWhiteSpace(meeting.ExternalCalendar))
-                throw new InvalidOperationException("Meeting.ExternalCalendar not set.");
-
-            var provider = CalendarProviders.Normalize(meeting.ExternalCalendar);
+            var provider = CalendarProviders.Normalize(meeting.ExternalCalendar)
+                           ?? CalendarProviders.Microsoft365;
 
             if (!CalendarProviders.IsSupported(provider))
                 throw new InvalidOperationException($"Unsupported provider: {meeting.ExternalCalendar}");
 
-            if (meeting.ExternalCalendar != provider)
+            if (!string.Equals(meeting.ExternalCalendar, provider, StringComparison.Ordinal))
                 meeting.ExternalCalendar = provider;
 
             if (string.IsNullOrWhiteSpace(meeting.ExternalEventId))
