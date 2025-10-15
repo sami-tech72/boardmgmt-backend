@@ -92,10 +92,23 @@ namespace BoardMgmt.WebApi.Controllers
                         var onlineMeetingId = TryExtractBetween(resource, "/onlineMeetings('", "')");
                         var transcriptId = TryExtractBetween(resource, "/transcripts('", "')");
 
-                        var meetingId = await ResolveOurMeetingIdAsync(onlineMeetingId, ct);
+                        var meetingId = await ResolveOurMeetingIdAsync(onlineMeetingId, transcriptId, ct);
                         if (meetingId == Guid.Empty)
                         {
-                            _log.LogWarning("No local meeting matched onlineMeetingId={OnlineMeetingId}", onlineMeetingId);
+                            _log.LogWarning(
+                                "No local meeting matched Graph notification. OnlineMeetingId={OnlineMeetingId} TranscriptId={TranscriptId}",
+                                onlineMeetingId,
+                                transcriptId);
+                            continue;
+                        }
+
+                        if (!string.IsNullOrWhiteSpace(transcriptId) &&
+                            await IsTranscriptAlreadyIngestedAsync(meetingId, transcriptId, ct))
+                        {
+                            _log.LogInformation(
+                                "Teams transcript already ingested. MeetingId={MeetingId} TranscriptId={TranscriptId}",
+                                meetingId,
+                                transcriptId);
                             continue;
                         }
 
@@ -151,8 +164,31 @@ namespace BoardMgmt.WebApi.Controllers
         // Strategy to map Graph notification -> your Meeting row.
         // We store ExternalOnlineMeetingId on Meeting when events are created/updated,
         // so incoming notifications can be matched directly.
-        private async Task<Guid> ResolveOurMeetingIdAsync(string? onlineMeetingId, CancellationToken ct)
+        private async Task<bool> IsTranscriptAlreadyIngestedAsync(Guid meetingId, string transcriptId, CancellationToken ct)
         {
+            return await _db.Set<Transcript>()
+                .AnyAsync(t =>
+                    t.MeetingId == meetingId &&
+                    t.Provider == CalendarProviders.Microsoft365 &&
+                    t.ProviderTranscriptId == transcriptId,
+                    ct);
+        }
+
+        private async Task<Guid> ResolveOurMeetingIdAsync(string? onlineMeetingId, string? transcriptId, CancellationToken ct)
+        {
+            if (!string.IsNullOrWhiteSpace(transcriptId))
+            {
+                var byTranscript = await _db.Set<Transcript>()
+                    .Where(t =>
+                        t.Provider == CalendarProviders.Microsoft365 &&
+                        t.ProviderTranscriptId == transcriptId)
+                    .Select(t => t.MeetingId)
+                    .FirstOrDefaultAsync(ct);
+
+                if (byTranscript != Guid.Empty)
+                    return byTranscript;
+            }
+
             if (!string.IsNullOrWhiteSpace(onlineMeetingId))
             {
                 var found = await _db.Set<Meeting>()
