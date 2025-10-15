@@ -24,6 +24,7 @@ namespace BoardMgmt.Application.Meetings.Commands
         private const string GraphV1BaseUrl = "https://graph.microsoft.com/v1.0";
         private const string GraphBetaBaseUrl = "https://graph.microsoft.com/beta";
         private static readonly string[] TranscriptApiBaseUrls = { GraphV1BaseUrl, GraphBetaBaseUrl };
+        private static readonly string[] CommunicationsTranscriptApiBaseUrls = { GraphBetaBaseUrl };
 
         private static readonly Dictionary<string, ParsableFactory<IParsable>> GraphErrorMapping = new()
         {
@@ -376,7 +377,7 @@ namespace BoardMgmt.Application.Meetings.Commands
 
             try
             {
-                return await ExecuteTranscriptRequestWithFallbackAsync(
+                var metadata = await ExecuteTranscriptRequestWithFallbackAsync(
                     () =>
                     {
                         var request = _graph.Users[userId]
@@ -401,66 +402,25 @@ namespace BoardMgmt.Application.Meetings.Commands
                             GraphErrorMapping,
                             cancellationToken: ct);
 
-                        if (string.IsNullOrWhiteSpace(json))
-                        {
-                            _logger.LogInformation(
-                                "Graph returned empty transcript list. UserId={UserId} OnlineMeetingId={OnlineMeetingId}",
-                                userId, onlineMeetingId);
-                            return null;
-                        }
-
-                        using var doc = JsonDocument.Parse(json);
-                        if (!doc.RootElement.TryGetProperty("value", out var valueEl) ||
-                            valueEl.ValueKind != JsonValueKind.Array)
-                        {
-                            _logger.LogInformation(
-                                "Transcript response had no 'value' array. UserId={UserId} OnlineMeetingId={OnlineMeetingId}",
-                                userId, onlineMeetingId);
-                            return null;
-                        }
-
-                        var all = new List<TeamsTranscriptMetadata>();
-                        foreach (var el in valueEl.EnumerateArray())
-                        {
-                            if (el.ValueKind != JsonValueKind.Object) continue;
-                            var meta = TryParseTeamsTranscriptMetadata(el);
-                            if (meta is not null) all.Add(meta);
-                        }
-
-                        if (all.Count == 0)
-                        {
-                            _logger.LogInformation(
-                                "Teams transcript list returned 0 entries. UserId={UserId} OnlineMeetingId={OnlineMeetingId}",
-                                userId, onlineMeetingId);
-                            return null;
-                        }
-
-                        // Only choose a transcript that is READY
-                        var ready = all
-                            .Where(t => IsTranscriptReady(t.Status))
-                            .OrderByDescending(t => t.CreatedUtc ?? DateTimeOffset.MinValue)
-                            .ToList();
-
-                        if (ready.Count == 0)
-                        {
-                            _logger.LogInformation(
-                                "Found {Count} transcripts but none is ready yet. UserId={UserId} OnlineMeetingId={OnlineMeetingId}",
-                                all.Count, userId, onlineMeetingId);
-                            return null;
-                        }
-
-                        var selected = ready[0];
-                        _logger.LogInformation(
-                            "Selected READY transcript {TranscriptId} (Status={Status}, CreatedUtc={CreatedUtc}). TotalReady={ReadyCount} TotalAll={AllCount}",
-                            selected.Id,
-                            string.IsNullOrWhiteSpace(selected.Status) ? "(unknown)" : selected.Status,
-                            selected.CreatedUtc?.ToString("O") ?? "(unknown)",
-                            ready.Count, all.Count);
-
-                        return selected;
+                        return ParseTranscriptMetadataFromJson(
+                            json,
+                            $"user endpoint UserId={userId} OnlineMeetingId={onlineMeetingId}");
                     },
-                    shouldRetryResult: result => result is null // if null, our caller will poll
+                    shouldRetryResult: result => result is null, // if null, our caller will poll
+                    baseUrls: TranscriptApiBaseUrls
                 );
+
+                if (metadata is not null)
+                {
+                    return metadata;
+                }
+
+                _logger.LogInformation(
+                    "Teams transcript not found via user-scoped API. Falling back to communications endpoint. UserId={UserId} OnlineMeetingId={OnlineMeetingId}",
+                    userId,
+                    onlineMeetingId);
+
+                return await GetTeamsTranscriptMetadataViaCommunicationsAsync(onlineMeetingId, ct);
             }
             catch (ServiceException ex) when (IsNotFound(ex))
             {
@@ -573,9 +533,12 @@ namespace BoardMgmt.Application.Meetings.Commands
             string transcriptId,
             CancellationToken ct)
         {
+            Stream? stream = null;
+            ServiceException? notFound = null;
+
             try
             {
-                return await ExecuteTranscriptRequestWithFallbackAsync(
+                stream = await ExecuteTranscriptRequestWithFallbackAsync(
                     () =>
                     {
                         var request = _graph.Users[userId]
@@ -594,30 +557,68 @@ namespace BoardMgmt.Application.Meetings.Commands
                         requestInfo,
                         GraphErrorMapping,
                         cancellationToken: ct),
-                    shouldRetryResult: stream => stream is null);
+                    shouldRetryResult: resultStream => resultStream is null,
+                    baseUrls: TranscriptApiBaseUrls);
             }
             catch (ServiceException ex) when (IsNotFound(ex))
             {
-                throw new InvalidOperationException(
-                    $"Microsoft 365 reported that the transcript content is no longer available. Try reprocessing the meeting or verify transcript retention settings. Details: {GetGraphErrorDetail(ex)}",
-                    ex);
+                notFound = ex;
             }
             catch (ServiceException ex)
             {
                 LogGraphServiceException(ex, "Failed to download Teams transcript content", new { userId, onlineMeetingId, transcriptId });
                 throw;
             }
+
+            if (stream is null)
+            {
+                _logger.LogInformation(
+                    "Teams transcript content not available via user-scoped API; attempting communications endpoint. OnlineMeetingId={OnlineMeetingId} TranscriptId={TranscriptId}",
+                    onlineMeetingId,
+                    transcriptId);
+
+                try
+                {
+                    stream = await DownloadTeamsTranscriptContentViaCommunicationsAsync(onlineMeetingId, transcriptId, ct);
+                }
+                catch (ServiceException ex) when (IsNotFound(ex))
+                {
+                    notFound = ex;
+                }
+                catch (ServiceException ex)
+                {
+                    LogGraphServiceException(ex, "Failed to download Teams transcript content via communications endpoint", new { onlineMeetingId, transcriptId });
+                    throw;
+                }
+            }
+
+            if (stream is not null)
+            {
+                return stream;
+            }
+
+            if (notFound is not null)
+            {
+                throw new InvalidOperationException(
+                    $"Microsoft 365 reported that the transcript content is no longer available. Try reprocessing the meeting or verify transcript retention settings. Details: {GetGraphErrorDetail(notFound)}",
+                    notFound);
+            }
+
+            return null;
         }
 
         private async Task<T?> ExecuteTranscriptRequestWithFallbackAsync<T>(
             Func<RequestInformation> buildRequest,
             Func<RequestInformation, Task<T?>> sendAsync,
-            Func<T?, bool>? shouldRetryResult = null)
+            Func<T?, bool>? shouldRetryResult = null,
+            IReadOnlyList<string>? baseUrls = null)
         {
             ServiceException? fallbackTrigger = null;
             var retriedDueToEmptyResult = false;
 
-            foreach (var baseUrl in TranscriptApiBaseUrls)
+            var urls = baseUrls ?? TranscriptApiBaseUrls;
+
+            foreach (var baseUrl in urls)
             {
                 var requestInfo = buildRequest();
                 requestInfo.PathParameters["baseurl"] = baseUrl;
@@ -659,6 +660,154 @@ namespace BoardMgmt.Application.Meetings.Commands
             }
 
             return default;
+        }
+
+        private async Task<TeamsTranscriptMetadata?> GetTeamsTranscriptMetadataViaCommunicationsAsync(
+            string onlineMeetingId,
+            CancellationToken ct)
+        {
+            try
+            {
+                return await ExecuteTranscriptRequestWithFallbackAsync(
+                    () =>
+                    {
+                        var request = new RequestInformation
+                        {
+                            HttpMethod = Method.GET,
+                            UrlTemplate = "{+baseurl}/communications/onlineMeetings/{onlineMeeting%2Did}/transcripts",
+                        };
+
+                        request.PathParameters["onlineMeeting%2Did"] = onlineMeetingId;
+                        _logger.LogInformation(
+                            "Built communications transcript request: {Url}",
+                            request.URI);
+                        return request;
+                    },
+                    async requestInfo =>
+                    {
+                        _logger.LogInformation(
+                            "Sending communications transcript request for OnlineMeetingId={OnlineMeetingId}",
+                            onlineMeetingId);
+
+                        var json = await _graph.RequestAdapter.SendPrimitiveAsync<string>(
+                            requestInfo,
+                            GraphErrorMapping,
+                            cancellationToken: ct);
+
+                        return ParseTranscriptMetadataFromJson(json,
+                            $"communications endpoint OnlineMeetingId={onlineMeetingId}");
+                    },
+                    shouldRetryResult: result => result is null,
+                    baseUrls: CommunicationsTranscriptApiBaseUrls);
+            }
+            catch (ServiceException ex) when (IsNotFound(ex))
+            {
+                _logger.LogDebug(ex,
+                    "Communications transcript endpoint reported not found. OnlineMeetingId={OnlineMeetingId}",
+                    onlineMeetingId);
+                return null;
+            }
+            catch (ServiceException ex) when (IsTranscriptUnavailable(ex))
+            {
+                _logger.LogInformation(ex,
+                    "Communications transcript metadata unavailable; treating as not ready. OnlineMeetingId={OnlineMeetingId}",
+                    onlineMeetingId);
+                return null;
+            }
+        }
+
+        private Task<Stream?> DownloadTeamsTranscriptContentViaCommunicationsAsync(
+            string onlineMeetingId,
+            string transcriptId,
+            CancellationToken ct)
+        {
+            return ExecuteTranscriptRequestWithFallbackAsync(
+                () =>
+                {
+                    var request = new RequestInformation
+                    {
+                        HttpMethod = Method.GET,
+                        UrlTemplate = "{+baseurl}/communications/onlineMeetings/{onlineMeeting%2Did}/transcripts/{meetingTranscript%2Did}/content",
+                    };
+
+                    request.QueryParameters["$format"] = "text/vtt";
+                    request.Headers.Add("Accept", "text/vtt");
+                    request.PathParameters["onlineMeeting%2Did"] = onlineMeetingId;
+                    request.PathParameters["meetingTranscript%2Did"] = transcriptId;
+                    return request;
+                },
+                requestInfo => _graph.RequestAdapter.SendPrimitiveAsync<Stream>(
+                    requestInfo,
+                    GraphErrorMapping,
+                    cancellationToken: ct),
+                shouldRetryResult: stream => stream is null,
+                baseUrls: CommunicationsTranscriptApiBaseUrls);
+        }
+
+        private TeamsTranscriptMetadata? ParseTranscriptMetadataFromJson(
+            string? json,
+            string context)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                _logger.LogInformation(
+                    "Graph returned empty transcript list ({Context}).",
+                    context);
+                return null;
+            }
+
+            using var doc = JsonDocument.Parse(json);
+
+            if (!doc.RootElement.TryGetProperty("value", out var valueEl) ||
+                valueEl.ValueKind != JsonValueKind.Array)
+            {
+                _logger.LogInformation(
+                    "Transcript response had no 'value' array ({Context}).",
+                    context);
+                return null;
+            }
+
+            var all = new List<TeamsTranscriptMetadata>();
+            foreach (var el in valueEl.EnumerateArray())
+            {
+                if (el.ValueKind != JsonValueKind.Object) continue;
+                var meta = TryParseTeamsTranscriptMetadata(el);
+                if (meta is not null) all.Add(meta);
+            }
+
+            if (all.Count == 0)
+            {
+                _logger.LogInformation(
+                    "Transcript list returned 0 entries ({Context}).",
+                    context);
+                return null;
+            }
+
+            var ready = all
+                .Where(t => IsTranscriptReady(t.Status))
+                .OrderByDescending(t => t.CreatedUtc ?? DateTimeOffset.MinValue)
+                .ToList();
+
+            if (ready.Count == 0)
+            {
+                _logger.LogInformation(
+                    "Found {Count} transcripts but none ready yet ({Context}).",
+                    all.Count,
+                    context);
+                return null;
+            }
+
+            var selected = ready[0];
+            _logger.LogInformation(
+                "Selected READY transcript {TranscriptId} (Status={Status}, CreatedUtc={CreatedUtc}) ({Context}). TotalReady={ReadyCount} TotalAll={AllCount}",
+                selected.Id,
+                string.IsNullOrWhiteSpace(selected.Status) ? "(unknown)" : selected.Status,
+                selected.CreatedUtc?.ToString("O") ?? "(unknown)",
+                context,
+                ready.Count,
+                all.Count);
+
+            return selected;
         }
 
         private static bool ShouldRetryTranscriptRequest(ServiceException ex)
