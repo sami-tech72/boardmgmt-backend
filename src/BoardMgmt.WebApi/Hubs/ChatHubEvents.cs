@@ -21,7 +21,7 @@ namespace BoardMgmt.WebApi.Hubs
             => hub.Clients.Group($"conv:{conversationId}")
                 .SendAsync("ReactionUpdated", payload);
 
-        public static Task Typing(IHubContext<ChatHub> hub, Guid conversationId, Guid userId, bool isTyping)
+        public static Task Typing(IHubContext<ChatHub> hub, Guid conversationId, string userId, bool isTyping)
             => hub.Clients.Group($"conv:{conversationId}")
                 .SendAsync("Typing", new { conversationId, userId, isTyping, at = DateTime.UtcNow });
     }
