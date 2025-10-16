@@ -1,47 +1,49 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Data; // IsolationLevel
 using System.Linq;
-using System.Net.Http;
-using System.Net.Http.Headers;
+using System.Net;
 using System.Text;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+
 using BoardMgmt.Application.Calendars;
+using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Application.Common.Email;
 using BoardMgmt.Application.Common.Options;
 using BoardMgmt.Application.Common.Parsing; // SimpleVtt
+using BoardMgmt.Domain.Calendars;
 using BoardMgmt.Domain.Entities;
+
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage; // CreateExecutionStrategy
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.Graph;
 
 namespace BoardMgmt.Application.Meetings.Commands
 {
-    public sealed class IngestTranscriptHandler : IRequestHandler<IngestTranscriptCommand, int>
+    // Provider-specific ingestion lives in partials:
+    //   - IngestTranscriptHandler.Teams.cs  (Microsoft 365 / Teams)
+    //   - IngestTranscriptHandler.Zoom.cs   (Zoom)
+    public sealed partial class IngestTranscriptHandler(
+        IAppDbContext db,
+        GraphServiceClient graph,
+        IHttpClientFactory httpFactory,
+        IZoomTokenProvider zoomTokenProvider,
+        IEmailSender email,
+        IOptions<AppOptions> app,
+        ILogger<IngestTranscriptHandler> logger)
+        : IRequestHandler<IngestTranscriptCommand, int>
     {
-        private readonly DbContext _db;
-        private readonly GraphServiceClient _graph;
-        private readonly IHttpClientFactory _httpFactory;
-        private readonly IZoomTokenProvider _zoomTokenProvider;
-        private readonly IEmailSender _email;
-        private readonly AppOptions _app;
-
-        public IngestTranscriptHandler(
-            DbContext db,
-            GraphServiceClient graph,
-            IHttpClientFactory httpFactory,
-            IZoomTokenProvider zoomTokenProvider,
-            IEmailSender email,
-            IOptions<AppOptions> app)
-        {
-            _db = db;
-            _graph = graph;
-            _httpFactory = httpFactory;
-            _zoomTokenProvider = zoomTokenProvider;
-            _email = email;
-            _app = app.Value ?? new AppOptions();
-        }
+        private readonly IAppDbContext _db = db;
+        private readonly GraphServiceClient _graph = graph;
+        private readonly IHttpClientFactory _httpFactory = httpFactory;
+        private readonly IZoomTokenProvider _zoomTokenProvider = zoomTokenProvider;
+        private readonly IEmailSender _email = email;
+        private readonly AppOptions _app = app.Value ?? new AppOptions();
+        private readonly ILogger<IngestTranscriptHandler> _logger = logger;
 
         public async Task<int> Handle(IngestTranscriptCommand request, CancellationToken ct)
         {
@@ -50,240 +52,187 @@ namespace BoardMgmt.Application.Meetings.Commands
                 .FirstOrDefaultAsync(m => m.Id == request.MeetingId, ct)
                 ?? throw new InvalidOperationException("Meeting not found.");
 
-            if (string.IsNullOrWhiteSpace(meeting.ExternalCalendar))
-                throw new InvalidOperationException("Meeting.ExternalCalendar not set.");
+            var provider = CalendarProviders.Normalize(meeting.ExternalCalendar)
+                           ?? CalendarProviders.Microsoft365;
+
+            if (!CalendarProviders.IsSupported(provider))
+                throw new InvalidOperationException($"Unsupported provider: {meeting.ExternalCalendar}");
+
+            if (!string.Equals(meeting.ExternalCalendar, provider, StringComparison.Ordinal))
+                meeting.ExternalCalendar = provider;
 
             if (string.IsNullOrWhiteSpace(meeting.ExternalEventId))
                 throw new InvalidOperationException("Meeting.ExternalEventId not set.");
 
-            var count = meeting.ExternalCalendar switch
+            var count = provider switch
             {
-                "Microsoft365" => await IngestTeams(meeting, ct),
-                "Zoom" => await IngestZoom(meeting, ct),
+                CalendarProviders.Microsoft365 => await IngestTeams(meeting, ct),
+                CalendarProviders.Zoom => await IngestZoom(meeting, ct),
                 _ => throw new InvalidOperationException($"Unsupported provider: {meeting.ExternalCalendar}")
             };
 
-            // After saving: load and email a summary + attach VTT
             await EmailTranscriptAsync(meeting, ct);
-
             return count;
         }
 
         // --------------------------------------------------------------------
-        // Microsoft Teams (Graph)
+        // Persist VTT → Transcript + TranscriptUtterance (idempotent replace)
         // --------------------------------------------------------------------
-        private async Task<int> IngestTeams(Meeting meeting, CancellationToken ct)
+        public async Task<int> SaveVtt(
+            Meeting meeting,
+            string provider,
+            string providerTranscriptId,
+            string vtt,
+            CancellationToken ct,
+            DateTimeOffset? providerCreatedUtc = null)
         {
-            var mailbox = meeting.ExternalCalendarMailbox;
-            if (string.IsNullOrWhiteSpace(mailbox))
-                throw new InvalidOperationException(
-                    "Meeting.ExternalCalendarMailbox is required for Teams transcript ingestion (set HostIdentity when creating the meeting).");
+            var cues = SimpleVtt.Parse(vtt).ToList();
+            const int MaxAttempts = 3;
 
-            // List transcripts (ONLINE MEETING scope)
-            var list = await _graph.Users[mailbox]
-                .OnlineMeetings[meeting.ExternalEventId]
-                .Transcripts
-                .GetAsync(cancellationToken: ct);
-
-            var tr = list?.Value?.FirstOrDefault()
-                ?? throw new InvalidOperationException("No transcript found for this Teams meeting. Ensure transcription was enabled.");
-
-            // Download VTT
-            using var stream = await _graph.Users[mailbox]
-                .OnlineMeetings[meeting.ExternalEventId]
-                .Transcripts[tr.Id!]
-                .Content
-                .GetAsync(cancellationToken: ct);
-
-            using var reader = new System.IO.StreamReader(stream);
-            var vtt = await reader.ReadToEndAsync();
-            if (string.IsNullOrWhiteSpace(vtt))
-                throw new InvalidOperationException("Teams returned an empty transcript content.");
-
-            return await SaveVtt(meeting, "Microsoft365", tr.Id!, vtt, ct);
-        }
-
-        // --------------------------------------------------------------------
-        // Zoom (Recordings API)
-        // --------------------------------------------------------------------
-        private async Task<int> IngestZoom(Meeting meeting, CancellationToken ct)
-        {
-            var http = _httpFactory.CreateClient("Zoom");
-            var token = await _zoomTokenProvider.GetAccessTokenAsync(ct);
-
-            // 1) Try recordings by meeting id
-            var doc = await TryGetJson(
-                http, token,
-                $"https://api.zoom.us/v2/meetings/{Uri.EscapeDataString(meeting.ExternalEventId!)}/recordings",
+            return await SaveVttWithRetryAsync(
+                meeting,
+                provider,
+                providerTranscriptId,
+                cues,
+                attempt: 1,
+                maxAttempts: MaxAttempts,
+                providerCreatedUtc: providerCreatedUtc,
                 ct);
-
-            if (doc is not null)
-                return await ExtractAndSaveZoomTranscriptOrThrow(meeting, http, token, doc, ct);
-
-            // 2) Get meeting details (for base UUID)
-            var meetingDetail = await GetJsonOrThrow(
-                http, token,
-                $"https://api.zoom.us/v2/meetings/{Uri.EscapeDataString(meeting.ExternalEventId!)}",
-                ct,
-                on404: "Zoom didn’t recognize this meeting id. Verify the host and app scopes (meeting:read:admin).");
-
-            var baseUuid = meetingDetail.RootElement.TryGetProperty("uuid", out var uuidEl)
-                ? uuidEl.GetString()
-                : null;
-
-            if (string.IsNullOrWhiteSpace(baseUuid))
-                throw new InvalidOperationException("Zoom didn’t return a meeting UUID. Verify the meeting id and app scopes.");
-
-            // 3) List past instances for UUID
-            var instances = await GetJsonOrThrow(
-                http, token,
-                $"https://api.zoom.us/v2/past_meetings/{Uri.EscapeDataString(Uri.EscapeDataString(baseUuid))}/instances",
-                ct,
-                on404: "Zoom returned no past instances for this UUID. If you didn’t record to cloud, no transcript will exist.");
-
-            if (!instances.RootElement.TryGetProperty("meetings", out var arr) ||
-                arr.ValueKind != JsonValueKind.Array || arr.GetArrayLength() == 0)
-                throw new InvalidOperationException("No past instances returned for this meeting UUID. Was the meeting held and recorded to the cloud?");
-
-            // 4) Try each instance's recordings
-            foreach (var inst in arr.EnumerateArray())
-            {
-                var instUuid = inst.TryGetProperty("uuid", out var iu) ? iu.GetString() : null;
-                if (string.IsNullOrWhiteSpace(instUuid)) continue;
-
-                var safeUuid = Uri.EscapeDataString(Uri.EscapeDataString(instUuid));
-                var recDoc = await TryGetJson(http, token,
-                    $"https://api.zoom.us/v2/past_meetings/{safeUuid}/recordings",
-                    ct);
-                if (recDoc is null) continue;
-
-                var saved = await TryExtractAndSaveZoomTranscript(meeting, http, token, recDoc, ct);
-                if (saved.HasValue) return saved.Value;
-            }
-
-            throw new InvalidOperationException(
-                "No cloud transcript file found for this meeting. " +
-                "Enable 'Cloud recording' and 'Create audio transcript', record to cloud, wait for processing, then try again.");
         }
 
-        // -------------------- Zoom helpers --------------------
-        private async Task<JsonDocument?> TryGetJson(HttpClient http, string token, string url, CancellationToken ct)
+        private async Task<int> SaveVttWithRetryAsync(
+            Meeting meeting,
+            string provider,
+            string providerTranscriptId,
+            IReadOnlyList<SimpleVtt.Cue> cues,
+            int attempt,
+            int maxAttempts,
+            DateTimeOffset? providerCreatedUtc,
+            CancellationToken ct)
         {
-            using var req = new HttpRequestMessage(HttpMethod.Get, url);
-            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            using var resp = await http.SendAsync(req, ct);
-            if (resp.IsSuccessStatusCode)
-                return JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct));
-            if (resp.StatusCode == System.Net.HttpStatusCode.NotFound)
-                return null;
-            var body = await resp.Content.ReadAsStringAsync(ct);
-            throw new HttpRequestException($"Zoom query failed ({(int)resp.StatusCode} {resp.ReasonPhrase}). Body: {SummarizeZoomError(body)}");
-        }
+            if (_db is not DbContext db)
+                throw new InvalidOperationException("SaveVtt requires DbContext.");
 
-        private async Task<JsonDocument> GetJsonOrThrow(HttpClient http, string token, string url, CancellationToken ct, string? on404 = null)
-        {
-            using var req = new HttpRequestMessage(HttpMethod.Get, url);
-            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            using var resp = await http.SendAsync(req, ct);
-            if (resp.IsSuccessStatusCode)
-                return JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct));
+            if (attempt > 1) db.ChangeTracker.Clear();
 
-            var body = await resp.Content.ReadAsStringAsync(ct);
-            if (resp.StatusCode == System.Net.HttpStatusCode.NotFound && !string.IsNullOrWhiteSpace(on404))
-                throw new InvalidOperationException(on404);
-            throw new HttpRequestException($"Zoom query failed ({(int)resp.StatusCode} {resp.ReasonPhrase}). Body: {SummarizeZoomError(body)}");
-        }
+            // Wrap the WHOLE transactional unit in the SQL Server execution strategy,
+            // so transient faults can retry atomically (includes user-initiated transaction).
+            var strategy = db.Database.CreateExecutionStrategy();
 
-        private async Task<int> ExtractAndSaveZoomTranscriptOrThrow(Meeting meeting, HttpClient http, string token, JsonDocument doc, CancellationToken ct)
-        {
-            var maybe = await TryExtractAndSaveZoomTranscript(meeting, http, token, doc, ct);
-            if (maybe.HasValue) return maybe.Value;
-
-            throw new InvalidOperationException(
-                "No transcript file found in cloud recordings. " +
-                "Enable 'Cloud recording' and 'Create audio transcript', record to cloud, and try again.");
-        }
-
-        private async Task<int?> TryExtractAndSaveZoomTranscript(Meeting meeting, HttpClient http, string token, JsonDocument doc, CancellationToken ct)
-        {
-            if (!doc.RootElement.TryGetProperty("recording_files", out var filesEl) || filesEl.ValueKind != JsonValueKind.Array)
-                return null;
-
-            var trFile = filesEl.EnumerateArray().FirstOrDefault(f =>
-            {
-                var type = f.TryGetProperty("file_type", out var t) ? t.GetString() : null;
-                return type == "TRANSCRIPT" || type == "CC";
-            });
-            if (trFile.ValueKind == JsonValueKind.Undefined) return null;
-
-            var fileId = trFile.GetProperty("id").GetString()!;
-            var downloadUrl = trFile.GetProperty("download_url").GetString()!;
-            var vttUrl = $"{downloadUrl}?access_token={token}";
-
-            var vtt = await http.GetStringAsync(new Uri(vttUrl), ct);
-            if (string.IsNullOrWhiteSpace(vtt))
-                throw new InvalidOperationException("Zoom returned an empty transcript content.");
-
-            return await SaveVtt(meeting, "Zoom", fileId, vtt, ct);
-        }
-
-        private static string SummarizeZoomError(string json)
-        {
             try
             {
-                using var doc = JsonDocument.Parse(json);
-                var root = doc.RootElement;
-                var code = root.TryGetProperty("code", out var c) ? c.ToString() : "";
-                var msg = root.TryGetProperty("message", out var m) ? m.GetString() ?? "" : "";
-                return string.IsNullOrEmpty(code) && string.IsNullOrEmpty(msg) ? json : $"code={code}, message={msg}";
+                return await strategy.ExecuteAsync(async () =>
+                {
+                    // This inner loop is only for optimistic concurrency conflicts (not transient SQL errors).
+                    var localAttempt = attempt;
+                    while (true)
+                    {
+                        if (localAttempt > 1) db.ChangeTracker.Clear();
+
+                        try
+                        {
+                            await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+
+                            // Get or create Transcript (unique on MeetingId+Provider)
+                            var transcript = await db.Set<Transcript>()
+                                .SingleOrDefaultAsync(t => t.MeetingId == meeting.Id && t.Provider == provider, ct);
+
+                            if (transcript is null)
+                            {
+                                transcript = new Transcript
+                                {
+                                    MeetingId = meeting.Id,
+                                    Provider = provider,
+                                    ProviderTranscriptId = providerTranscriptId,
+                                    CreatedUtc = providerCreatedUtc ?? DateTimeOffset.UtcNow
+                                };
+                                db.Set<Transcript>().Add(transcript);
+                                await db.SaveChangesAsync(ct); // ensure Id
+                            }
+                            else
+                            {
+                                // Keep CreatedUtc stable unless the provider shares a better timestamp; always refresh external id
+                                transcript.ProviderTranscriptId = providerTranscriptId;
+                                if (providerCreatedUtc.HasValue && transcript.CreatedUtc != providerCreatedUtc.Value)
+                                {
+                                    transcript.CreatedUtc = providerCreatedUtc.Value;
+                                }
+                                await db.SaveChangesAsync(ct);
+                            }
+
+                            var transcriptId = transcript.Id;
+
+                            // Replace utterances set-based (no tracked collection)
+                            await db.Set<TranscriptUtterance>()
+                                .Where(u => u.TranscriptId == transcriptId)
+                                .ExecuteDeleteAsync(ct);
+
+                            var toInsert = new List<TranscriptUtterance>(cues.Count);
+                            foreach (var cue in cues)
+                                toInsert.Add(MapUtterance(meeting, transcriptId, cue));
+
+                            if (toInsert.Count > 0)
+                            {
+                                await db.Set<TranscriptUtterance>().AddRangeAsync(toInsert, ct);
+                                await db.SaveChangesAsync(ct);
+                            }
+
+                            await tx.CommitAsync(ct);
+                            return toInsert.Count;
+                        }
+                        catch (DbUpdateConcurrencyException ex)
+                        {
+                            if (localAttempt >= maxAttempts)
+                            {
+                                _logger.LogError(ex,
+                                    "Failed to save transcript {ProviderTranscriptId} for meeting {MeetingId} ({Provider}) after {MaxAttempts} attempts due to concurrency conflicts.",
+                                    providerTranscriptId, meeting.Id, provider, maxAttempts);
+
+                                throw new InvalidOperationException("Failed to save transcript after retrying due to concurrency conflicts.", ex);
+                            }
+
+                            var backoff = TimeSpan.FromMilliseconds(Math.Pow(2, localAttempt) * 50);
+                            try { await Task.Delay(backoff, ct); } catch { /* ignore cancellation */ }
+                            localAttempt++;
+                            // loop and retry inside the same execution-strategy attempt
+                        }
+                    }
+                });
             }
-            catch { return json; }
+            catch (DbUpdateException ex)
+            {
+                // Covers unique index collisions, FK issues, etc.
+                _logger.LogError(ex,
+                    "Write error while saving transcript {ProviderTranscriptId} for meeting {MeetingId} ({Provider}).",
+                    providerTranscriptId, meeting.Id, provider);
+                throw;
+            }
         }
 
-        // --------------------------------------------------------------------
-        // Persist VTT → Transcript + TranscriptUtterance
-        // --------------------------------------------------------------------
-        private async Task<int> SaveVtt(Meeting meeting, string provider, string providerTranscriptId, string vtt, CancellationToken ct)
+        private async Task DeleteExistingUtterancesAsync(Transcript transcript, CancellationToken ct)
         {
-            var existing = await _db.Set<Transcript>()
-                .Include(t => t.Utterances)
-                .FirstOrDefaultAsync(t => t.MeetingId == meeting.Id && t.Provider == provider, ct);
+            if (_db is not DbContext db) return;
 
-            if (existing != null)
-            {
-                _db.Set<TranscriptUtterance>().RemoveRange(
-                    _db.Set<TranscriptUtterance>().Where(u => u.TranscriptId == existing.Id));
-
-                existing.ProviderTranscriptId = providerTranscriptId;
-                existing.CreatedUtc = DateTimeOffset.UtcNow;
-
-                foreach (var cue in SimpleVtt.Parse(vtt))
-                    existing.Utterances.Add(MapUtterance(meeting, existing, cue));
-
-                await _db.SaveChangesAsync(ct);
-                return existing.Utterances.Count;
-            }
-
-            var tr = new Transcript
-            {
-                MeetingId = meeting.Id,
-                Provider = provider,
-                ProviderTranscriptId = providerTranscriptId,
-                CreatedUtc = DateTimeOffset.UtcNow
-            };
-
-            foreach (var cue in SimpleVtt.Parse(vtt))
-                tr.Utterances.Add(MapUtterance(meeting, tr, cue));
-
-            _db.Add(tr);
-            await _db.SaveChangesAsync(ct);
-            return tr.Utterances.Count;
+            await db.Set<TranscriptUtterance>()
+                .Where(u => u.TranscriptId == transcript.Id)
+                .ExecuteDeleteAsync(ct);
+            // IMPORTANT: don't touch transcript.Utterances collection here.
         }
 
-        private static TranscriptUtterance MapUtterance(Meeting meeting, Transcript tr, SimpleVtt.Cue cue)
+        private const int MaxUtteranceTextLength = 4000;
+
+        private static TranscriptUtterance MapUtterance(Meeting meeting, Guid transcriptId, SimpleVtt.Cue cue)
         {
             string? userId = null;
             string? email = cue.SpeakerEmail;
+
+            var text = cue.Text;
+            if (text.Length > MaxUtteranceTextLength)
+            {
+                const string ellipsis = "…";
+                var max = Math.Max(0, MaxUtteranceTextLength - ellipsis.Length);
+                text = text[..max] + ellipsis;
+            }
 
             if (!string.IsNullOrWhiteSpace(email))
             {
@@ -304,10 +253,10 @@ namespace BoardMgmt.Application.Meetings.Commands
 
             return new TranscriptUtterance
             {
-                Transcript = tr,
+                TranscriptId = transcriptId,
                 Start = cue.Start,
                 End = cue.End,
-                Text = cue.Text,
+                Text = text,
                 SpeakerName = cue.SpeakerName,
                 SpeakerEmail = email,
                 UserId = userId
@@ -334,7 +283,7 @@ namespace BoardMgmt.Application.Meetings.Commands
                 .Select(u =>
                 {
                     var speaker = string.IsNullOrWhiteSpace(u.SpeakerName) ? (u.SpeakerEmail ?? "Unknown") : u.SpeakerName;
-                    return $"<li><strong>{System.Net.WebUtility.HtmlEncode(speaker)}</strong>: {System.Net.WebUtility.HtmlEncode(u.Text)}</li>";
+                    return $"<li><strong>{WebUtility.HtmlEncode(speaker)}</strong>: {WebUtility.HtmlEncode(u.Text)}</li>";
                 });
 
             var meetingUrl = string.IsNullOrWhiteSpace(_app.AppBaseUrl)
@@ -342,33 +291,24 @@ namespace BoardMgmt.Application.Meetings.Commands
                 : $"{_app.AppBaseUrl!.TrimEnd('/')}/meetings/{meeting.Id}/transcripts";
 
             var html = new StringBuilder()
-                .Append("<!DOCTYPE html>")
-                .Append("<html lang='en'>")
-                .Append("<head>")
-                .Append("<meta charset='UTF-8'>")
+                .Append("<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'>")
                 .Append("<meta name='viewport' content='width=device-width, initial-scale=1.0'>")
                 .Append("<style>")
-                .Append("body { font-family: Arial, sans-serif; background-color: #f4f6f8; margin:0; padding:20px; }")
-                .Append(".container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); padding:20px; }")
-                .Append(".header { border-bottom: 2px solid #0078d4; padding-bottom: 10px; margin-bottom: 20px; }")
-                .Append(".header h2 { margin:0; color:#0078d4; font-size:20px; }")
-                .Append(".meta { font-size:14px; color:#555; margin-bottom: 20px; }")
-                .Append(".preview { margin: 20px 0; }")
-                .Append(".preview ol { padding-left:20px; }")
-                .Append(".preview li { margin-bottom:8px; line-height:1.4; }")
-                .Append(".footer { margin-top:30px; font-size:12px; color:#999; text-align:center; }")
-                .Append(".btn { display:inline-block; padding:10px 15px; margin-top:15px; background:#0078d4; color:#fff; text-decoration:none; border-radius:4px; }")
-                .Append("</style>")
-                .Append("</head>")
-                .Append("<body>")
-                .Append("<div class='container'>")
+                .Append("body{font-family:Arial,sans-serif;background:#f4f6f8;margin:0;padding:20px}")
+                .Append(".container{max-width:600px;margin:0 auto;background:#fff;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,.1);padding:20px}")
+                .Append(".header{border-bottom:2px solid #0078d4;padding-bottom:10px;margin-bottom:20px}")
+                .Append(".header h2{margin:0;color:#0078d4;font-size:20px}")
+                .Append(".meta{font-size:14px;color:#555;margin-bottom:20px}")
+                .Append(".preview{margin:20px 0}.preview ol{padding-left:20px}.preview li{margin-bottom:8px;line-height:1.4}")
+                .Append(".footer{margin-top:30px;font-size:12px;color:#999;text-align:center}")
+                .Append(".btn{display:inline-block;padding:10px 15px;margin-top:15px;background:#0078d4;color:#fff;text-decoration:none;border-radius:4px}")
+                .Append("</style></head><body><div class='container'>")
                 .Append("<div class='header'><h2>📄 Meeting Transcript</h2></div>")
                 .Append("<div class='meta'>")
-                .Append($"<p><strong>Title:</strong> {System.Net.WebUtility.HtmlEncode(meeting.Title)}</p>")
+                .Append($"<p><strong>Title:</strong> {WebUtility.HtmlEncode(meeting.Title)}</p>")
                 .Append($"<p><strong>When:</strong> {meeting.ScheduledAt.LocalDateTime:G}</p>")
                 .Append("</div>")
-                .Append("<p>Hello,</p>")
-                .Append("<p>The transcript for your meeting has been ingested successfully. Below is a short preview:</p>")
+                .Append("<p>Hello,</p><p>The transcript for your meeting has been ingested successfully. Below is a short preview:</p>")
                 .Append("<div class='preview'><ol>")
                 .Append(string.Join("", lines))
                 .Append("</ol></div>");
@@ -376,13 +316,8 @@ namespace BoardMgmt.Application.Meetings.Commands
             if (!string.IsNullOrWhiteSpace(meetingUrl))
                 html.Append($"<p><a href='{meetingUrl}' class='btn'>View Full Transcript</a></p>");
 
-            html.Append("<div class='footer'>")
-                .Append("<p>You are receiving this email because you attended this meeting.</p>")
-                .Append("<p>&copy; BoardMgmt</p>")
-                .Append("</div>")
-                .Append("</div>")
-                .Append("</body>")
-                .Append("</html>");
+            html.Append("<div class='footer'><p>You are receiving this email because you attended this meeting.</p>")
+                .Append("<p>&copy; BoardMgmt</p></div></div></body></html>");
 
             var vttBytes = BuildVttFromUtterances(transcript);
             var attachment = ("transcript.vtt", "text/vtt", vttBytes);
@@ -390,6 +325,7 @@ namespace BoardMgmt.Application.Meetings.Commands
             var recipients = meeting.Attendees
                 .Select(a => a.Email)
                 .Where(e => !string.IsNullOrWhiteSpace(e))
+                .Select(e => e!)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
@@ -412,19 +348,15 @@ namespace BoardMgmt.Application.Meetings.Commands
 
         private static byte[] BuildVttFromUtterances(Transcript transcript)
         {
+            static string Fmt(TimeSpan t) => $"{(int)t.TotalHours:00}:{t.Minutes:00}:{t.Seconds:00}.{t.Milliseconds:000}";
             var sb = new StringBuilder();
-            sb.AppendLine("WEBVTT");
-            sb.AppendLine();
+            sb.AppendLine("WEBVTT").AppendLine();
 
             foreach (var u in transcript.Utterances.OrderBy(x => x.Start))
             {
-                static string fmt(TimeSpan t) => $"{(int)t.TotalHours:00}:{t.Minutes:00}:{t.Seconds:00}.{t.Milliseconds:000}";
-                sb.AppendLine($"{fmt(u.Start)} --> {fmt(u.End)}");
+                sb.AppendLine($"{Fmt(u.Start)} --> {Fmt(u.End)}");
                 var speaker = string.IsNullOrWhiteSpace(u.SpeakerName) ? u.SpeakerEmail : u.SpeakerName;
-                if (!string.IsNullOrWhiteSpace(speaker))
-                    sb.AppendLine($"{speaker}: {u.Text}");
-                else
-                    sb.AppendLine(u.Text);
+                sb.AppendLine(!string.IsNullOrWhiteSpace(speaker) ? $"{speaker}: {u.Text}" : u.Text);
                 sb.AppendLine();
             }
 

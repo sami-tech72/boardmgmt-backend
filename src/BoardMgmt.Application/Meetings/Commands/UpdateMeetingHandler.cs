@@ -10,11 +10,11 @@ namespace BoardMgmt.Application.Meetings.Commands;
 
 public class UpdateMeetingHandler : IRequestHandler<UpdateMeetingCommand, bool>
 {
-    private readonly DbContext _db;
+    private readonly IAppDbContext _db;
     private readonly IIdentityUserReader _users;
     private readonly ICalendarServiceSelector _calSelector;
 
-    public UpdateMeetingHandler(DbContext db, IIdentityUserReader users, ICalendarServiceSelector calSelector)
+    public UpdateMeetingHandler(IAppDbContext db, IIdentityUserReader users, ICalendarServiceSelector calSelector)
     {
         _db = db;
         _users = users;
@@ -24,11 +24,14 @@ public class UpdateMeetingHandler : IRequestHandler<UpdateMeetingCommand, bool>
     public async Task<bool> Handle(UpdateMeetingCommand request, CancellationToken ct)
     {
         var entity = await _db.Set<Meeting>()
-            .Include(m => m.Attendees)
+            .Include(m => m.Attendees) // tracked for updates
             .FirstOrDefaultAsync(m => m.Id == request.Id, ct);
+
         if (entity is null) return false;
 
+        // -------------------
         // Basic meeting fields
+        // -------------------
         entity.Title = request.Title.Trim();
         entity.Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
         entity.Type = request.Type;
@@ -36,55 +39,67 @@ public class UpdateMeetingHandler : IRequestHandler<UpdateMeetingCommand, bool>
         entity.EndAt = request.EndAt;
         entity.Location = string.IsNullOrWhiteSpace(request.Location) ? "TBD" : request.Location.Trim();
 
-        // Attendees
+        // -------------------
+        // Attendees upsert
+        // -------------------
         if (request.AttendeesRich is not null)
         {
-            var existingById = entity.Attendees.ToDictionary(a => a.Id, a => a);
-            var originalIds = existingById.Keys.ToHashSet();
-
-            var attendeeUserIds = request.AttendeesRich
+            // 1) Prepare identity map for authoritative name/email resolution
+            var incomingUserIds = request.AttendeesRich
                 .Select(a => a.UserId)
                 .Where(id => !string.IsNullOrWhiteSpace(id))
                 .Select(id => id!.Trim())
-                .Where(id => id.Length > 0)
-                .Distinct()
+                .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
-            var usersById = attendeeUserIds.Count == 0
+            var usersById = incomingUserIds.Count == 0
                 ? new Dictionary<string, AppUser>(StringComparer.OrdinalIgnoreCase)
-                : (await _users.GetByIdsAsync(attendeeUserIds, ct)).ToDictionary(u => u.Id, StringComparer.OrdinalIgnoreCase);
+                : (await _users.GetByIdsAsync(incomingUserIds, ct))
+                    .ToDictionary(u => u.Id, StringComparer.OrdinalIgnoreCase);
+
+            // 2) Index existing attendees (tracked)
+            var existingById = entity.Attendees.ToDictionary(a => a.Id, a => a);
+            var existingIds = existingById.Keys.ToHashSet();
+
+            // 3) Apply updates / adds
+            var seenExistingIds = new HashSet<Guid>();
+            var toAdd = new List<MeetingAttendee>();
 
             foreach (var dto in request.AttendeesRich)
             {
-                var userKey = dto.UserId?.Trim();
-                AppUser? user = null;
-                var hasUser = userKey is not null
-                    && userKey.Length > 0
-                    && usersById.TryGetValue(userKey, out user);
+                MeetingAttendee? tracked = null;
+                var hasExisting = dto.Id.HasValue && existingById.TryGetValue(dto.Id.Value, out tracked);
 
-                if (dto.Id.HasValue && existingById.TryGetValue(dto.Id.Value, out var att))
+                AppUser? user = null;
+                var hasUser = !string.IsNullOrWhiteSpace(dto.UserId)
+                              && usersById.TryGetValue(dto.UserId!.Trim(), out user);
+
+                if (hasExisting && tracked is not null)
                 {
-                    // update existing
-                    att.UserId = dto.UserId;
+                    // Update existing
+                    tracked.UserId = dto.UserId;
+                    tracked.Role = dto.Role;
+                    tracked.IsRequired = dto.IsRequired;
+                    tracked.IsConfirmed = dto.IsConfirmed;
+
                     if (hasUser && user is not null)
                     {
-                        att.Name = string.IsNullOrWhiteSpace(dto.Name)
-                            ? (!string.IsNullOrWhiteSpace(user.DisplayName) ? user.DisplayName! : user.Email ?? dto.Name)
+                        tracked.Name = string.IsNullOrWhiteSpace(dto.Name)
+                            ? (!string.IsNullOrWhiteSpace(user.DisplayName) ? user.DisplayName! : user.Email ?? user.Id)
                             : dto.Name;
-                        att.Email = user.Email;
+                        tracked.Email = user.Email;
                     }
                     else
                     {
-                        att.Name = dto.Name;
-                        att.Email = dto.Email;
+                        tracked.Name = dto.Name;
+                        tracked.Email = dto.Email;
                     }
-                    att.Role = dto.Role;
-                    att.IsRequired = dto.IsRequired;
-                    att.IsConfirmed = dto.IsConfirmed;
+
+                    seenExistingIds.Add(tracked.Id);
                 }
                 else
                 {
-                    // add new
+                    // Add new
                     var attendee = new MeetingAttendee
                     {
                         Id = dto.Id ?? Guid.NewGuid(),
@@ -108,32 +123,41 @@ public class UpdateMeetingHandler : IRequestHandler<UpdateMeetingCommand, bool>
                         attendee.Email = dto.Email;
                     }
 
-                    entity.Attendees.Add(attendee);
+                    toAdd.Add(attendee);
                 }
             }
 
-            // remove those not present in incoming list (compare by existing ids only)
+
+            // 4) Remove those missing from incoming list (compare only original existing IDs)
             var keepIds = request.AttendeesRich.Where(a => a.Id.HasValue).Select(a => a.Id!.Value).ToHashSet();
-            var toRemove = entity.Attendees
-                .Where(a => originalIds.Contains(a.Id) && !keepIds.Contains(a.Id))
-                .ToList();
+            var toRemoveIds = existingIds.Where(id => !keepIds.Contains(id)).ToList();
 
-            if (toRemove.Count > 0)
+            if (toRemoveIds.Count > 0)
             {
-                foreach (var r in toRemove)
-                {
-                    entity.Attendees.Remove(r);
-                }
+                // Prefer set-based delete to avoid collection state issues
+                await _db.Set<MeetingAttendee>()
+                    .Where(a => a.MeetingId == entity.Id && toRemoveIds.Contains(a.Id))
+                    .ExecuteDeleteAsync(ct);
 
-                _db.Set<MeetingAttendee>().RemoveRange(toRemove);
+                // Also evict any now-stale tracked entries from local collection to keep change tracker clean
+                entity.Attendees.RemoveAll(a => toRemoveIds.Contains(a.Id));
             }
+
+            if (toAdd.Count > 0)
+                await _db.Set<MeetingAttendee>().AddRangeAsync(toAdd, ct);
         }
 
+        // -------------------
         // Calendar provider update (optional)
+        // (Do this AFTER local model is correct, BEFORE final SaveChanges)
+        // -------------------
         var svc = _calSelector.For(entity.ExternalCalendar ?? CalendarProviders.Microsoft365);
         var (_, joinUrl) = await svc.UpdateEventAsync(entity, ct);
         entity.OnlineJoinUrl = joinUrl;
 
+        // -------------------
+        // Save with concurrency handling for removed attendees
+        // -------------------
         await SaveChangesHandlingRemovedAttendeesAsync(ct);
         return true;
     }
@@ -146,21 +170,29 @@ public class UpdateMeetingHandler : IRequestHandler<UpdateMeetingCommand, bool>
         }
         catch (DbUpdateConcurrencyException ex)
         {
+            // If a concurrent process already deleted some attendees we tried to delete,
+            // detach those entries and retry once.
             var attendeeDeletes = ex.Entries
                 .Where(e => e.Entity is MeetingAttendee && e.State == EntityState.Deleted)
                 .ToList();
 
             if (attendeeDeletes.Count == 0)
-            {
                 throw;
-            }
 
             foreach (var entry in attendeeDeletes)
-            {
                 entry.State = EntityState.Detached;
-            }
 
             await _db.SaveChangesAsync(ct);
         }
+    }
+}
+
+// Small helper for removing items from a List<T> based on predicate without multiple enumerations
+file static class ListExtensions
+{
+    public static void RemoveAll<T>(this ICollection<T> source, Func<T, bool> predicate)
+    {
+        var toRemove = source.Where(predicate).ToList();
+        foreach (var item in toRemove) source.Remove(item);
     }
 }

@@ -5,12 +5,14 @@ using BoardMgmt.Application.Common.Email;
 using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Application.Common.Interfaces.Repositories;
 using BoardMgmt.Application.Common.Options;
+using BoardMgmt.Domain.Calendars;
 using BoardMgmt.Domain.Entities;
 using BoardMgmt.Domain.Identity;
 using BoardMgmt.Infrastructure.Auth;
 using BoardMgmt.Infrastructure.Calendars;
 using BoardMgmt.Infrastructure.Email;
 using BoardMgmt.Infrastructure.Files;
+using BoardMgmt.Infrastructure.Graph;
 using BoardMgmt.Infrastructure.Identity;
 using BoardMgmt.Infrastructure.Persistence;
 using BoardMgmt.Infrastructure.Persistence.Repositories;
@@ -25,6 +27,8 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Graph;
 using System;
+using GraphCalendarOptions = BoardMgmt.Infrastructure.Calendars.GraphOptions;
+using GraphIntegrationOptions = BoardMgmt.Infrastructure.Graph.GraphOptions;
 
 namespace BoardMgmt.Infrastructure
 {
@@ -61,14 +65,15 @@ namespace BoardMgmt.Infrastructure
                 if (env.IsDevelopment())
                     options.EnableSensitiveDataLogging();
 
-                // Optional: fine-grained EF event selection
+                // Use the built-in EF Core logging category so Serilog configuration
+                // (MinimumLevel.Override["Microsoft.EntityFrameworkCore"] = Warning)
+                // can suppress high-volume messages such as CommandExecuted from being
+                // written to the Logs table.  Create the logger once instead of per
+                // message to avoid unnecessary allocations.
+                var efLogger = loggerFactory.CreateLogger("Microsoft.EntityFrameworkCore");
+
                 options.LogTo(
-                    // Send EF messages to MEL -> Serilog
-                    message =>
-                    {
-                        var efLogger = loggerFactory.CreateLogger("EFCore");
-                        efLogger.LogInformation("{EFCoreMessage}", message);
-                    },
+                    message => efLogger.LogInformation("{EFCoreMessage}", message),
                     new[]
                     {
                         RelationalEventId.CommandExecuting,
@@ -79,7 +84,7 @@ namespace BoardMgmt.Infrastructure
                         CoreEventId.SaveChangesStarting,
                         CoreEventId.SaveChangesCompleted
                     },
-                    LogLevel.Information
+                    env.IsDevelopment() ? LogLevel.Information : LogLevel.Warning
                 );
             });
 
@@ -109,8 +114,6 @@ namespace BoardMgmt.Infrastructure
             services.AddScoped<IJwtTokenService, JwtTokenService>();
             services.AddScoped<IIdentityUserReader, IdentityUserReader>();
 
-            // Some handlers may still take DbContext directly:
-            services.AddScoped<DbContext>(sp => sp.GetRequiredService<AppDbContext>());
 
             // Current user accessor
             services.AddHttpContextAccessor();
@@ -148,22 +151,25 @@ namespace BoardMgmt.Infrastructure
         private static IServiceCollection AddCalendarIntegrations(this IServiceCollection services, IConfiguration config)
         {
             // Options
-            services.Configure<GraphOptions>(config.GetSection("Graph"));
+            services.Configure<GraphCalendarOptions>(config.GetSection("Graph"));
+            services.Configure<GraphIntegrationOptions>(config.GetSection("Graph"));
             services.Configure<ZoomOptions>(config.GetSection("Zoom"));
 
 
             // Graph client (app-only)
-            var graphOpts = config.GetSection("Graph").Get<GraphOptions>()!;
+            var graphOpts = config.GetSection("Graph").Get<GraphCalendarOptions>()!;
             var credential = new ClientSecretCredential(graphOpts.TenantId, graphOpts.ClientId, graphOpts.ClientSecret);
             var graphClient = new GraphServiceClient(credential);
             services.AddSingleton(graphClient);
+
+            services.AddSingleton<IGraphSubscriptionManager, GraphSubscriptionManager>();
 
 
             // Zoom HttpClient
             services.AddHttpClient("Zoom", client =>
             {
                 client.BaseAddress = new Uri("https://api.zoom.us/v2/");
-                client.Timeout = TimeSpan.FromSeconds(30);
+                client.Timeout = TimeSpan.FromMinutes(5);
                 // BaseAddress optional; we send absolute URLs.
             });
 
@@ -184,8 +190,8 @@ namespace BoardMgmt.Infrastructure
             // Selector registration (map provider keys to services)
             services.AddSingleton<ICalendarServiceSelector>(sp => new CalendarServiceSelector(new[]
             {
-                new KeyValuePair<string, ICalendarService>("Microsoft365", sp.GetRequiredService<Microsoft365CalendarService>()),
-                new KeyValuePair<string, ICalendarService>("Zoom", sp.GetRequiredService<ZoomCalendarService>())
+                new KeyValuePair<string, ICalendarService>(CalendarProviders.Microsoft365, sp.GetRequiredService<Microsoft365CalendarService>()),
+                new KeyValuePair<string, ICalendarService>(CalendarProviders.Zoom, sp.GetRequiredService<ZoomCalendarService>())
             }));
 
 

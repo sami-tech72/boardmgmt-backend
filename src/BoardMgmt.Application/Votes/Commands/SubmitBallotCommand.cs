@@ -22,11 +22,14 @@ public sealed class SubmitBallotCommandHandler
     {
         if (!_user.IsAuthenticated) throw new UnauthorizedAccessException();
 
+        var userId = _user.UserId ?? throw new InvalidOperationException("Authenticated user missing identifier.");
+
         var v = await _db.VotePolls
             .Include(x => x.Options)
             .Include(x => x.Ballots) // needed to find/update the user's ballot + recompute results
             .Include(x => x.EligibleUsers)
-            .Include(x => x.Meeting)!.ThenInclude(m => m.Attendees)
+            .Include(x => x.Meeting)
+                .ThenInclude(m => m.Attendees)
             .FirstOrDefaultAsync(x => x.Id == r.VoteId, ct)
             ?? throw new KeyNotFoundException("Vote not found.");
 
@@ -37,8 +40,9 @@ public sealed class SubmitBallotCommandHandler
         var eligible = v.Eligibility switch
         {
             VoteEligibility.Public => true,
-            VoteEligibility.SpecificUsers => v.EligibleUsers.Any(e => e.UserId == _user.UserId),
-            VoteEligibility.MeetingAttendees => v.MeetingId != null && v.Meeting!.Attendees.Any(a => a.UserId == _user.UserId),
+            VoteEligibility.SpecificUsers => v.EligibleUsers.Any(e => e.UserId == userId),
+            VoteEligibility.MeetingAttendees => v.MeetingId != null && v.Meeting != null &&
+                v.Meeting.Attendees.Any(a => a.UserId == userId),
             _ => false
         };
         if (!eligible) throw new UnauthorizedAccessException("Not eligible to vote.");
@@ -57,10 +61,10 @@ public sealed class SubmitBallotCommandHandler
         }
 
         // ✅ Upsert the user's ballot (create if none, otherwise UPDATE to allow re-voting)
-        var ballot = v.Ballots.FirstOrDefault(b => b.UserId == _user.UserId);
+        var ballot = v.Ballots.FirstOrDefault(b => b.UserId == userId);
         if (ballot is null)
         {
-            ballot = new VoteBallot { VoteId = v.Id, UserId = _user.UserId! };
+            ballot = new VoteBallot { VoteId = v.Id, UserId = userId };
             _db.VoteBallots.Add(ballot);
         }
 

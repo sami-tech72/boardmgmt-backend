@@ -27,7 +27,8 @@ public sealed class GetActiveVotesQueryHandler
             .Include(v => v.Options)
             .Include(v => v.Ballots)
             .Include(v => v.EligibleUsers)
-            .Include(v => v.Meeting)!.ThenInclude(m => m.Attendees)
+            .Include(v => v.Meeting)
+                .ThenInclude(m => m.Attendees)
             .Where(v => v.Deadline >= nowUtc);
 
         q = FilterByEligibility(q, _user);
@@ -38,18 +39,21 @@ public sealed class GetActiveVotesQueryHandler
 
     internal static IQueryable<VotePoll> FilterByEligibility(IQueryable<VotePoll> q, ICurrentUser user)
     {
-        if (user.IsAuthenticated is false)
-            return q.Where(v => v.Eligibility == VoteEligibility.Public);
+        if (user.IsAuthenticated && user.UserId is { Length: > 0 } userId)
+        {
+            return q.Where(v =>
+                   v.Eligibility == VoteEligibility.Public
+                || v.CreatedByUserId == userId
+                || (v.Eligibility == VoteEligibility.SpecificUsers
+                    && v.EligibleUsers.Any(e => e.UserId == userId))
+                || (v.Eligibility == VoteEligibility.MeetingAttendees
+                    && v.MeetingId != null
+                    && v.Meeting != null
+                    && v.Meeting.Attendees.Any(a => a.UserId == userId))
+            );
+        }
 
-        return q.Where(v =>
-               v.Eligibility == VoteEligibility.Public
-            || v.CreatedByUserId == user.UserId
-            || (v.Eligibility == VoteEligibility.SpecificUsers
-                && v.EligibleUsers.Any(e => e.UserId == user.UserId))
-            || (v.Eligibility == VoteEligibility.MeetingAttendees
-                && v.MeetingId != null
-                && v.Meeting!.Attendees.Any(a => a.UserId == user.UserId))
-        );
+        return q.Where(v => v.Eligibility == VoteEligibility.Public);
     }
 
     internal static VoteSummaryDto MapSummary(VotePoll v, ICurrentUser user)
@@ -57,7 +61,7 @@ public sealed class GetActiveVotesQueryHandler
         var results = BuildResults(v);
 
         // compute current user's ballot (if any)
-        var myBallot = user.IsAuthenticated
+        var myBallot = user.IsAuthenticated && !string.IsNullOrEmpty(user.UserId)
             ? v.Ballots.FirstOrDefault(b => b.UserId == user.UserId)
             : null;
 

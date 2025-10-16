@@ -3,31 +3,37 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 using BoardMgmt.Application.Common.Interfaces;
-using BoardMgmt.Domain.Identity;                 // 👈 AppModule, Permission
+using BoardMgmt.Domain.Identity;
 using BoardMgmt.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
 namespace BoardMgmt.Infrastructure.Auth
 {
-    public class PermissionService(
-        AppDbContext db,
-        RoleManager<IdentityRole> roles,
-        ICurrentUser current)
-        : IPermissionService, IRolePermissionStore // 👈 implement both
+    public class PermissionService : IPermissionService, IRolePermissionStore
     {
-        // ===== Existing methods you already had =====
+        private readonly AppDbContext _db;
+        private readonly RoleManager<IdentityRole> _roles;
+        private readonly ICurrentUser _current;
+
+        public PermissionService(AppDbContext db, RoleManager<IdentityRole> roles, ICurrentUser current)
+        {
+            _db = db;
+            _roles = roles;
+            _current = current;
+        }
+
         public async Task<Permission> GetMineAsync(AppModule module, CancellationToken ct)
         {
-            var roleNames = current.Roles;
+            var roleNames = _current.Roles;
             if (roleNames.Count == 0) return Permission.None;
 
-            var roleIds = await roles.Roles
+            var roleIds = await _roles.Roles
                 .Where(r => roleNames.Contains(r.Name!))
                 .Select(r => r.Id)
                 .ToListAsync(ct);
 
-            var allowedList = await db.RolePermissions
+            var allowedList = await _db.RolePermissions
                 .Where(p => roleIds.Contains(p.RoleId) && p.Module == module)
                 .Select(p => p.Allowed)
                 .ToListAsync(ct);
@@ -48,28 +54,30 @@ namespace BoardMgmt.Infrastructure.Auth
 
         // ===== NEW: IRolePermissionStore aggregation =====
 
-        // Single role → { moduleId -> bitmask }
         public async Task<IDictionary<int, int>> GetAggregatedForRoleAsync(string roleId, CancellationToken ct)
         {
-            var list = await db.RolePermissions
+            var rows = await _db.RolePermissions
                 .Where(rp => rp.RoleId == roleId)
-                .GroupBy(rp => (int)rp.Module)
-                .Select(g => new
-                {
-                    Module = g.Key,
-                    Allowed = g.Select(x => (int)x.Allowed).Aggregate(0, (a, b) => a | b)
-                })
+                .Select(rp => new { Module = (int)rp.Module, Allowed = (int)rp.Allowed })
                 .ToListAsync(ct);
 
-            return list.ToDictionary(x => x.Module, x => x.Allowed);
+            return rows
+                .GroupBy(r => r.Module)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.Aggregate(0, (mask, row) => mask | row.Allowed));
         }
 
-        // Many roles → { roleId -> { moduleId -> bitmask } }
         public async Task<IDictionary<string, IDictionary<int, int>>> GetAggregatedForRolesAsync(
             IEnumerable<string> roleIds, CancellationToken ct)
         {
             var idSet = roleIds.ToHashSet();
-            var rows = await db.RolePermissions
+            if (idSet.Count == 0)
+            {
+                return new Dictionary<string, IDictionary<int, int>>();
+            }
+
+            var rows = await _db.RolePermissions
                 .Where(rp => idSet.Contains(rp.RoleId))
                 .Select(rp => new { rp.RoleId, Module = (int)rp.Module, Allowed = (int)rp.Allowed })
                 .ToListAsync(ct);
@@ -79,12 +87,10 @@ namespace BoardMgmt.Infrastructure.Auth
                 .ToDictionary(
                     g => g.Key,
                     g => (IDictionary<int, int>)g
-                        .GroupBy(x => x.Module)
+                        .GroupBy(row => row.Module)
                         .ToDictionary(
                             mg => mg.Key,
-                            mg => mg.Select(x => x.Allowed).Aggregate(0, (a, b) => a | b)
-                        )
-                );
+                            mg => mg.Aggregate(0, (mask, row) => mask | row.Allowed)));
         }
     }
 }

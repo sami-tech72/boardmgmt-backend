@@ -12,12 +12,12 @@ namespace BoardMgmt.Application.Meetings.Commands;
 
 public class CreateMeetingHandler : IRequestHandler<CreateMeetingCommand, Guid>
 {
-    private readonly DbContext _db;
+    private readonly IAppDbContext _db;
     private readonly IIdentityUserReader _users;
     private readonly ICalendarServiceSelector _calSelector;
 
 
-    public CreateMeetingHandler(DbContext db, IIdentityUserReader users, ICalendarServiceSelector calSelector)
+    public CreateMeetingHandler(IAppDbContext db, IIdentityUserReader users, ICalendarServiceSelector calSelector)
     {
         _db = db;
         _users = users;
@@ -27,9 +27,21 @@ public class CreateMeetingHandler : IRequestHandler<CreateMeetingCommand, Guid>
 
     public async Task<Guid> Handle(CreateMeetingCommand request, CancellationToken ct)
     {
-        if (!CalendarProviders.IsSupported(request.Provider))
-            throw new ArgumentOutOfRangeException("provider", $"Unknown calendar provider: {request.Provider}");
+        var provider = CalendarProviders.Normalize(request.Provider);
 
+        if (!CalendarProviders.IsSupported(provider))
+            throw new ArgumentOutOfRangeException(nameof(request.Provider), $"Unknown calendar provider: {request.Provider}");
+
+        string? hostIdentity = string.IsNullOrWhiteSpace(request.HostIdentity)
+            ? null
+            : request.HostIdentity!.Trim();
+
+        string? normalizedMailbox = hostIdentity;
+
+        if (string.Equals(provider, CalendarProviders.Microsoft365, StringComparison.OrdinalIgnoreCase))
+        {
+            normalizedMailbox = MailboxIdentifier.Normalize(hostIdentity);
+        }
 
         var entity = new Meeting
         {
@@ -40,8 +52,9 @@ public class CreateMeetingHandler : IRequestHandler<CreateMeetingCommand, Guid>
             EndAt = request.EndAt,
             Location = string.IsNullOrWhiteSpace(request.Location) ? "TBD" : request.Location.Trim(),
             Status = MeetingStatus.Scheduled,
-            ExternalCalendar = request.Provider, // "Microsoft365" or "Zoom"
-            ExternalCalendarMailbox = request.HostIdentity // M365 mailbox or Zoom host email (optional)
+            ExternalCalendar = provider!, // "Microsoft365" or "Zoom"
+            ExternalCalendarMailbox = normalizedMailbox,
+            HostIdentity = normalizedMailbox ?? hostIdentity
         };
 
 
@@ -76,13 +89,13 @@ public class CreateMeetingHandler : IRequestHandler<CreateMeetingCommand, Guid>
 
 
         // Create in chosen provider
-        var svc = _calSelector.For(request.Provider);
+        var svc = _calSelector.For(provider!);
         var (eventId, joinUrl) = await svc.CreateEventAsync(entity, ct);
         entity.ExternalEventId = eventId;
         entity.OnlineJoinUrl = joinUrl;
 
 
-        _db.Set<Meeting>().Add(entity);
+        _db.Meetings.Add(entity);
         await _db.SaveChangesAsync(ct);
         return entity.Id;
     }

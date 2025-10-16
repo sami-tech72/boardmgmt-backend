@@ -1,5 +1,6 @@
 ﻿// Application/Calendars/Commands/MoveCalendarEventHandler.cs
 using BoardMgmt.Domain.Entities;
+using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Application.Calendars;
 using BoardMgmt.Domain.Calendars;
 using MediatR;
@@ -9,10 +10,10 @@ namespace BoardMgmt.Application.Calendars.Commands
 {
     public sealed class MoveCalendarEventHandler : IRequestHandler<MoveCalendarEventCommand, bool>
     {
-        private readonly DbContext _db;
+                private readonly IAppDbContext _db;
         private readonly ICalendarServiceSelector _calSelector;
 
-        public MoveCalendarEventHandler(DbContext db, ICalendarServiceSelector calSelector)
+        public MoveCalendarEventHandler(IAppDbContext db, ICalendarServiceSelector calSelector)
         {
             _db = db;
             _calSelector = calSelector;

@@ -1,4 +1,5 @@
-﻿using BoardMgmt.Application.Reports.DTOs;
+﻿using BoardMgmt.Application.Common.Interfaces;
+using BoardMgmt.Application.Reports.DTOs;
 using BoardMgmt.Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -9,9 +10,9 @@ public record GetReportsDashboardQuery(int Months = 6) : IRequest<ReportsDashboa
 
 public sealed class GetReportsDashboardHandler : IRequestHandler<GetReportsDashboardQuery, ReportsDashboardDto>
 {
-    private readonly DbContext _db;
+    private readonly IAppDbContext _db;
 
-    public GetReportsDashboardHandler(DbContext db) => _db = db;
+    public GetReportsDashboardHandler(IAppDbContext db) => _db = db;
 
     public async Task<ReportsDashboardDto> Handle(GetReportsDashboardQuery request, CancellationToken ct)
     {

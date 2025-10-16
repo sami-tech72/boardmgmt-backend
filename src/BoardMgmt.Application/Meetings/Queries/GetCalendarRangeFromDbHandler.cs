@@ -10,10 +10,10 @@ namespace BoardMgmt.Application.Calendars.Queries;
 public sealed class GetCalendarRangeFromDbHandler
   : IRequestHandler<GetCalendarRangeFromDbQuery, IReadOnlyList<CalendarEventDto>>
 {
-    private readonly DbContext _db;
+        private readonly IAppDbContext _db;
     private readonly ICurrentUser _current;
 
-    public GetCalendarRangeFromDbHandler(DbContext db, ICurrentUser current)
+    public GetCalendarRangeFromDbHandler(IAppDbContext db, ICurrentUser current)
     {
         _db = db;
         _current = current;

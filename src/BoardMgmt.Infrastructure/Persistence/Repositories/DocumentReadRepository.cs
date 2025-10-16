@@ -8,13 +8,14 @@ using BoardMgmt.Application.Common.Interfaces.Repositories;
 using BoardMgmt.Application.Dashboard.DTOs;
 using BoardMgmt.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
+using BoardMgmt.Infrastructure.Persistence;
 
 namespace BoardMgmt.Infrastructure.Persistence.Repositories
 {
     public class DocumentReadRepository : IDocumentReadRepository
     {
-        private readonly DbContext _db;
-        public DocumentReadRepository(DbContext db) => _db = db;
+        private readonly AppDbContext _db;
+        public DocumentReadRepository(AppDbContext db) => _db = db;
 
         // You don't have IsActive on Document, so we just count all documents
         public Task<int> CountActiveAsync(CancellationToken ct) =>

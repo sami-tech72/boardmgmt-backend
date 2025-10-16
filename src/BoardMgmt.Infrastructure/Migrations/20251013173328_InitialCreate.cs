@@ -96,6 +96,7 @@ namespace BoardMgmt.Infrastructure.Migrations
                     ExternalCalendar = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
                     ExternalCalendarMailbox = table.Column<string>(type: "nvarchar(320)", maxLength: 320, nullable: true),
                     ExternalEventId = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: true),
+                    ExternalOnlineMeetingId = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: true),
                     OnlineJoinUrl = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: true),
                     HostIdentity = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     CreatedAt = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: false),
@@ -878,6 +879,11 @@ namespace BoardMgmt.Infrastructure.Migrations
                 name: "IX_MeetingAttendees_UserId",
                 table: "MeetingAttendees",
                 column: "UserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Meetings_ExternalOnlineMeetingId",
+                table: "Meetings",
+                column: "ExternalOnlineMeetingId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Meetings_ScheduledAt_Status",

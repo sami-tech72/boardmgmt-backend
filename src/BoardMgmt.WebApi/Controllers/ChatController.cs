@@ -19,9 +19,9 @@ public class ChatController : ControllerBase
     private readonly ISender _mediator;
     private readonly IHubContext<ChatHub> _hub;
     private readonly ICurrentUser _current;
-    private readonly DbContext _db;
+    private readonly IAppDbContext _db;
 
-    public ChatController(ISender mediator, IHubContext<ChatHub> hub, ICurrentUser current, DbContext db)
+    public ChatController(ISender mediator, IHubContext<ChatHub> hub, ICurrentUser current, IAppDbContext db)
     {
         _mediator = mediator;
         _hub = hub;

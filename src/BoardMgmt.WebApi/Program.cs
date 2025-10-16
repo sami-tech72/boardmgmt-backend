@@ -119,7 +119,7 @@ builder.Services.AddCors(opt =>
         .AllowCredentials()
         .WithOrigins(
             config.GetSection("Cors:AllowedOrigins").Get<string[]>()
-            ?? new[] { "http://localhost:4200", "https://localhost:4200" }
+            ?? new[] { "http://localhost:4200", "https://localhost:4200", "http://localhost:5174", "https://localhost:5174" }
         )
     );
 });

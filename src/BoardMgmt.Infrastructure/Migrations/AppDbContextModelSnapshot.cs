@@ -658,6 +658,10 @@ namespace BoardMgmt.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<string>("ExternalOnlineMeetingId")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
                     b.Property<string>("HostIdentity")
                         .HasColumnType("nvarchar(max)");
 
@@ -691,6 +695,8 @@ namespace BoardMgmt.Infrastructure.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ExternalOnlineMeetingId");
 
                     b.HasIndex("ScheduledAt", "Status");
 
@@ -1328,7 +1334,7 @@ namespace BoardMgmt.Infrastructure.Migrations
             modelBuilder.Entity("BoardMgmt.Domain.Entities.Transcript", b =>
                 {
                     b.HasOne("BoardMgmt.Domain.Entities.Meeting", "Meeting")
-                        .WithMany()
+                        .WithMany("Transcripts")
                         .HasForeignKey("MeetingId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -1500,6 +1506,8 @@ namespace BoardMgmt.Infrastructure.Migrations
                     b.Navigation("Attendees");
 
                     b.Navigation("Documents");
+
+                    b.Navigation("Transcripts");
 
                     b.Navigation("Votes");
                 });

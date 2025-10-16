@@ -2,15 +2,17 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using BoardMgmt.Application.Meetings.Commands;
 using BoardMgmt.Domain.Entities;
-using BoardMgmt.Infrastructure.Persistence; // your DbContext namespace
+using BoardMgmt.Application.Common.Interfaces;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Hosting;
 
 namespace BoardMgmt.WebApi.Controllers
 {
@@ -19,20 +21,23 @@ namespace BoardMgmt.WebApi.Controllers
     public sealed class ZoomWebhookController : ControllerBase
     {
         private readonly IMediator _mediator;
-        private readonly AppDbContext _db;                 // <-- your concrete DbContext type
+        private readonly IAppDbContext _db;
         private readonly string _secretToken;
         private readonly ILogger<ZoomWebhookController> _logger;
         private readonly bool _disableSigValidation;
+        private readonly IHostApplicationLifetime _appLifetime;
 
         public ZoomWebhookController(
             IMediator mediator,
-            AppDbContext db,
+            IAppDbContext db,
             IConfiguration config,
-            ILogger<ZoomWebhookController> logger)
+            ILogger<ZoomWebhookController> logger,
+            IHostApplicationLifetime appLifetime)
         {
             _mediator = mediator;
             _db = db;
             _logger = logger;
+            _appLifetime = appLifetime;
 
             _secretToken = config["Zoom:WebhookSecretToken"]
                 ?? throw new InvalidOperationException("Zoom:WebhookSecretToken not configured.");
@@ -56,6 +61,12 @@ namespace BoardMgmt.WebApi.Controllers
                     body?.Length ?? 0,
                     Request.Headers["x-zm-request-timestamp"].ToString(),
                     Request.Headers["x-zm-signature"].ToString());
+
+                if (string.IsNullOrWhiteSpace(body))
+                {
+                    _logger.LogWarning("Zoom webhook received empty body.");
+                    return BadRequest("empty body");
+                }
 
                 using var doc = JsonDocument.Parse(body);
                 var root = doc.RootElement;
@@ -126,7 +137,8 @@ namespace BoardMgmt.WebApi.Controllers
                     try
                     {
                         _logger.LogInformation("Starting transcript ingest. MeetingId={MeetingId}", ourMeeting.Id);
-                        await _mediator.Send(new IngestTranscriptCommand(ourMeeting.Id), ct);
+                        using var ingestCts = CancellationTokenSource.CreateLinkedTokenSource(_appLifetime.ApplicationStopping);
+                        await _mediator.Send(new IngestTranscriptCommand(ourMeeting.Id), ingestCts.Token);
                         _logger.LogInformation("Transcript ingest finished. MeetingId={MeetingId}", ourMeeting.Id);
                     }
                     catch (Exception exIngest)
