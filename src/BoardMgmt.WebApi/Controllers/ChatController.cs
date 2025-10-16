@@ -1,4 +1,5 @@
 ﻿// Controllers/ChatController.cs
+using System.IO;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -209,15 +210,21 @@ public class ChatController : ControllerBase
         if (!Request.HasFormContentType || Request.Form.Files.Count == 0)
             return BadRequest(new { error = "No files uploaded" });
 
-        Directory.CreateDirectory(Path.Combine("storage", "chat", id.ToString()));
+        var storageRoot = Path.Combine("storage", "chat", id.ToString());
+        Directory.CreateDirectory(storageRoot);
         var toSave = new List<(string FileName, string ContentType, long FileSize, string StoragePath)>();
 
         foreach (var f in Request.Form.Files)
         {
-            var path = Path.Combine("storage", "chat", id.ToString(), f.FileName);
-            await using var fs = System.IO.File.Create(path);
+            var originalName = SanitizeFileName(f.FileName);
+            var extension = Path.GetExtension(originalName);
+            var storageFileName = $"{Guid.NewGuid():N}{extension}";
+            var storagePath = Path.Combine(storageRoot, storageFileName);
+
+            await using var fs = File.Create(storagePath);
             await f.CopyToAsync(fs);
-            toSave.Add((f.FileName, f.ContentType ?? "application/octet-stream", f.Length, path));
+
+            toSave.Add((originalName, f.ContentType ?? "application/octet-stream", f.Length, storagePath));
         }
 
         var _ = await _mediator.Send(new AddChatAttachmentsCommand(id, toSave));
@@ -242,9 +249,9 @@ public class ChatController : ControllerBase
         var att = await _db.Set<ChatAttachment>()
             .FirstOrDefaultAsync(a => a.Id == attachmentId && a.MessageId == messageId);
 
-        if (att is null) return NotFound();
+        if (att is null || !File.Exists(att.StoragePath)) return NotFound();
 
-        var stream = System.IO.File.OpenRead(att.StoragePath);
+        var stream = File.OpenRead(att.StoragePath);
         return File(stream, att.ContentType, att.FileName);
     }
 
@@ -280,5 +287,27 @@ public class ChatController : ControllerBase
     {
         var id = await _mediator.Send(new CreateOrGetDirectConversationCommand(CurrentUserId, otherUserId));
         return Ok(new { id });
+    }
+
+    private static string SanitizeFileName(string? fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            return "attachment";
+        }
+
+        var justName = Path.GetFileName(fileName);
+
+        foreach (var invalid in Path.GetInvalidFileNameChars())
+        {
+            justName = justName.Replace(invalid, '_');
+        }
+
+        if (string.IsNullOrWhiteSpace(justName))
+        {
+            return "attachment";
+        }
+
+        return justName.Length > 255 ? justName[..255] : justName;
     }
 }
