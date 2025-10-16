@@ -12,6 +12,7 @@ using BoardMgmt.Infrastructure.Auth;
 using BoardMgmt.Infrastructure.Calendars;
 using BoardMgmt.Infrastructure.Email;
 using BoardMgmt.Infrastructure.Files;
+using BoardMgmt.Infrastructure.Graph;
 using BoardMgmt.Infrastructure.Identity;
 using BoardMgmt.Infrastructure.Persistence;
 using BoardMgmt.Infrastructure.Persistence.Repositories;
@@ -26,6 +27,8 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Graph;
 using System;
+using GraphCalendarOptions = BoardMgmt.Infrastructure.Calendars.GraphOptions;
+using GraphIntegrationOptions = BoardMgmt.Infrastructure.Graph.GraphOptions;
 
 namespace BoardMgmt.Infrastructure
 {
@@ -148,15 +151,18 @@ namespace BoardMgmt.Infrastructure
         private static IServiceCollection AddCalendarIntegrations(this IServiceCollection services, IConfiguration config)
         {
             // Options
-            services.Configure<GraphOptions>(config.GetSection("Graph"));
+            services.Configure<GraphCalendarOptions>(config.GetSection("Graph"));
+            services.Configure<GraphIntegrationOptions>(config.GetSection("Graph"));
             services.Configure<ZoomOptions>(config.GetSection("Zoom"));
 
 
             // Graph client (app-only)
-            var graphOpts = config.GetSection("Graph").Get<GraphOptions>()!;
+            var graphOpts = config.GetSection("Graph").Get<GraphCalendarOptions>()!;
             var credential = new ClientSecretCredential(graphOpts.TenantId, graphOpts.ClientId, graphOpts.ClientSecret);
             var graphClient = new GraphServiceClient(credential);
             services.AddSingleton(graphClient);
+
+            services.AddSingleton<IGraphSubscriptionManager, GraphSubscriptionManager>();
 
 
             // Zoom HttpClient
