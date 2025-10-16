@@ -1,0 +1,377 @@
+<!-- Top Navigation -->
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 top-navbar">
+  <h1 class="h2">Meetings</h1>
+  <div class="btn-toolbar mb-2 mb-md-0">
+    <div class="btn-group me-2">
+      <button type="button" class="btn btn-primary" (click)="createModal.open()">
+        <i class="fas fa-plus"></i> New Meeting
+      </button>
+      <button type="button" class="btn btn-outline-secondary" (click)="viewCalendar()">
+        <i class="fas fa-calendar"></i> Calendar View
+      </button>
+    </div>
+
+   <app-user-menu [displayName]="'John Doe'" (logout)="onLogout()"></app-user-menu>
+  </div>
+</div>
+
+<!-- Meeting Filters -->
+<div class="row mb-4">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-body">
+        <div class="row align-items-center g-2">
+          <div class="col-md-3">
+            <select class="form-select" id="statusFilter" [ngModel]="statusFilter()" (ngModelChange)="statusFilter.set($event)">
+              <option value="">All Status</option>
+              <option value="draft">Draft</option>
+              <option value="upcoming">Upcoming</option>
+              <option value="active">Active</option>
+              <option value="completed">Completed</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </div>
+
+          <div class="col-md-3">
+            <select class="form-select" id="typeFilter" [ngModel]="typeFilter()" (ngModelChange)="typeFilter.set($event)">
+              <option value="">All Types</option>
+              <option value="board">Board Meeting</option>
+              <option value="committee">Committee</option>
+              <option value="emergency">Emergency</option>
+            </select>
+          </div>
+
+          <div class="col-md-4">
+            <div class="input-group">
+              <input type="text" class="form-control" placeholder="Search meetings..." id="searchMeetings"
+                     [ngModel]="search()" (ngModelChange)="search.set($event)"/>
+              <button class="btn btn-outline-secondary" type="button" (click)="search.set('')">
+                <i class="fas fa-times"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="col-md-2">
+            <button class="btn btn-outline-primary w-100" id="clearFilters" (click)="clearFilters()">
+              <i class="fas fa-broom"></i> Clear
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Loading / Error / Empty states -->
+<div *ngIf="loading()" class="alert alert-info d-flex align-items-center">
+  <i class="fas fa-spinner fa-spin me-2"></i> Loading meetings…
+</div>
+
+<div *ngIf="!loading() && error()" class="alert alert-danger d-flex align-items-center">
+  <i class="fas fa-exclamation-triangle me-2"></i> {{ error() }}
+  <button class="btn btn-sm btn-outline-light ms-auto" (click)="load()">
+    <i class="fas fa-redo-alt"></i> Retry
+  </button>
+</div>
+
+<div *ngIf="!loading() && !error() && filtered().length === 0" class="alert alert-secondary">
+  No meetings match your filters.
+</div>
+
+<!-- Meetings List -->
+<div class="row" *ngIf="!loading() && !error() && filtered().length > 0">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header">
+        <h5 class="mb-0"><i class="fas fa-calendar-alt me-2"></i>All Meetings</h5>
+      </div>
+
+      <div class="card-body">
+        <div class="table-responsive">
+          <table class="table table-hover align-middle" id="meetingsTable">
+            <thead>
+              <tr>
+                <th>Meeting Details</th>
+                <th>Date &amp; Time</th>
+                <th>Attendees</th>
+                <th>Status</th>
+                <th class="text-end">Actions</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              <tr *ngFor="let m of filtered(); trackBy: trackById">
+                <td>
+                  <div class="d-flex align-items-center">
+                    <div class="meeting-icon text-white rounded-circle me-3 d-flex align-items-center justify-content-center"
+                         [ngClass]="typeColorClass(m.type)" aria-hidden="true">
+                      <i [ngClass]="typeIconClass(m.type)"></i>
+                    </div>
+
+                    <div>
+                      <h6 class="mb-1">{{ m.title }}</h6>
+                      <small class="text-muted">{{ m.description || '—' }}</small>
+                      <div class="small text-muted">
+                        <i class="far fa-map me-1"></i>{{ m.location }}
+                      </div>
+                      <div class="small text-muted mt-1">
+                        <span *ngIf="m.provider === 'Zoom'" class="badge bg-dark">
+                          <i class="fas fa-video me-1"></i> Zoom
+                        </span>
+                        <span *ngIf="m.provider === 'Microsoft365'" class="badge bg-primary">
+                          <i class="fab fa-microsoft me-1"></i> Microsoft 365
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </td>
+
+                <td class="text-nowrap">
+                  <strong>{{ m.scheduledAt | date:'mediumDate' }}</strong><br />
+                  <small class="text-muted">
+                    {{ m.scheduledAt | date:'shortTime' }}
+                    <ng-container *ngIf="m.endAt"> - {{ m.endAt | date:'shortTime' }}</ng-container>
+                  </small>
+                </td>
+
+                <td>
+                  <div class="avatar-group">
+                    <span class="badge bg-secondary rounded-pill">{{ m.attendeesCount }}</span>
+                  </div>
+                </td>
+
+                <td>
+                  <ng-container [ngSwitch]="statusLabel(m)">
+                    <span *ngSwitchCase="'draft'" class="badge bg-secondary">Draft</span>
+                    <span *ngSwitchCase="'upcoming'" class="badge bg-warning">Upcoming</span>
+                    <span *ngSwitchCase="'active'" class="badge bg-info">Active</span>
+                    <span *ngSwitchCase="'completed'" class="badge bg-success">Completed</span>
+                    <span *ngSwitchCase="'cancelled'" class="badge bg-danger">Cancelled</span>
+                    <span *ngSwitchDefault class="badge bg-light text-dark">Unknown</span>
+                  </ng-container>
+                </td>
+
+                <td class="text-end">
+                  <div class="btn-group" role="group">
+                    <button class="btn btn-sm btn-primary" (click)="viewMeeting(m.id)" title="View">
+                      <i class="fas fa-eye"></i>
+                    </button>
+
+                    <button class="btn btn-sm btn-success" (click)="openJoinModal(m)"
+                            [disabled]="!hasJoinLink(m) || (statusLabel(m) !== 'active' && statusLabel(m) !== 'upcoming')"
+                            title="Join">
+                      <i class="fas fa-video"></i>
+                    </button>
+
+                    <button class="btn btn-sm btn-outline-secondary" (click)="editMeeting(m.id)"
+                            [disabled]="statusLabel(m) === 'completed' || statusLabel(m) === 'cancelled'"
+                            title="Edit">
+                      <i class="fas fa-edit"></i>
+                    </button>
+
+                    <button *ngIf="statusLabel(m) === 'completed'" class="btn btn-sm btn-outline-info"
+                            (click)="viewRecording(m.id)" title="Recording">
+                      <i class="fas fa-play"></i>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal (create OR edit) -->
+<app-schedule-meeting-modal #createModal (created)="load()" (updated)="load()"></app-schedule-meeting-modal>
+
+<!-- Join Meeting Modal -->
+<div class="modal fade" id="joinMeetingModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content" *ngIf="selectedForJoin() as m">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title"><i class="fas fa-video me-2"></i>Join Meeting</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+
+      <div class="modal-body text-center">
+        <div class="mb-4">
+          <i class="fas fa-video fa-4x text-success mb-3" aria-hidden="true"></i>
+          <h5 class="mb-1">Ready to join the meeting?</h5>
+          <p class="text-muted mb-0">You will be redirected to the video conference platform.</p>
+        </div>
+
+        <div class="mb-3 small text-muted">
+          <div class="fw-semibold">{{ m.title }}</div>
+          <div>
+            {{ m.scheduledAt | date:'mediumDate' }} • {{ m.scheduledAt | date:'shortTime' }}
+            <ng-container *ngIf="m.endAt">– {{ m.endAt | date:'shortTime' }}</ng-container>
+          </div>
+          <div *ngIf="m.location">{{ m.location }}</div>
+        </div>
+
+        <div class="d-grid gap-2">
+          <button class="btn btn-success btn-lg" (click)="launchMeeting()">
+            <i class="fas fa-video me-2"></i>Launch Meeting
+          </button>
+          <button class="btn btn-outline-secondary" (click)="dialIn()">
+            <i class="fas fa-phone me-2"></i>Dial-in Options
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- DETAILS MODAL WITH TABS -->
+<div class="modal fade" id="meetingDetailsModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content" *ngIf="selectedForDetails() as d; else detailsLoading">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-calendar-alt me-2"></i>{{ d.title }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+
+      <div class="modal-body p-0">
+        <ul class="nav nav-tabs px-3 pt-3" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabDetails" type="button" role="tab">
+              <i class="fas fa-info-circle me-1"></i> Details
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabAgenda" type="button" role="tab">
+              <i class="fas fa-list-ul me-1"></i> Agenda
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabAttendees" type="button" role="tab">
+              <i class="fas fa-user-friends me-1"></i> Attendees
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabChat" type="button" role="tab" (click)="ensureTranscriptLoaded(d.id)">
+              <i class="fas fa-comments me-1"></i> Chat
+            </button>
+          </li>
+        </ul>
+
+        <div class="tab-content p-3">
+          <!-- Details Tab -->
+          <div class="tab-pane fade show active" id="tabDetails" role="tabpanel">
+            <div class="row g-3">
+              <div class="col-md-6">
+                <div class="small text-muted mb-1"><strong>Type:</strong> <span class="text-capitalize">{{ d.type || '—' }}</span></div>
+                <div class="small text-muted mb-1"><strong>Date:</strong> {{ d.scheduledAt | date:'mediumDate' }}</div>
+                <div class="small text-muted mb-1">
+                  <strong>Time:</strong> {{ d.scheduledAt | date:'shortTime' }}
+                  <ng-container *ngIf="d.endAt">– {{ d.endAt | date:'shortTime' }}</ng-container>
+                </div>
+                <div class="small text-muted"><strong>Location:</strong> {{ d.location || '—' }}</div>
+              </div>
+              <div class="col-md-6">
+                <div class="small text-muted mb-2">
+                  <strong>Provider:</strong>
+                  <span *ngIf="d.provider==='Zoom'" class="badge bg-dark"><i class="fas fa-video me-1"></i> Zoom</span>
+                  <span *ngIf="d.provider==='Microsoft365'" class="badge bg-primary"><i class="fab fa-microsoft me-1"></i> Microsoft 365</span>
+                  <span *ngIf="!d.provider" class="badge bg-light text-dark">Unknown</span>
+                </div>
+                <div class="small text-muted" *ngIf="d.description"><strong>Description:</strong> {{ d.description }}</div>
+              </div>
+            </div>
+            <div class="alert alert-warning d-flex align-items-center mt-3" *ngIf="!hasJoinLink(d)">
+              <i class="fas fa-exclamation-triangle me-2"></i> No join link available for this meeting.
+            </div>
+          </div>
+
+          <!-- Agenda Tab -->
+          <div class="tab-pane fade" id="tabAgenda" role="tabpanel">
+            <h6 class="mb-2">Agenda Items</h6>
+            <ul class="list-group list-group-flush" *ngIf="d.agendaItems?.length; else noAgenda">
+              <li class="list-group-item" *ngFor="let item of d.agendaItems | orderBy:'order'">
+                <div class="fw-semibold">{{ item.title }}</div>
+                <div class="text-muted small" *ngIf="item.description">{{ item.description }}</div>
+              </li>
+            </ul>
+            <ng-template #noAgenda>
+              <div class="text-muted small">No agenda items.</div>
+            </ng-template>
+          </div>
+
+          <!-- Attendees Tab -->
+          <div class="tab-pane fade" id="tabAttendees" role="tabpanel">
+            <h6 class="mb-2">Attendees</h6>
+            <div class="d-flex flex-wrap gap-2" *ngIf="d.attendees?.length; else noAtt">
+              <span class="badge bg-primary" *ngFor="let a of d.attendees">{{ a.name || a.email || a.userId || 'Unknown' }}</span>
+            </div>
+            <ng-template #noAtt>
+              <div class="text-muted small">No attendees listed.</div>
+            </ng-template>
+          </div>
+
+          <!-- Chat / Transcript Tab -->
+          <div class="tab-pane fade" id="tabChat" role="tabpanel">
+            <div class="d-flex align-items-center mb-2">
+              <h6 class="mb-0 me-2">Chat / Transcript</h6>
+              <span *ngIf="transcript() as t" class="badge bg-light text-dark">{{ t.provider }} • {{ t.createdUtc | date:'medium' }}</span>
+              <span class="ms-auto">
+                <button class="btn btn-sm btn-outline-primary me-2" (click)="refreshTranscript(d.id)" [disabled]="transcriptLoading() || ingesting()">
+                  <i class="fas fa-sync-alt me-1" [class.fa-spin]="transcriptLoading()"></i> Refresh
+                </button>
+                <button class="btn btn-sm btn-outline-success" (click)="ingestNow(d.id)" [disabled]="ingesting() || transcriptLoading()">
+                  <i class="fas fa-cloud-download-alt me-1" [class.fa-spin]="ingesting()"></i> Ingest Latest
+                </button>
+              </span>
+            </div>
+
+            <div *ngIf="transcriptLoading()" class="text-muted">
+              <i class="fas fa-spinner fa-spin me-1"></i> Loading transcript…
+            </div>
+
+            <div *ngIf="!transcriptLoading() && transcript() as t; else noTranscript">
+              <div class="chat-thread">
+                <div class="chat-item" *ngFor="let u of t.utterances">
+                  <div class="chat-avatar">{{ (u.speakerName || u.speakerEmail || '•') | initials }}</div>
+                  <div class="chat-bubble">
+                    <div class="chat-meta">
+                      <span class="chat-speaker">{{ u.speakerName || u.speakerEmail || 'Unknown' }}</span>
+                      <span class="chat-time">{{ u.start | ts }}</span>
+                    </div>
+                    <div class="chat-text">{{ u.text }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <ng-template #noTranscript>
+              <div class="alert alert-secondary mt-2">
+                No transcript yet. If the meeting was recorded to cloud with transcription enabled,
+                click <strong>Ingest Latest</strong> after processing completes.
+              </div>
+            </ng-template>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <div class="me-auto">
+          <button class="btn btn-outline-secondary btn-sm" (click)="copyJoinLink(selectedForDetails())" [disabled]="!hasJoinLink(selectedForDetails()!)">
+            <i class="fas fa-link me-1"></i> Copy Join Link
+          </button>
+        </div>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-success" [disabled]="!hasJoinLink(selectedForDetails()!)" (click)="openJoinModal(selectedForDetails()!)">
+          <i class="fas fa-video me-2"></i>Join Meeting
+        </button>
+      </div>
+    </div>
+
+    <ng-template #detailsLoading>
+      <div class="modal-content"><div class="modal-body"><i class="fas fa-spinner fa-spin me-2"></i> Loading…</div></div>
+    </ng-template>
+  </div>
+</div>

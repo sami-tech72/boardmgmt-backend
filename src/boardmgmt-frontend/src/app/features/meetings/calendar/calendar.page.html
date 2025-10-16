@@ -1,0 +1,201 @@
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 top-navbar">
+  <h1 class="h2">Meetings</h1>
+  <div class="btn-toolbar mb-2 mb-md-0">
+    
+
+   <app-user-menu [displayName]="'John Doe'" (logout)="onLogout()"></app-user-menu>
+  </div>
+</div>
+
+<div class="outlook-cal">
+  <!-- Toolbar -->
+  <div class="d-flex align-items-center justify-content-between mb-3 cal-toolbar">
+    <div class="btn-group">
+      <button class="btn btn-outline-secondary" (click)="prev()">&laquo;</button>
+      <button class="btn btn-outline-secondary" (click)="today()">Today</button>
+      <button class="btn btn-outline-secondary" (click)="next()">&raquo;</button>
+    </div>
+
+    <h4 class="mb-0">
+      {{ viewDate() | date: view === CalendarView.Month ? 'MMMM y' : (view === CalendarView.Week ?
+      "'Week of' MMM d, y" : 'fullDate') }}
+    </h4>
+
+    <div class="d-flex gap-2 align-items-center">
+      <select
+        class="form-select form-select-sm"
+        [ngModel]="provider()"
+        (ngModelChange)="onProviderChange($event)"
+      >
+        <option value="All">All Providers</option>
+        <option value="Microsoft365">Microsoft 365</option>
+        <option value="Zoom">Zoom</option>
+      </select>
+
+      <div class="btn-group">
+        <button
+          class="btn btn-outline-primary"
+          [class.active]="view===CalendarView.Month"
+          (click)="setView(CalendarView.Month)"
+        >
+          Month
+        </button>
+        <button
+          class="btn btn-outline-primary"
+          [class.active]="view===CalendarView.Week"
+          (click)="setView(CalendarView.Week)"
+        >
+          Week
+        </button>
+        <button
+          class="btn btn-outline-primary"
+          [class.active]="view===CalendarView.Day"
+          (click)="setView(CalendarView.Day)"
+        >
+          Day
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- States -->
+  <div *ngIf="loading()" class="alert alert-info">
+    <i class="fas fa-spinner fa-spin me-2"></i>Loading…
+  </div>
+  <div *ngIf="!loading() && error()" class="alert alert-danger">{{ error() }}</div>
+
+  <!-- Calendar -->
+  <ng-container *ngIf="!loading() && !error()">
+    <!-- MONTH -->
+    <mwl-calendar-month-view
+      *ngIf="view===CalendarView.Month"
+      [viewDate]="viewDate()"
+      [events]="events()"
+      [refresh]="refresh$"
+      [cellTemplate]="monthCellTpl"
+      (dayClicked)="onMonthDayClicked($event.day.date)"
+      (eventTimesChanged)="eventTimesChanged($event)"
+      [eventTitleTemplate]="monthEventTpl"
+    >
+    </mwl-calendar-month-view>
+
+    <!-- Custom month cell -->
+    <ng-template #monthCellTpl let-day="day" let-locale="locale">
+      <div
+        class="month-cell"
+        [class.in-month]="day.inMonth"
+        [class.out-month]="!day.inMonth"
+        [class.today]="day.isToday"
+        [class.weekend]="day.isWeekend"
+        mwlDroppable
+        dragOverClass="cal-drag-over"
+        (drop)="eventDropped(day, $event.dropData?.event, $event.dropData?.draggedFrom)"
+      >
+        <div class="cell-header">
+          <span class="date-num">{{ day.date | date:'d' }}</span>
+        </div>
+
+        <div class="cal-events">
+          <ng-container *ngFor="let e of day.events">
+            <ng-container
+              [ngTemplateOutlet]="monthEventTpl"
+              [ngTemplateOutletContext]="{ event: e }"
+            >
+            </ng-container>
+          </ng-container>
+        </div>
+      </div>
+    </ng-template>
+
+    <!-- WEEK -->
+    <mwl-calendar-week-view
+      *ngIf="view===CalendarView.Week"
+      [viewDate]="viewDate()"
+      [events]="events()"
+      [refresh]="refresh$"
+      [hourSegments]="2"
+      [weekStartsOn]="1"
+      (hourSegmentClicked)="onHourSegmentClicked($event.date)"
+      (eventClicked)="onEventClicked($event.event)"
+      (eventTimesChanged)="eventTimesChanged($event)"
+      [eventTitleTemplate]="eventTpl"
+    >
+    </mwl-calendar-week-view>
+
+    <!-- DAY -->
+    <mwl-calendar-day-view
+      *ngIf="view===CalendarView.Day"
+      [viewDate]="viewDate()"
+      [events]="events()"
+      [refresh]="refresh$"
+      [hourSegments]="2"
+      (hourSegmentClicked)="onHourSegmentClicked($event.date)"
+      (eventClicked)="onEventClicked($event.event)"
+      (eventTimesChanged)="eventTimesChanged($event)"
+      [eventTitleTemplate]="eventTpl"
+    >
+    </mwl-calendar-day-view>
+
+    <!-- MONTH event content -->
+    <ng-template #monthEventTpl let-event="event">
+      <div
+        class="month-pill"
+        [ngClass]="{
+             'p-zoom': event.cssClass==='cal-zoom',
+             'p-m365': event.cssClass==='cal-m365',
+             'p-generic': event.cssClass==='cal-generic'
+           }"
+        mwlDraggable
+        [dragAxis]="{x:true,y:true}"
+        [dragActiveClass]="'cal-drag-active'"
+        [dropData]="{ event: event, draggedFrom: event.start }"
+        (click)="$event.stopPropagation(); onEventClicked(event)"
+      >
+        <span class="when" *ngIf="event?.start">{{ event.start | date:'shortTime' }}</span>
+        <span class="title" [title]="event.title">{{ event.title }}</span>
+
+        <a
+          *ngIf="event.meta?.joinUrl"
+          (click)="$event.stopPropagation(); join(event)"
+          class="join"
+          title="Join"
+        >
+          <i class="fas fa-video"></i>
+        </a>
+      </div>
+    </ng-template>
+
+    <!-- WEEK/DAY event content -->
+    <ng-template #eventTpl let-event="event">
+      <div
+        class="cal-event-row"
+        [class.cal-zoom]="event.cssClass==='cal-zoom'"
+        [class.cal-m365]="event.cssClass==='cal-m365'"
+        [class.cal-generic]="event.cssClass==='cal-generic'"
+        (click)="onEventClicked(event)"
+      >
+        <span class="when" *ngIf="event?.start">
+          {{ event.start | date:'shortTime' }}
+          <ng-container *ngIf="event?.end">– {{ event.end | date:'shortTime' }}</ng-container>
+        </span>
+        <span class="title" [title]="event.title">{{ event.title }}</span>
+        <a
+          *ngIf="event.meta?.joinUrl"
+          (click)="$event.stopPropagation(); join(event)"
+          class="ms-2 text-decoration-none"
+          title="Join"
+        >
+          <i class="fas fa-video"></i>
+        </a>
+      </div>
+    </ng-template>
+  </ng-container>
+
+  <!-- Create / Edit modal (shared) -->
+  <app-schedule-meeting-modal
+    #createModal
+    (created)="reloadAfterCreate()"
+    (updated)="reloadAfterCreate()"
+  >
+  </app-schedule-meeting-modal>
+</div>

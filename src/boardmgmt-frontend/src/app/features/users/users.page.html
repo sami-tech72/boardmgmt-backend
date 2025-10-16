@@ -1,0 +1,342 @@
+<!-- Top Navigation -->
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 top-navbar">
+  <h1 class="h2">User Management</h1>
+  <div class="btn-toolbar mb-2 mb-md-0">
+    <div class="btn-group me-2">
+      <button type="button" class="btn btn-primary" (click)="openCreate()">
+        <i class="fas fa-plus"></i> Add User
+      </button>
+      <button type="button" class="btn btn-outline-secondary" disabled>
+        <i class="fas fa-download"></i> Export
+      </button>
+    </div>
+    <app-user-menu [displayName]="'John Doe'" (logout)="onLogout()"></app-user-menu>
+  </div>
+</div>
+
+<!-- Stats -->
+<div class="row mb-4">
+  <div class="col-xl-3 col-md-6 mb-4">
+    <div class="card stats-card">
+      <div class="card-body d-flex justify-content-between align-items-center">
+        <div>
+          <div class="text-xs fw-bold text-uppercase mb-1">Total (page)</div>
+          <div class="h5 mb-0 fw-bold">{{ total() }}</div>
+        </div>
+        <i class="fas fa-users stats-icon"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-xl-3 col-md-6 mb-4">
+    <div class="card stats-card success">
+      <div class="card-body d-flex justify-content-between align-items-center">
+        <div>
+          <div class="text-xs fw-bold text-uppercase mb-1">Active Users</div>
+          <div class="h5 mb-0 fw-bold">{{ activeCount() }}</div>
+        </div>
+        <i class="fas fa-user-check stats-icon"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-xl-3 col-md-6 mb-4">
+    <div class="card stats-card warning">
+      <div class="card-body d-flex justify-content-between align-items-center">
+        <div>
+          <div class="text-xs fw-bold text-uppercase mb-1">Board Members</div>
+          <div class="h5 mb-0 fw-bold">{{ boardMembersCount() }}</div>
+        </div>
+        <i class="fas fa-user-tie stats-icon"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-xl-3 col-md-6 mb-4">
+    <div class="card stats-card danger">
+      <div class="card-body d-flex justify-content-between align-items-center">
+        <div>
+          <div class="text-xs fw-bold text-uppercase mb-1">Administrators</div>
+          <div class="h5 mb-0 fw-bold">{{ adminsCount() }}</div>
+        </div>
+        <i class="fas fa-user-shield stats-icon"></i>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Filters -->
+<div class="row mb-4">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-body">
+        <div class="row align-items-center g-2">
+          <div class="col-md-3">
+            <ng-select
+              [items]="roles()"
+              bindLabel="name"
+              bindValue="id"
+              [ngModel]="selectedRoleId()"
+              (ngModelChange)="selectedRoleId.set($event); page.set(1)"
+              [clearable]="true"
+              [searchable]="true"
+              placeholder="All Roles"
+              [ngModelOptions]="{standalone:true}">
+            </ng-select>
+          </div>
+          <div class="col-md-3">
+            <ng-select
+              [items]="departments()"
+              bindLabel="name"
+              bindValue="id"
+              [ngModel]="selectedDepartmentId()"
+              (ngModelChange)="selectedDepartmentId.set($event); page.set(1)"
+              [clearable]="true"
+              [searchable]="true"
+              placeholder="All Departments"
+              [ngModelOptions]="{standalone:true}">
+            </ng-select>
+          </div>
+          <div class="col-md-2">
+            <select class="form-select" [ngModel]="status()" (ngModelChange)="status.set($event); page.set(1)">
+              <option value="">All Status</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <div class="input-group">
+              <input type="text" class="form-control" placeholder="Search users..." [ngModel]="q()" (ngModelChange)="q.set($event); page.set(1)">
+              <button class="btn btn-outline-secondary" type="button" (click)="load()">
+                <i class="fas fa-search"></i>
+              </button>
+            </div>
+          </div>
+          <div class="col-md-1">
+            <button class="btn btn-outline-secondary w-100" (click)="clearFilters()">
+              <i class="fas fa-times me-2"></i>Clear
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Users Table -->
+<div class="card">
+  <div class="card-header">
+    <h5 class="mb-0"><i class="fas fa-users me-2"></i>All Users</h5>
+  </div>
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle">
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Roles</th>
+            <th>Department</th>
+            <th>Status</th>
+            <th style="width: 150px;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let u of filteredForTable(); trackBy: trackById">
+            <td>
+              <div class="d-flex align-items-center">
+                <div class="user-avatar me-3">
+                  <i class="fas fa-user-circle fa-2x text-primary"></i>
+                </div>
+                <div>
+                  <h6 class="mb-0">{{ u.fullName }}</h6>
+                  <small class="text-muted">{{ u.email }}</small>
+                </div>
+              </div>
+            </td>
+            <td>
+              <ng-container *ngIf="u.roles?.length; else noRoles">
+                <span *ngFor="let r of u.roles" class="badge bg-light text-dark me-1">{{ r }}</span>
+              </ng-container>
+              <ng-template #noRoles><span class="text-muted">—</span></ng-template>
+            </td>
+            <td>{{ u.departmentName || '—' }}</td>
+            <td>
+              <span class="badge" [ngClass]="'bg-' + statusBadge(u)">
+                {{ u.isActive === false ? 'Inactive' : 'Active' }}
+              </span>
+            </td>
+            <td>
+              <div class="btn-group" role="group">
+                <button class="btn btn-sm btn-outline-primary" (click)="openEdit(u)">
+                  <i class="fas fa-edit"></i>
+                </button>
+                <!-- Add activate/deactivate here once endpoints exist -->
+              </div>
+            </td>
+          </tr>
+          <tr *ngIf="!isLoading() && !filteredForTable().length">
+            <td colspan="5" class="text-center text-muted py-4">No users match your filters.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pager -->
+    <div class="d-flex justify-content-between align-items-center">
+      <div class="small text-muted">Showing {{ users().length }} of {{ total() }}</div>
+      <div class="btn-group">
+        <button class="btn btn-outline-secondary btn-sm" [disabled]="page() <= 1" (click)="prevPage()">
+  <i class="fas fa-chevron-left"></i>
+</button>
+        <button class="btn btn-outline-secondary btn-sm" (click)="nextPage()">
+  <i class="fas fa-chevron-right"></i>
+</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Create Modal -->
+<div class="modal fade" id="createUserModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-user-plus me-2"></i>Add New User</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form (submit)="$event.preventDefault(); create();">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Full Name</label>
+              <input type="text" class="form-control" [(ngModel)]="fullName" name="fullName" required>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Email</label>
+              <input type="email" class="form-control" [(ngModel)]="email" name="email" required>
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Password</label>
+              <input type="password" class="form-control" [(ngModel)]="password" name="password" required>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Role</label>
+              <ng-select
+                [items]="roles()"
+                bindLabel="name"
+                bindValue="id"
+                [ngModel]="selectedRole()"
+                (ngModelChange)="selectedRole.set($event)"
+                [clearable]="true"
+                [searchable]="true"
+                placeholder="Select role..."
+                [ngModelOptions]="{standalone:true}">
+              </ng-select>
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Department</label>
+            <ng-select
+              [items]="departments()"
+              bindLabel="name"
+              bindValue="id"
+              [ngModel]="selectedDept()"
+              (ngModelChange)="selectedDept.set($event)"
+              [clearable]="true"
+              [searchable]="true"
+              placeholder="Select department..."
+              [ngModelOptions]="{standalone:true}">
+            </ng-select>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" (click)="closeCreate()">Cancel</button>
+        <button type="button" class="btn btn-primary" (click)="create()" [disabled]="isLoading()">
+          <i class="fas fa-user-plus me-2"></i>Add User
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Modal -->
+<div class="modal fade" id="editUserModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-user-cog me-2"></i>Edit User</h5>
+        <button type="button" class="btn-close" (click)="closeEdit()"></button>
+      </div>
+
+      <div class="modal-body" *ngIf="editingUser">
+        <form (submit)="$event.preventDefault(); saveEdit()">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Full Name</label>
+              <input type="text" class="form-control" [(ngModel)]="editFullName" name="editFullName" required>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Email</label>
+              <input type="email" class="form-control" [(ngModel)]="editEmail" name="editEmail" required>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">New Password <small class="text-muted">(leave blank to keep)</small></label>
+              <input type="password" class="form-control" [(ngModel)]="editPassword" name="editPassword" autocomplete="new-password">
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Primary Role</label>
+              <ng-select
+                [items]="roles()"
+                bindLabel="name"
+                bindValue="id"
+                [ngModel]="editSelectedRole()"
+                (ngModelChange)="editSelectedRole.set($event)"
+                [clearable]="true"
+                [searchable]="true"
+                placeholder="Select role..."
+                [ngModelOptions]="{standalone:true}">
+              </ng-select>
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Department</label>
+            <ng-select
+              [items]="departments()"
+              bindLabel="name"
+              bindValue="id"
+              [ngModel]="editSelectedDept()"
+              (ngModelChange)="editSelectedDept.set($event)"
+              [clearable]="true"
+              [searchable]="true"
+              placeholder="Select department..."
+              [ngModelOptions]="{standalone:true}">
+            </ng-select>
+          </div>
+
+          <div class="mb-2">
+            <label class="form-label d-block">Status</label>
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" [(ngModel)]="editIsActive" name="editIsActive" id="editIsActive">
+              <label class="form-check-label" for="editIsActive">
+                {{ editIsActive ? 'Active' : 'Inactive' }}
+              </label>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" (click)="closeEdit()">Close</button>
+        <button type="button" class="btn btn-primary" (click)="saveEdit()" [disabled]="isLoading()">
+          Save Changes
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+

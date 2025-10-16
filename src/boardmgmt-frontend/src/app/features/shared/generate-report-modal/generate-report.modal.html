@@ -1,0 +1,91 @@
+<div class="modal fade" id="reportGeneratorModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-chart-bar me-2"></i>Generate New Report</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+
+      <form [formGroup]="form" (ngSubmit)="onSubmit()">
+        <div class="modal-body">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Report Type</label>
+              <select class="form-select" formControlName="type">
+                <option value="attendance">Attendance</option>
+                <option value="voting">Voting</option>
+                <option value="documents">Document Usage</option>
+                <option value="performance">Performance</option>
+                <option value="custom">Custom</option>
+              </select>
+            </div>
+
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Time Period</label>
+              <select class="form-select" formControlName="period">
+                <option value="last-month">Last Month</option>
+                <option value="last-quarter">Last Quarter</option>
+                <option value="last-year">Last Year</option>
+                <option value="custom">Custom Range</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="row" *ngIf="showCustomDates()">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Start Date</label>
+              <input type="date" class="form-control" formControlName="start" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">End Date</label>
+              <input type="date" class="form-control" formControlName="end" />
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Include Sections</label>
+            <div class="row">
+              <div class="col-md-6">
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" formControlName="includeCharts" id="includeCharts" />
+                  <label class="form-check-label" for="includeCharts">Charts & Graphs</label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" formControlName="includeData" id="includeData" />
+                  <label class="form-check-label" for="includeData">Raw Data Tables</label>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" formControlName="includeSummary" id="includeSummary" />
+                  <label class="form-check-label" for="includeSummary">Executive Summary</label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" formControlName="includeRecommendations" id="includeRecommendations" />
+                  <label class="form-check-label" for="includeRecommendations">Recommendations</label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Output Format</label>
+            <select class="form-select" formControlName="format">
+              <option value="html">HTML (fast sample)</option>
+              <option value="pdf">PDF</option>
+              <option value="excel">Excel</option>
+              <option value="powerpoint">PowerPoint</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">
+            <i class="fas fa-cog me-2"></i>Generate Report
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,500 @@
+<!-- src/app/features/dashboard/dashboard.page.html -->
+
+<!-- Top Navigation -->
+<div
+  class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 top-navbar"
+>
+  <h1 class="h2">Dashboard</h1>
+  <div class="btn-toolbar mb-2 mb-md-0">
+   <app-user-menu [displayName]="'John Doe'" (logout)="onLogout()"></app-user-menu>
+  </div>
+</div>
+
+<div *ngIf="error()" class="alert alert-danger py-2">{{ error() }}</div>
+
+<!-- Stats Cards -->
+<div class="row mb-4" *ngIf="stats() as s; else statsSkeleton">
+  <!-- Upcoming Meetings card -->
+  <div class="col-xl-3 col-md-6 mb-4">
+    <div class="card stats-card success clickable" (click)="openStats('meetings')">
+      <div class="card-body">
+        <div class="row no-gutters align-items-center">
+          <div class="col mr-2">
+            <div class="text-xs font-weight-bold text-uppercase mb-1">Upcoming Meetings</div>
+            <div class="h5 mb-0 font-weight-bold">{{ s.upcomingMeetings }}</div>
+          </div>
+          <div class="col-auto"><i class="fas fa-calendar-alt stats-icon"></i></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-3 col-md-6 mb-4">
+    <div class="card stats-card success clickable" (click)="openStats('documents')">
+      <div class="card-body">
+        <div class="row no-gutters align-items-center">
+          <div class="col mr-2">
+            <div class="text-xs font-weight-bold text-uppercase mb-1">Active Documents</div>
+            <div class="h5 mb-0 font-weight-bold">{{ s.activeDocuments }}</div>
+          </div>
+          <div class="col-auto"><i class="fas fa-file-alt stats-icon"></i></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-3 col-md-6 mb-4">
+    <div class="card stats-card warning clickable" (click)="openStats('votes')">
+      <div class="card-body">
+        <div class="row no-gutters align-items-center">
+          <div class="col mr-2">
+            <div class="text-xs font-weight-bold text-uppercase mb-1">Pending Votes</div>
+            <div class="h5 mb-0 font-weight-bold">{{ s.pendingVotes }}</div>
+          </div>
+          <div class="col-auto"><i class="fas fa-vote-yea stats-icon"></i></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-3 col-md-6 mb-4">
+    <div class="card stats-card danger clickable" (click)="openStats('users')">
+      <div class="card-body">
+        <div class="row no-gutters align-items-center">
+          <div class="col mr-2">
+            <div class="text-xs font-weight-bold text-uppercase mb-1">Active Users</div>
+            <div class="h5 mb-0 font-weight-bold">{{ s.activeUsers }}</div>
+          </div>
+          <div class="col-auto"><i class="fas fa-envelope stats-icon"></i></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<ng-template #statsSkeleton>
+  <div class="row mb-4">
+    <div class="col-xl-3 col-md-6 mb-4" *ngFor="let i of [1,2,3,4]">
+      <div class="card stats-card placeholder-wave">
+        <div class="card-body">
+          <div class="placeholder col-6 mb-2"></div>
+          <div class="placeholder col-3"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</ng-template>
+
+<!-- Recent Activity and Quick Actions -->
+<div class="row">
+  <!-- Recent Meetings -->
+  <div class="col-lg-8 mb-4">
+    <div class="card">
+      <div class="card-header">
+        <h5 class="mb-0"><i class="fas fa-calendar-alt me-2"></i>Recent Meetings</h5>
+      </div>
+      <div class="card-body">
+        <div class="table-responsive" *ngIf="meetings().length; else meetingsEmpty">
+          <table class="table table-hover">
+            <thead>
+              <tr>
+                <th>Meeting</th>
+                <th>Date</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let m of meetings()">
+                <td>
+                  <strong>{{ m.title }}</strong><br />
+                  <small class="text-muted" *ngIf="m.subtitle">{{ m.subtitle }}</small>
+                </td>
+                <td>
+                  {{ m.startsAt | date:'MMM d, y' }}<br />
+                  <small class="text-muted">{{ m.startsAt | date:'shortTime' }}</small>
+                </td>
+                <td>
+                  <span
+                    class="badge"
+                    [ngClass]="{ 'bg-warning': m.status==='Upcoming', 'bg-success': m.status==='Completed', 'bg-danger': m.status==='Cancelled' }"
+                  >
+                    {{ m.status }}
+                  </span>
+                </td>
+
+                <!-- Actions -->
+                <td class="text-nowrap">
+                  <button class="btn btn-sm btn-primary" (click)="viewMeeting(m.id)">
+                    <i class="fas fa-eye me-1"></i> View
+                  </button>
+
+                  <button
+                    class="btn btn-sm btn-outline-secondary"
+                    *ngIf="m.status==='Upcoming'"
+                    (click)="openJoinById(m.id)"
+                  >
+                    <i class="fas fa-video me-1"></i> Join
+                  </button>
+
+                  <button
+                    class="btn btn-sm btn-outline-secondary"
+                    *ngIf="m.status==='Completed'"
+                    (click)="openMinutes(m.id)"
+                  >
+                    <i class="fas fa-file-alt me-1"></i> Minutes
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <ng-template #meetingsEmpty><div class="text-muted">No recent meetings.</div></ng-template>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Actions + Recent Documents -->
+  <div class="col-lg-4 mb-4">
+    <div class="card">
+      <div class="card-header">
+        <h5 class="mb-0"><i class="fas fa-bolt me-2"></i>Quick Actions</h5>
+      </div>
+      <div class="card-body">
+        <div class="d-grid gap-2">
+          <button class="btn btn-primary" (click)="createModal.open()">
+            <i class="fas fa-plus me-2"></i>Schedule Meeting
+          </button>
+          <button class="btn btn-success" (click)="openUpload()">
+            <i class="fas fa-upload me-2"></i>Upload Document
+          </button>
+          <button class="btn btn-warning" (click)="openVoteModal()">
+            <i class="fas fa-vote-yea me-2"></i>Create Vote
+          </button>
+          <button class="btn btn-info" (click)="goTo('/messages')" type="button">
+            <i class="fas fa-paper-plane me-2"></i>Send Message
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mt-4">
+      <div class="card-header">
+        <h5 class="mb-0"><i class="fas fa-file-alt me-2"></i>Recent Documents</h5>
+      </div>
+      <div class="card-body">
+        <div *ngIf="documents().length; else docsEmpty" class="list-group list-group-flush">
+          <div class="list-group-item d-flex align-items-center" *ngFor="let d of documents()">
+            <div class="doc-icon" [ngClass]="d.kind">
+              <i class="fas" [ngClass]="docIconClass(d.kind)"></i>
+            </div>
+            <div>
+              <h6 class="mb-1">{{ d.title }}</h6>
+              <small class="text-muted">{{ d.updatedAgo }}</small>
+            </div>
+          </div>
+        </div>
+        <ng-template #docsEmpty><div class="text-muted">No recent documents.</div></ng-template>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Activity Timeline -->
+<div class="row">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header">
+        <h5 class="mb-0"><i class="fas fa-clock me-2"></i>Recent Activity</h5>
+      </div>
+      <div class="card-body">
+        <div class="timeline" *ngIf="activity().length; else activityEmpty">
+          <div class="timeline-item" *ngFor="let a of activity()">
+            <div [ngClass]="timelineMarkerClass(a.color)"></div>
+            <div class="timeline-content">
+              <h6 class="timeline-title">{{ a.title }}</h6>
+              <p class="timeline-text">{{ a.text }}</p>
+              <small class="text-muted">{{ a.whenAgo }}</small>
+            </div>
+          </div>
+        </div>
+        <ng-template #activityEmpty><div class="text-muted">No recent activity.</div></ng-template>
+      </div>
+    </div>
+  </div>
+</div>
+
+<app-schedule-meeting-modal
+  #createModal
+  (created)="load()"
+  (updated)="load()"
+></app-schedule-meeting-modal>
+
+<app-upload-document-modal (uploaded)="refresh()"></app-upload-document-modal>
+<app-create-vote-modal #voteModal (created)="refresh()"></app-create-vote-modal>
+<app-stats-detail-modal></app-stats-detail-modal>
+
+<!-- ============================= -->
+<!-- JOIN MEETING MODAL (DASHBOARD) -->
+<!-- ============================= -->
+<div #joinModalEl class="modal fade" id="joinMeetingModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content" *ngIf="selectedForJoin() as m">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title"><i class="fas fa-video me-2"></i>Join Meeting</h5>
+        <button
+          type="button"
+          class="btn-close btn-close-white"
+          data-bs-dismiss="modal"
+          aria-label="Close"
+        ></button>
+      </div>
+
+      <div class="modal-body text-center">
+        <div class="mb-4">
+          <i class="fas fa-video fa-4x text-success mb-3" aria-hidden="true"></i>
+          <h5 class="mb-1">Ready to join the meeting?</h5>
+          <p class="text-muted mb-0">You will be redirected to the video conference platform.</p>
+        </div>
+
+        <div class="mb-3 small text-muted">
+          <div class="fw-semibold">{{ m.title }}</div>
+          <div>
+            {{ m.scheduledAt | date:'mediumDate' }} • {{ m.scheduledAt | date:'shortTime' }}
+            <ng-container *ngIf="m.endAt">– {{ m.endAt | date:'shortTime' }}</ng-container>
+          </div>
+          <div *ngIf="m.location">{{ m.location }}</div>
+        </div>
+
+        <div class="d-grid gap-2">
+          <button class="btn btn-success btn-lg" (click)="launchMeeting()">
+            <i class="fas fa-video me-2"></i>Launch Meeting
+          </button>
+          <button class="btn btn-outline-secondary" (click)="dialIn()">
+            <i class="fas fa-phone me-2"></i>Dial-in Options
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- =========================================== -->
+<!-- MEETING DETAILS MODAL WITH TABS (DASHBOARD) -->
+<!-- =========================================== -->
+<div #detailsModalEl class="modal fade" id="meetingDetailsModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content" *ngIf="selectedForDetails() as d; else detailsLoading">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-calendar-alt me-2"></i>{{ d.title }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+
+      <div class="modal-body p-0">
+        <ul class="nav nav-tabs px-3 pt-3" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button
+              class="nav-link active"
+              data-bs-toggle="tab"
+              data-bs-target="#dashTabDetails"
+              type="button"
+              role="tab"
+            >
+              <i class="fas fa-info-circle me-1"></i> Details
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button
+              class="nav-link"
+              data-bs-toggle="tab"
+              data-bs-target="#dashTabAgenda"
+              type="button"
+              role="tab"
+            >
+              <i class="fas fa-list-ul me-1"></i> Agenda
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button
+              class="nav-link"
+              data-bs-toggle="tab"
+              data-bs-target="#dashTabAttendees"
+              type="button"
+              role="tab"
+            >
+              <i class="fas fa-user-friends me-1"></i> Attendees
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button
+              class="nav-link"
+              data-bs-toggle="tab"
+              data-bs-target="#dashTabChat"
+              type="button"
+              role="tab"
+              (click)="ensureTranscriptLoaded(d.id)"
+            >
+              <i class="fas fa-comments me-1"></i> Chat
+            </button>
+          </li>
+        </ul>
+
+        <div class="tab-content p-3">
+          <!-- Details -->
+          <div class="tab-pane fade show active" id="dashTabDetails" role="tabpanel">
+            <div class="row g-3">
+              <div class="col-md-6">
+                <div class="small text-muted mb-1">
+                  <strong>Type:</strong>
+                  <span class="text-capitalize">{{ d.type || '—' }}</span>
+                </div>
+                <div class="small text-muted mb-1">
+                  <strong>Date:</strong> {{ d.scheduledAt | date:'mediumDate' }}
+                </div>
+                <div class="small text-muted mb-1">
+                  <strong>Time:</strong> {{ d.scheduledAt | date:'shortTime' }}
+                  <ng-container *ngIf="d.endAt">– {{ d.endAt | date:'shortTime' }}</ng-container>
+                </div>
+                <div class="small text-muted">
+                  <strong>Location:</strong> {{ d.location || '—' }}
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="small text-muted mb-2">
+                  <strong>Provider:</strong>
+                  <span *ngIf="d.provider==='Zoom'" class="badge bg-dark"
+                    ><i class="fas fa-video me-1"></i> Zoom</span
+                  >
+                  <span *ngIf="d.provider==='Microsoft365'" class="badge bg-primary"
+                    ><i class="fab fa-microsoft me-1"></i> Microsoft 365</span
+                  >
+                  <span *ngIf="!d.provider" class="badge bg-light text-dark">Unknown</span>
+                </div>
+                <div class="small text-muted" *ngIf="d.description">
+                  <strong>Description:</strong> {{ d.description }}
+                </div>
+              </div>
+            </div>
+            <div class="alert alert-warning d-flex align-items-center mt-3" *ngIf="!hasJoinLink(d)">
+              <i class="fas fa-exclamation-triangle me-2"></i> No join link available for this
+              meeting.
+            </div>
+          </div>
+
+          <!-- Agenda -->
+          <div class="tab-pane fade" id="dashTabAgenda" role="tabpanel">
+            <h6 class="mb-2">Agenda Items</h6>
+            <ul
+              class="list-group list-group-flush"
+              *ngIf="d.agendaItems?.length; else noAgendaDash"
+            >
+              <li class="list-group-item" *ngFor="let item of d.agendaItems">
+                <div class="fw-semibold">{{ item.title }}</div>
+                <div class="text-muted small" *ngIf="item.description">{{ item.description }}</div>
+              </li>
+            </ul>
+            <ng-template #noAgendaDash>
+              <div class="text-muted small">No agenda items.</div>
+            </ng-template>
+          </div>
+
+          <!-- Attendees -->
+          <div class="tab-pane fade" id="dashTabAttendees" role="tabpanel">
+            <h6 class="mb-2">Attendees</h6>
+            <div class="d-flex flex-wrap gap-2" *ngIf="d.attendees?.length; else noAttDash">
+              <span class="badge bg-primary" *ngFor="let a of d.attendees"
+                >{{ a.name || a.email || a.userId || 'Unknown' }}</span
+              >
+            </div>
+            <ng-template #noAttDash>
+              <div class="text-muted small">No attendees listed.</div>
+            </ng-template>
+          </div>
+
+          <!-- Chat / Transcript -->
+          <div class="tab-pane fade" id="dashTabChat" role="tabpanel">
+            <div class="d-flex align-items-center mb-2">
+              <h6 class="mb-0 me-2">Chat / Transcript</h6>
+              <span *ngIf="transcript() as t" class="badge bg-light text-dark"
+                >{{ t.provider }} • {{ t.createdUtc | date:'medium' }}</span
+              >
+              <span class="ms-auto">
+                <button
+                  class="btn btn-sm btn-outline-primary me-2"
+                  (click)="refreshTranscript(d.id)"
+                  [disabled]="transcriptLoading() || ingesting()"
+                >
+                  <i class="fas fa-sync-alt me-1" [class.fa-spin]="transcriptLoading()"></i> Refresh
+                </button>
+                <button
+                  class="btn btn-sm btn-outline-success"
+                  (click)="ingestNow(d.id)"
+                  [disabled]="ingesting() || transcriptLoading()"
+                >
+                  <i class="fas fa-cloud-download-alt me-1" [class.fa-spin]="ingesting()"></i>
+                  Ingest Latest
+                </button>
+              </span>
+            </div>
+
+            <div *ngIf="transcriptLoading()" class="text-muted">
+              <i class="fas fa-spinner fa-spin me-1"></i> Loading transcript…
+            </div>
+
+            <div *ngIf="!transcriptLoading() && transcript() as t; else noTranscriptDash">
+              <div class="chat-thread">
+                <div class="chat-item" *ngFor="let u of t.utterances">
+                  <div class="chat-avatar">
+                    {{ initials(u.speakerName || u.speakerEmail || '') }}
+                  </div>
+                  <div class="chat-bubble">
+                    <div class="chat-meta">
+                      <span class="chat-speaker"
+                        >{{ u.speakerName || u.speakerEmail || 'Unknown' }}</span
+                      >
+                      <span class="chat-time">{{ ts(u.start) }}</span>
+                    </div>
+                    <div class="chat-text">{{ u.text }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <ng-template #noTranscriptDash>
+              <div class="alert alert-secondary mt-2">
+                No transcript yet. If the meeting was recorded to cloud with transcription enabled,
+                click <strong>Ingest Latest</strong> after processing completes.
+              </div>
+            </ng-template>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <div class="me-auto">
+          <button
+            class="btn btn-outline-secondary btn-sm"
+            (click)="copyJoinLink(selectedForDetails())"
+            [disabled]="!hasJoinLink(selectedForDetails()!)"
+          >
+            <i class="fas fa-link me-1"></i> Copy Join Link
+          </button>
+        </div>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        <button
+          type="button"
+          class="btn btn-success"
+          [disabled]="!hasJoinLink(selectedForDetails()!)"
+          (click)="openJoinModal(selectedForDetails()!)"
+        >
+          <i class="fas fa-video me-2"></i>Join Meeting
+        </button>
+      </div>
+    </div>
+
+    <ng-template #detailsLoading>
+      <div class="modal-content">
+        <div class="modal-body"><i class="fas fa-spinner fa-spin me-2"></i> Loading…</div>
+      </div>
+    </ng-template>
+  </div>
+</div>

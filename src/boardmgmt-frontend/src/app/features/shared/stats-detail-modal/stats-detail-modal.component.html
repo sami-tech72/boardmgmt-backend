@@ -1,0 +1,143 @@
+<div class="modal-backdrop" *ngIf="visible()" (click)="close()"></div>
+<div class="modal" *ngIf="visible()">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">{{ title() }}</h5>
+        <button type="button" class="btn-close" (click)="close()"></button>
+      </div>
+
+      <div class="modal-body">
+        <div *ngIf="error()" class="alert alert-danger py-2">{{ error() }}</div>
+
+        <ng-container *ngIf="!error()">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div class="h6 m-0">Total: {{ total() }}</div>
+
+            <div class="btn-group">
+              <button
+                class="btn btn-sm btn-outline-secondary"
+                (click)="prev()"
+                [disabled]="page() === 1"
+              >
+                <i class="fas fa-chevron-left"></i>
+              </button>
+              <span class="btn btn-sm btn-outline-secondary disabled"> Page {{ page() }} </span>
+              <button
+                class="btn btn-sm btn-outline-secondary"
+                (click)="next()"
+                [disabled]="page() * pageSize() >= total()"
+              >
+                <i class="fas fa-chevron-right"></i>
+              </button>
+            </div>
+          </div>
+
+          <div *ngIf="loading()" class="placeholder-wave">
+            <div class="placeholder col-12 mb-2" style="height: 32px"></div>
+            <div class="placeholder col-12 mb-2" style="height: 32px"></div>
+            <div class="placeholder col-12 mb-2" style="height: 32px"></div>
+          </div>
+
+          <!-- Meetings -->
+          <table class="table table-hover" *ngIf="!loading() && kind() === 'meetings'">
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>When</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let m of meetings()">
+                <td>
+                  <strong>{{ m.title }}</strong
+                  ><br />
+                  <small class="text-muted" *ngIf="m.subtitle">{{ m.subtitle }}</small>
+                </td>
+                <td>
+                  {{ m.startsAtUtc | date : 'MMM d, y' }}<br />
+                  <small class="text-muted">{{ m.startsAtUtc | date : 'shortTime' }}</small>
+                </td>
+                <td>
+                  <span
+                    class="badge"
+                    [ngClass]="{
+                      'bg-warning': m.status === 'Upcoming',
+                      'bg-success': m.status === 'Completed',
+                      'bg-danger': m.status === 'Cancelled'
+                    }"
+                  >
+                    {{ m.status }}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <!-- Documents -->
+          <table class="table table-hover" *ngIf="!loading() && kind() === 'documents'">
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>Kind</th>
+                <th>Updated</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let d of documents()">
+                <td>{{ d.title }}</td>
+                <td class="text-uppercase">{{ d.kind }}</td>
+                <td>{{ d.updatedAgo }}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <!-- Votes -->
+          <table class="table table-hover" *ngIf="!loading() && kind() === 'votes'">
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>Deadline</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let v of votes()">
+                <td>{{ v.title }}</td>
+                <td>{{ v.deadlineUtc | date : 'MMM d, y, shortTime' }}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <!-- Messages -->
+          <!-- Users -->
+          <table class="table table-hover" *ngIf="!loading() && kind() === 'users'">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Last Seen</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let u of users()">
+                <td>{{ u.displayName }}</td>
+                <td>{{ u.email || '—' }}</td>
+                <td>
+                  <ng-container *ngIf="u.lastSeenUtc; else neverSeen">
+                    {{ u.lastSeenUtc | date : 'MMM d, y, shortTime' }}
+                  </ng-container>
+                  <ng-template #neverSeen>—</ng-template>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </ng-container>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-secondary" (click)="close()">Close</button>
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,21 @@
+/* dashboard.page.css */
+.stats-card.clickable {
+  cursor: pointer;
+}
+
+
+/* Chat styling */
+.chat-thread { display: flex; flex-direction: column; gap: 10px; }
+.chat-item { display: flex; align-items: flex-start; gap: 10px; }
+.chat-avatar {
+  width: 36px; height: 36px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: #e9ecef; font-weight: 600; font-size: 12px;
+}
+.chat-bubble {
+  background: #f8f9fa; border: 1px solid #e5e7eb; border-radius: 10px; padding: 8px 10px; max-width: 100%;
+}
+.chat-meta { font-size: 12px; color: #6c757d; display: flex; gap: 8px; margin-bottom: 4px; }
+.chat-speaker { font-weight: 600; color: #343a40; }
+.chat-time { font-variant-numeric: tabular-nums; }
+.chat-text { white-space: pre-wrap; }

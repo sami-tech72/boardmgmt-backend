@@ -113,3 +113,52 @@ zoom_oauth.json
 # Ignore any exported Graph/Zoom logs
 *.graph.log
 *.zoom.log
+
+
+## =========================
+## FRONTEND (Angular / Node)
+## =========================
+
+# Angular build output
+boardmgmt-frontend/dist/
+boardmgmt-frontend/build/
+boardmgmt-frontend/tmp/
+boardmgmt-frontend/out-tsc/
+
+# Angular cache
+boardmgmt-frontend/.angular/
+boardmgmt-frontend/.angular/cache/
+boardmgmt-frontend/.angular/local/
+
+# Node modules
+boardmgmt-frontend/node_modules/
+
+# Environment files
+boardmgmt-frontend/src/environments/environment*.ts
+
+# VS Code settings for frontend
+boardmgmt-frontend/.vscode/
+
+# Editor / IDE files
+boardmgmt-frontend/.idea/
+boardmgmt-frontend/*.code-workspace
+
+# Logs
+boardmgmt-frontend/npm-debug.log*
+boardmgmt-frontend/yarn-debug.log*
+boardmgmt-frontend/yarn-error.log*
+boardmgmt-frontend/pnpm-debug.log*
+
+# Misc system files
+boardmgmt-frontend/.DS_Store
+boardmgmt-frontend/Thumbs.db
+
+# Lock files (optional — comment out if you want to keep for version consistency)
+# boardmgmt-frontend/package-lock.json
+# boardmgmt-frontend/yarn.lock
+# boardmgmt-frontend/pnpm-lock.yaml
+
+# Local configuration or secrets (if any)
+boardmgmt-frontend/src/assets/config/local/
+boardmgmt-frontend/src/assets/config/private/
+

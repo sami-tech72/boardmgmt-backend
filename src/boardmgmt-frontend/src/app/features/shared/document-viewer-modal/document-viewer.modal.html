@@ -1,0 +1,85 @@
+<div #modalRoot class="modal fade" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl">
+    <!-- Loading -->
+    <div class="modal-content" *ngIf="!doc">
+      <div class="modal-body p-5 text-center text-muted">Loading…</div>
+    </div>
+
+    <!-- Content -->
+    <div class="modal-content" *ngIf="doc as d">
+      <div class="modal-header">
+        <h5 class="modal-title">
+          <i class="fas fa-file-alt me-2"></i>{{ d.originalName }}
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" (click)="close()"></button>
+      </div>
+
+      <div class="modal-body">
+        <div class="row g-3">
+          <div class="col-md-8">
+            <div class="document-preview bg-light p-4 rounded" style="height: 500px">
+              <div class="h-100 d-flex flex-column align-items-center justify-content-center text-center">
+                <i class="fas fa-5x text-muted mb-3" [ngClass]="faIconFor(d)"></i>
+
+                <ng-container *ngIf="(d.contentType || '').toLowerCase().includes('pdf'); else genericPreview">
+                  <ng-container *ngIf="safePdfUrl(d) as pdfUrl; else previewUnavailable">
+                    <iframe [src]="pdfUrl" style="width: 100%; height: 100%; border: 0"></iframe>
+                  </ng-container>
+                  <ng-template #previewUnavailable>
+                    <h6 class="mb-2">Preview unavailable</h6>
+                    <p class="text-muted mb-3">This file’s URL is not from an allowed origin for inline viewing.</p>
+                    <a class="btn btn-primary" [href]="d.url" [attr.download]="d.originalName">
+                      <i class="fas fa-download me-2"></i>Download to View
+                    </a>
+                  </ng-template>
+                </ng-container>
+
+                <ng-template #genericPreview>
+                  <h5>Document Preview</h5>
+                  <p class="text-muted mb-3">Preview for Office files can be added later.</p>
+                  <a class="btn btn-primary" [href]="d.url" [attr.download]="d.originalName">
+                    <i class="fas fa-download me-2"></i>Download to View
+                  </a>
+                </ng-template>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-4">
+            <h6>Document Information</h6>
+            <table class="table table-sm">
+              <tr><td><strong>Name:</strong></td><td class="text-break">{{ d.originalName }}</td></tr>
+              <tr><td><strong>Type:</strong></td><td>{{ d.contentType }}</td></tr>
+              <tr><td><strong>Size:</strong></td><td>{{ prettySize(d.sizeBytes) }}</td></tr>
+              <tr><td><strong>Uploaded:</strong></td><td>{{ d.uploadedAt | date:'medium' }}</td></tr>
+              <tr><td><strong>Folder:</strong></td><td>{{ d.folderSlug || 'root' }}</td></tr>
+              <tr *ngIf="d.version > 1"><td><strong>Version:</strong></td><td>{{ d.version }}</td></tr>
+              <tr *ngIf="d.description"><td><strong>Description:</strong></td><td class="text-break">{{ d.description }}</td></tr>
+            </table>
+
+            <h6 class="mt-4">Actions</h6>
+            <div class="d-grid gap-2">
+              <a class="btn btn-success" (click)="downloadDocument(d)">
+                <i class="fas fa-download me-2"></i>Download
+              </a>
+
+              <button class="btn btn-info" type="button" (click)="shareDocument(d)">
+                <i class="fas fa-share me-2"></i>Share
+              </button>
+
+              <button class="btn btn-warning" type="button" (click)="beginEdit()">
+                <i class="fas fa-edit me-2"></i>Edit Properties
+              </button>
+
+              <!-- Replace File UI removed on purpose -->
+
+              <button class="btn btn-danger" type="button" (click)="confirmDelete()">
+                <i class="fas fa-trash me-2"></i>Delete
+              </button>
+            </div>
+          </div>
+        </div> <!-- row -->
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,81 @@
+/* Slightly thicker card borders to show themed edge */
+.card { border-width: 2px; }
+
+/* Slim, rounded progress like the screenshot */
+.progress.slim {
+  height: 6px;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.progress.slim .progress-bar { transition: width .2s ease; }
+
+/* Option pill look */
+.voting-options .option {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .65rem .9rem;
+  border: 2px solid var(--bs-border-color);
+  border-radius: .75rem;
+  background-color: var(--bs-body-bg);
+  transition: border-color .15s ease, background-color .15s ease, box-shadow .15s ease;
+  margin-bottom: .5rem;
+}
+
+/* Radios more visible & aligned */
+.voting-options .form-check-input {
+  width: 1rem;
+  height: 1rem;
+  margin-top: 0;
+  box-shadow: none;
+}
+
+/* Hover emphasis */
+.voting-options .option:hover {
+  background-color: rgba(0,0,0,.02);
+}
+
+/* === Theming scoped by the card's theme class === */
+.theme-warning .voting-options .option.active {
+  border-color: var(--bs-warning);
+  box-shadow: 0 0 0 .15rem rgba(255, 193, 7, .25);
+}
+.theme-info .voting-options .option.active {
+  border-color: var(--bs-info);
+  box-shadow: 0 0 0 .15rem rgba(13, 202, 240, .25);
+}
+
+/* Radio checked color by theme */
+.theme-warning .form-check-input:checked {
+  background-color: var(--bs-warning);
+  border-color: var(--bs-warning);
+}
+.theme-info .form-check-input:checked {
+  background-color: var(--bs-info);
+  border-color: var(--bs-info);
+}
+
+/* Focus ring by theme */
+.theme-warning .form-check-input:focus {
+  border-color: var(--bs-warning);
+  box-shadow: 0 0 0 .25rem rgba(255, 193, 7, .25);
+}
+.theme-info .form-check-input:focus {
+  border-color: var(--bs-info);
+  box-shadow: 0 0 0 .25rem rgba(13, 202, 240, .25);
+}
+
+/* Optional: hover outline picks up theme */
+.theme-warning .voting-options .option:hover { border-color: rgba(255,193,7,.6); }
+.theme-info    .voting-options .option:hover { border-color: rgba(13,202,240,.6); }
+
+/* Buttons pop a bit more */
+.btn-warning, .btn-info { font-weight: 600; }
+
+/* Misc spacing tweaks */
+.voting-options .form-check + .form-check { margin-top: .25rem; }
+.card-header h6 { line-height: 1.25; }
+.voting-options.disabled {
+  opacity: .6;
+  pointer-events: none;
+}

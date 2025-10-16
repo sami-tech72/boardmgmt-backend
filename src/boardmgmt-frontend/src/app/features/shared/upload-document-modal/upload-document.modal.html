@@ -1,0 +1,132 @@
+<div class="modal fade" #modalEl tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+
+      <div class="modal-header">
+        <h5 class="modal-title">
+          <i class="fas" [ngClass]="mode === 'edit' ? 'fa-edit' : 'fa-upload'"></i>
+          {{ mode === 'edit' ? 'Edit Document' : 'Upload Document' }}
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" [disabled]="uploading"></button>
+      </div>
+
+      <div class="modal-body">
+        <form (submit)="$event.preventDefault()">
+          <div class="form-text mb-2" *ngIf="mode === 'edit'">
+            Updating details. Selecting a file will replace the current file and create a new version.
+          </div>
+
+          <!-- Drag & Drop / File input -->
+          <div class="mb-3">
+            <label class="form-label">{{ mode === 'edit' ? 'Select Replacement File (optional)' : 'Select Files' }}</label>
+
+            <div class="drop-zone"
+                 [class.drop-zone--dragover]="dragOver"
+                 (dragover)="onDragOver($event)"
+                 (dragleave)="onDragLeave($event)"
+                 (drop)="onDrop($event)">
+              <p class="mb-2">Drag & drop {{ mode === 'edit' ? 'a file' : 'files' }} here</p>
+              <p class="mb-2">or</p>
+              <input
+                type="file"
+                class="form-control"
+                (change)="onFileChange($event)"
+                [multiple]="mode !== 'edit'"
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-powerpoint"
+              />
+            </div>
+
+            <div class="form-text">
+              Supported: PDF, Word, Excel, PowerPoint. Max 50MB per file.
+            </div>
+
+            <!-- Chosen files -->
+            <ul class="list-group mt-2" *ngIf="files.length">
+              <li class="list-group-item d-flex justify-content-between align-items-center"
+                  *ngFor="let f of files; let i = index">
+                <span class="text-truncate">{{ f.name }}</span>
+                <div class="d-flex align-items-center gap-2">
+                  <small class="text-muted">{{ prettySize(f.size) }}</small>
+                  <button type="button" class="btn btn-sm btn-outline-danger"
+                          (click)="removeFile(i)" [disabled]="uploading">
+                    <i class="fas fa-times"></i>
+                  </button>
+                </div>
+              </li>
+            </ul>
+
+            <div *ngIf="fileError" class="text-danger mt-2">{{ fileError }}</div>
+          </div>
+
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Folder</label>
+              <select class="form-select" [(ngModel)]="folderSlug" name="folderSlug" [disabled]="uploading">
+                <option *ngFor="let f of folders" [value]="f.slug">{{ f.name }}</option>
+              </select>
+
+            </div>
+
+            <div class="col-md-6" *ngIf="mode === 'create'">
+              <label class="form-label">Meeting (optional)</label>
+              <select class="form-select" [(ngModel)]="meetingId" name="meetingId" [disabled]="uploading">
+                <option value="">— None —</option>
+                <option *ngFor="let m of meetings" [value]="m.id">
+                  {{ m.title }} • {{ m.scheduledAt | date:'mediumDate' }}
+                </option>
+              </select>
+            </div>
+          </div>
+
+          <div class="mt-3">
+            <label class="form-label">Description (Optional)</label>
+            <textarea class="form-control" [(ngModel)]="description" name="description" rows="3"
+                      placeholder="Brief description of the document..." [disabled]="uploading"></textarea>
+          </div>
+
+          <!-- Roles -->
+          <div class="mt-4">
+            <label class="form-label d-block mb-2">Access Permissions</label>
+            <div class="row">
+              <div class="col-md-6" *ngFor="let r of roles">
+                <div class="form-check mb-2">
+                  <input class="form-check-input" type="checkbox"
+                         [id]="'role_'+r.id" name="role_{{r.id}}"
+                         [(ngModel)]="selected[r.id]" [disabled]="uploading"/>
+                  <label class="form-check-label" [for]="'role_'+r.id">
+                    {{ r.display || r.name }}
+                  </label>
+                </div>
+              </div>
+            </div>
+            <div class="form-text">
+              If nothing is selected, the request omits <code>roleIds</code> so the backend can apply defaults.
+            </div>
+          </div>
+
+          <!-- Progress -->
+          <div class="mt-3" *ngIf="uploading">
+            <small class="text-muted d-block mb-1">
+              {{ mode === 'edit' ? 'Saving...' : 'Uploading...' }} {{progress}}%
+            </small>
+            <div class="progress">
+              <div class="progress-bar" role="progressbar" [style.width.%]="progress"></div>
+            </div>
+          </div>
+
+          <!-- Error -->
+          <div *ngIf="submitError" class="alert alert-danger mt-3">{{ submitError }}</div>
+        </form>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal" [disabled]="uploading">Cancel</button>
+        <button class="btn btn-primary" (click)="submit()" [disabled]="uploading || !!fileError || (mode==='create' && !files.length)">
+          <i class="fas" [ngClass]="mode === 'edit' ? 'fa-save' : 'fa-upload'"></i>
+          {{ mode === 'edit' ? 'Save Changes' : 'Upload' }}
+        </button>
+      </div>
+
+    </div>
+  </div>
+</div>

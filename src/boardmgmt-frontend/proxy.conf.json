@@ -1,0 +1,15 @@
+{
+  "/api": {
+    "target": "https://localhost:44325",
+    "secure": false,
+    "changeOrigin": true,
+    "cookieDomainRewrite": "localhost",
+    "headers": { "Connection": "keep-alive" }
+  },
+  "/hubs": {
+    "target": "https://localhost:44325",
+    "ws": true,
+    "secure": false,
+    "changeOrigin": true
+  }
+}

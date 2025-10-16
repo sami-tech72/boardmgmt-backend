@@ -207,19 +207,38 @@ public class ChatController : ControllerBase
         return Ok();
     }
 
+    //private async Task<IReadOnlyList<ReactionDto>> BuildReactionPayload(Guid messageId)
+    //{
+    //    var reactions = await _db.Set<ChatReaction>()
+    //    .Where(r => r.MessageId == messageId)
+    //    .GroupBy(r => r.Emoji)
+    //    .Select(g => new ReactionDto(
+    //        g.Key,
+    //        g.Count(),
+    //        g.Any(r => r.UserId == CurrentUserId)))
+    //    .ToListAsync();
+
+    //    return reactions;
+    //}
+
     private async Task<IReadOnlyList<ReactionDto>> BuildReactionPayload(Guid messageId)
     {
-        var reactions = await _db.Set<ChatReaction>()
-        .Where(r => r.MessageId == messageId)
-        .GroupBy(r => r.Emoji)
-        .Select(g => new ReactionDto(
-            g.Key,
-            g.Count(),
-            g.Any(r => r.UserId == CurrentUserId)))
-        .ToListAsync();
+        var rows = await _db.Set<ChatReaction>()
+            .Where(r => r.MessageId == messageId)
+            .GroupBy(r => r.Emoji)
+            .Select(g => new
+            {
+                Emoji = g.Key,
+                Count = g.Count(),
+                ReactedByMe = g.Any(r => r.UserId == CurrentUserId)
+            })
+            .ToListAsync();
 
-        return reactions;
+        return rows
+            .Select(x => new ReactionDto(Emoji: x.Emoji, Count: x.Count, ReactedByMe: x.ReactedByMe))
+            .ToList();
     }
+
 
     // ===== Attachments =====
 

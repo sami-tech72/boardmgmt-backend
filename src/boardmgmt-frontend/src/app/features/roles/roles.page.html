@@ -1,0 +1,112 @@
+<!-- Top Navigation -->
+<div
+  class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 top-navbar"
+>
+  <h1 class="h2">Role</h1>
+  <div class="btn-toolbar mb-2 mb-md-0">
+    <div class="btn-group me-2">
+      <button class="btn btn-primary" [routerLink]="['/roles/create-role']">
+        <i class="fas fa-plus"></i> Create Role
+      </button>
+    </div>
+    <app-user-menu [displayName]="'John Doe'" (logout)="onLogout()"></app-user-menu>
+  </div>
+</div>
+
+<!-- Role list -->
+<div class="row">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header">
+        <h5 class="mb-0"><i class="fas fa-list me-2"></i>Roles</h5>
+      </div>
+
+      <div class="card-body table-responsive">
+        <table class="table table-hover align-middle">
+          <thead>
+            <tr>
+              <th style="width: 28%">Id</th>
+              <th style="width: 44%">Role</th>
+              <th style="width: 18%">Modules</th>
+              <th style="width: 10%">Action</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            <tr *ngIf="loading">
+              <td colspan="4">
+                <span class="spinner-border spinner-border-sm me-2"></span>
+                Loading…
+              </td>
+            </tr>
+
+            <tr *ngFor="let r of roles">
+              <td class="text-truncate" title="{{ r.id }}">{{ r.id }}</td>
+
+              <td>
+                <ng-container *ngIf="editId !== r.id; else editTpl">{{ r.name }}</ng-container>
+                <ng-template #editTpl>
+                  <div class="d-flex gap-2">
+                    <input
+                      class="form-control form-control-sm"
+                      [(ngModel)]="editName"
+                      maxlength="80"
+                    />
+                    <button
+                      class="btn btn-sm btn-success"
+                      (click)="saveName(r)"
+                      [disabled]="saving"
+                    >
+                      <i class="fas fa-check"></i>
+                    </button>
+                    <button
+                      class="btn btn-sm btn-outline-secondary"
+                      (click)="cancelEdit()"
+                      [disabled]="saving"
+                    >
+                      <i class="fas fa-times"></i>
+                    </button>
+                  </div>
+                </ng-template>
+              </td>
+
+              <td>{{ countModulesWithPerms(r.permissions) }}</td>
+
+              <td class="text-nowrap">
+                <!-- open full edit (rename + permissions) -->
+                <button
+                  class="btn btn-sm btn-outline-secondary me-1"
+                  [routerLink]="['/roles/create-role']"
+                  [queryParams]="{ roleId: r.id, name: r.name }"
+                >
+                  <i class="fas fa-gear"></i>
+                </button>
+
+                <!-- inline rename toggle -->
+                <button
+                  class="btn btn-sm btn-outline-primary me-1"
+                  (click)="startEdit(r)"
+                  [disabled]="saving || editId === r.id"
+                >
+                  <i class="fas fa-pen"></i>
+                </button>
+
+                <button
+                  class="btn btn-sm btn-outline-danger"
+                  (click)="remove(r)"
+                  [disabled]="saving"
+                >
+                  <i class="fas fa-trash"></i>
+                </button>
+              </td>
+            </tr>
+
+            <tr *ngIf="!loading && roles.length === 0">
+              <td colspan="4" class="text-muted">No roles yet.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

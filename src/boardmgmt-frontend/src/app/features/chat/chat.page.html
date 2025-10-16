@@ -1,0 +1,234 @@
+<div class="chat-page">
+  <div class="chat-layout" [class.thread-open]="!!threadRoot()">
+    <!-- SIDEBAR -->
+    <aside class="chat-sidebar">
+      <div class="brand">
+        <i class="fas fa-hashtag" aria-hidden="true"></i>
+        <span>Company Chat</span>
+      </div>
+
+      <section class="section">
+        <div class="section-title">Channels</div>
+        <button
+          class="link"
+          *ngFor="let c of channels()"
+          (click)="open(c.id)"
+          [class.active]="c.id===activeId()"
+        >
+          <span class="hash">#</span>
+          <span class="name ellipsis">{{ c.name }}</span>
+          <span *ngIf="c.unreadCount" class="badge">{{ c.unreadCount }}</span>
+        </button>
+        <div class="section-actions">
+          <button class="link subtle" (click)="openCreateChannel()">
+            <i class="fas fa-plus" aria-hidden="true"></i>
+            <span>New channel</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-title">People</div>
+
+        <div class="search-wrap">
+          <i class="fas fa-search" aria-hidden="true"></i>
+          <input
+            class="search"
+            type="text"
+            placeholder="Filter people…"
+            [(ngModel)]="peopleFilter"
+            aria-label="Filter people"
+          />
+        </div>
+
+        <button
+          class="link"
+          *ngFor="let u of filteredPeople()"
+          (click)="openWithUser(u)"
+          [class.active]="activePersonId===u.id"
+          [disabled]="u.id === selfId"
+          [class.is-self]="u.id === selfId"
+        >
+          <span class="presence" [class.online]="onlineMap.get(u.id)"></span>
+          <span class="name ellipsis">{{ u.name || u.email || u.id }}</span>
+        </button>
+      </section>
+
+      <section class="section">
+        <div class="search-wrap">
+          <i class="fas fa-search" aria-hidden="true"></i>
+          <input
+            class="search"
+            type="text"
+            placeholder="Search messages…"
+            [(ngModel)]="searchQ"
+            (keyup.enter)="doSearch()"
+            aria-label="Search messages"
+          />
+        </div>
+      </section>
+    </aside>
+
+    <!-- MAIN -->
+    <main class="chat">
+      <header class="chat-header" *ngIf="detail() as conv">
+        <div class="title">
+          <span *ngIf="conv.type==='Channel'" class="hash">#</span>
+          <span class="name">{{ conv.name }}</span>
+        </div>
+        <div class="header-actions">
+          <span *ngIf="typingUsers().length" class="typing">
+            <i class="fas fa-keyboard" aria-hidden="true"></i>
+            {{ typingUsers().join(', ') }} typing…
+          </span>
+          <button class="btn-ghost" (click)="closeThread()" *ngIf="threadRoot()">
+            <i class="fas fa-columns" aria-hidden="true"></i
+            ><span class="hide-sm"> Hide thread</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- LIST -->
+      <div class="messages" #scrollHost (scroll)="onScroll()">
+        <div
+          *ngFor="let m of messages(); trackBy: byId"
+          class="message"
+          [class.deleted]="m.isDeleted"
+          (mouseenter)="hover=m.id"
+          (mouseleave)="hover=null"
+        >
+          <img
+            class="avatar"
+            src="assets/avatar.png"
+            alt=""
+            (error)="($any($event.target)).style.visibility='hidden'"
+          />
+
+          <div class="content">
+            <div class="head">
+              <span class="author">{{ displayName(m.fromUser) }}</span>
+              <span class="dot">•</span>
+              <span class="time">{{ m.createdAtUtc | date:'short' }}</span>
+              <span *ngIf="m.editedAtUtc" class="edited">(edited)</span>
+            </div>
+
+            <div class="body" [innerHTML]="m.bodyHtml"></div>
+
+            <div class="attachments" *ngIf="m.attachments?.length">
+              <a
+                *ngFor="let a of m.attachments"
+                [href]="attachmentUrl(m.id, a.attachmentId)"
+                class="chip"
+              >
+                <i class="fas fa-paperclip" aria-hidden="true"></i>
+                <span class="ellipsis">{{ a.fileName }}</span>
+              </a>
+            </div>
+
+            <div class="actions">
+              <button class="action pill" (click)="toggleReaction(m,'👍')" title="Like">👍</button>
+              <button class="action pill" (click)="toggleReaction(m,'❤️')" title="Love">❤️</button>
+              <button class="action pill" (click)="toggleReaction(m,'😀')" title="Smile">😀</button>
+
+              <button class="action" (click)="openThread(m)">
+                <i class="fas fa-comments" aria-hidden="true"></i> Thread ({{ m.threadReplyCount }})
+              </button>
+
+              <span class="spacer"></span>
+
+              <button class="action danger" *ngIf="isMine(m)" (click)="deleteMsg(m)">
+                <i class="fas fa-trash-alt" aria-hidden="true"></i>
+                <span class="hide-sm">Delete</span>
+              </button>
+              <button class="action" *ngIf="isMine(m)" (click)="editMsg(m)">
+                <i class="fas fa-pen" aria-hidden="true"></i> <span class="hide-sm">Edit</span>
+              </button>
+            </div>
+
+            <div class="reactions" *ngIf="m.reactions?.length">
+              <button
+                class="reaction"
+                *ngFor="let r of m.reactions"
+                [class.mine]="r.reactedByMe"
+                (click)="toggleReaction(m, r.emoji)"
+              >
+                <span class="emoji">{{ r.emoji }}</span>
+                <span class="count">{{ r.count }}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- COMPOSER -->
+      <div class="composer">
+        <div class="toolbar">
+          <button class="btn" (click)="pickEmoji('😀')" title="Emoji">😀</button>
+          <button class="btn" (click)="pickEmoji('👍')" title="Emoji">👍</button>
+          <button class="btn" (click)="pickEmoji('🎉')" title="Emoji">🎉</button>
+
+          <label class="btn file" title="Attach files">
+            <i class="fas fa-paperclip" aria-hidden="true"></i>
+            <input type="file" multiple (change)="onFiles($event)" />
+          </label>
+        </div>
+
+        <div class="input-wrap">
+          <textarea
+            rows="3"
+            class="editor"
+            [(ngModel)]="draft"
+            (input)="onTyping()"
+            [placeholder]="'Message ' + (detail()?.type==='Channel' ? '#' : '') + (detail()?.name || '') + '…'"
+          ></textarea>
+
+          <button class="send" (click)="send()" title="Send">
+            <i class="fas fa-paper-plane" aria-hidden="true"></i>
+            <span class="send-label">Send</span>
+          </button>
+        </div>
+      </div>
+    </main>
+
+    <!-- THREAD -->
+    <aside class="thread" *ngIf="threadRoot() as root">
+      <div class="thread-header">
+        <div class="thread-title"><i class="fas fa-comments" aria-hidden="true"></i> Thread</div>
+        <button class="close" (click)="closeThread()" title="Close thread">
+          <i class="fas fa-times" aria-hidden="true"></i>
+        </button>
+      </div>
+
+      <div class="thread-messages">
+        <div class="message" *ngFor="let m of threadMsgs(); trackBy: byId">
+          <img
+            class="avatar"
+            src="assets/avatar.png"
+            alt=""
+            (error)="($any($event.target)).style.visibility='hidden'"
+          />
+          <div class="content">
+            <div class="head">
+              <span class="author">{{ displayName(m.fromUser) }}</span>
+              <span class="time">{{ m.createdAtUtc | date:'short' }}</span>
+            </div>
+            <div class="body" [innerHTML]="m.bodyHtml"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="thread-composer">
+        <textarea
+          rows="3"
+          class="editor"
+          [(ngModel)]="threadDraft"
+          (input)="onTyping(true)"
+          placeholder="Reply in thread…"
+        ></textarea>
+        <button class="send" (click)="sendThread()" title="Send reply">
+          <i class="fas fa-paper-plane" aria-hidden="true"></i>
+        </button>
+      </div>
+    </aside>
+  </div>
+</div>

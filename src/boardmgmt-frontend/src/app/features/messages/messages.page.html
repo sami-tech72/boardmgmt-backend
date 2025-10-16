@@ -1,0 +1,223 @@
+<div class="d-flex justify-content-between align-items-center pt-3 pb-2 mb-3 top-navbar">
+  <h1 class="h2">Messages</h1>
+  <div class="btn-toolbar">
+    <div class="btn-group">
+      <button type="button" class="btn btn-primary" (click)="openCompose()">
+        <i class="fas fa-plus"></i> New Message
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="row g-2 mb-3">
+  <div class="col-md-4">
+    <input
+      class="form-control"
+      placeholder="Search subject or body…"
+      [(ngModel)]="q"
+      (keyup.enter)="load()"
+    />
+  </div>
+  <div class="col-md-3">
+    <select class="form-select" [(ngModel)]="priorityFilter" (change)="load()">
+      <option value="">All priorities</option>
+      <option>Low</option>
+      <option>Normal</option>
+      <option>High</option>
+      <option>Urgent</option>
+    </select>
+  </div>
+  <div class="col-md-3">
+    <select class="form-select" [(ngModel)]="statusFilter" (change)="load()">
+      <option value="">All statuses</option>
+      <option>Draft</option>
+      <option>Sent</option>
+    </select>
+  </div>
+  <div class="col-md-2 d-grid">
+    <button class="btn btn-outline-secondary" (click)="load()">
+      <i class="fas fa-filter"></i> Apply
+    </button>
+  </div>
+</div>
+
+<div class="row" *ngIf="!loading(); else loadingTpl">
+  <div class="col-lg-4 mb-4">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="fas fa-inbox me-2"></i>Inbox</h5>
+        <span class="badge bg-primary">{{ total() }}</span>
+      </div>
+      <div class="card-body p-0">
+        <div class="list-group list-group-flush">
+          <button
+            *ngFor="let m of inbox()"
+            class="list-group-item list-group-item-action message-item"
+            [class.active]="m.id === selectedId()"
+            (click)="select(m.id)"
+          >
+            <div class="d-flex w-100 justify-content-between">
+              <div class="d-flex align-items-start">
+                <img
+                  src="https://via.placeholder.com/40"
+                  class="rounded-circle me-3"
+                  alt="Avatar"
+                />
+                <div>
+                  <div class="d-flex align-items-center gap-2">
+                    <h6 class="mb-0">
+                      <ng-container *ngIf="whoLabel(m.fromUser) === 'You'; else fromOther"
+                        ><i class="fas fa-arrow-up-right me-1"></i>You</ng-container
+                      >
+                      <ng-template #fromOther
+                        ><i class="fas fa-arrow-down-left me-1"></i>{{ whoLabel(m.fromUser)
+                        }}</ng-template
+                      >
+                    </h6>
+                    <span *ngIf="m.hasAttachments" class="text-muted"
+                      ><i class="fas fa-paperclip"></i
+                    ></span>
+                  </div>
+                  <div class="text-muted small">
+                    {{ m.createdAtUtc | date: 'medium' }} <span class="mx-1">•</span
+                    ><span class="text-truncate d-inline-block" style="max-width: 12rem"
+                      >{{ m.subject }}</span
+                    >
+                  </div>
+                  <div class="small text-truncate">{{ m.preview }}</div>
+                </div>
+              </div>
+              <span
+                class="badge"
+                [ngClass]="{ 'bg-danger': m.priority === 'Urgent', 'bg-warning text-dark': m.priority === 'High', 'bg-secondary': m.priority === 'Normal', 'bg-light text-dark': m.priority === 'Low' }"
+                >{{ m.priority }}</span
+              >
+            </div>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-8" *ngIf="detail() as d">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <div class="d-flex align-items-center">
+          <img src="https://via.placeholder.com/40" class="rounded-circle me-3" alt="Avatar" />
+          <div>
+            <h6 class="mb-0">{{ d.fromUser?.fullName || d.fromUser?.email || 'Unknown' }}</h6>
+            <small class="text-muted">{{ d.fromUser?.email }}</small>
+          </div>
+        </div>
+        <div class="btn-group">
+          <button class="btn btn-sm btn-outline-secondary" (click)="openCompose(replyPrefill(d))">
+            <i class="fas fa-reply"></i> Reply
+          </button>
+          <button
+            class="btn btn-sm btn-outline-secondary"
+            (click)="openCompose(replyAllPrefill(d))"
+          >
+            <i class="fas fa-reply-all"></i> Reply All
+          </button>
+          <button class="btn btn-sm btn-outline-secondary" (click)="openCompose(forwardPrefill(d))">
+            <i class="fas fa-share"></i> Forward
+          </button>
+          <button class="btn btn-sm btn-outline-danger" (click)="deleteSelected()">
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="card-body">
+        <div class="mb-3">
+          <h5 class="mb-1">{{ d.subject }}</h5>
+          <div class="d-flex flex-wrap align-items-center gap-2 small text-muted">
+            <span
+              class="badge"
+              [ngClass]="{ 'bg-danger': d.priority === 'Urgent', 'bg-warning text-dark': d.priority === 'High', 'bg-secondary': d.priority === 'Normal', 'bg-light text-dark': d.priority === 'Low' }"
+              >{{ d.priority }}</span
+            >
+            <span
+              >• {{ d.createdAtUtc | date: 'fullDate' }} at {{ d.createdAtUtc | date: 'shortTime'
+              }}</span
+            >
+            <span class="badge text-bg-light border">
+              <ng-container *ngIf="(d.fromUser?.id || '') === me(); else incomingTpl"
+                >You → {{ recipientsLine(d) }}</ng-container
+              >
+              <ng-template #incomingTpl
+                >{{ d.fromUser?.fullName || d.fromUser?.email || 'Unknown' }} → You</ng-template
+              >
+            </span>
+          </div>
+        </div>
+
+        <div class="chat-container d-flex flex-column gap-2" *ngIf="thread() as th">
+          <div
+            *ngFor="let b of th.items"
+            class="d-flex"
+            [class.justify-content-end]="isOutgoingBubble(b)"
+          >
+            <div
+              class="chat-bubble"
+              [class.outgoing]="isOutgoingBubble(b)"
+              [class.incoming]="!isOutgoingBubble(b)"
+            >
+              <div class="chat-meta small text-muted mb-1">
+                <ng-container *ngIf="isOutgoingBubble(b); else fromMeta">You</ng-container>
+                <ng-template #fromMeta
+                  >{{ b.fromUser.fullName || b.fromUser.email || 'Unknown' }}</ng-template
+                >
+                <span class="mx-1">•</span> {{ b.createdAtUtc | date: 'short' }}
+              </div>
+              <div class="chat-body" [innerHTML]="b.body"></div>
+              <div *ngIf="b.attachments?.length" class="mt-2 d-flex flex-wrap gap-2">
+                <a
+                  *ngFor="let a of b.attachments"
+                  [href]="attachmentUrl(b.id, a.attachmentId)"
+                  class="attachment-chip"
+                  ><i class="fas fa-paperclip me-1"></i>{{ a.fileName }}</a
+                >
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div *ngIf="!thread()">
+          <div [innerHTML]="d.body"></div>
+          <div *ngIf="d.attachments?.length" class="mt-2 d-flex flex-wrap gap-2">
+            <a
+              *ngFor="let a of d.attachments"
+              [href]="attachmentUrl(d.id, a.attachmentId)"
+              class="attachment-chip"
+              ><i class="fas fa-paperclip me-1"></i>{{ a.fileName }}</a
+            >
+          </div>
+        </div>
+      </div>
+
+      <div class="card-footer">
+        <div class="input-group">
+          <textarea
+            class="form-control"
+            rows="3"
+            placeholder="Type your reply..."
+            [ngModel]="replyText()"
+            (ngModelChange)="replyText.set($event)"
+          ></textarea>
+          <button class="btn btn-primary" type="button" (click)="sendReply()">
+            <i class="fas fa-paper-plane"></i> Send
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<ng-template #loadingTpl>
+  <div class="text-center py-5">
+    <div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div>
+  </div>
+</ng-template>
+
+<app-new-message-modal #composeModal (sent)="onSentRefresh()"></app-new-message-modal>

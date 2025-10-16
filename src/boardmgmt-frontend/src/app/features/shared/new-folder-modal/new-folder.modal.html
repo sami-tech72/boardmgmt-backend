@@ -1,0 +1,36 @@
+<!-- New Folder Modal -->
+<div class="modal fade" #modalEl tabindex="-1" aria-labelledby="newFolderLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <form class="modal-content" (ngSubmit)="submit()">
+      <div class="modal-header">
+        <h5 class="modal-title" id="newFolderLabel">
+          <i class="fas fa-folder-plus me-2"></i>Create New Folder
+        </h5>
+        <button type="button" class="btn-close" (click)="close()" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <label class="form-label" for="folderNameInput">Folder name</label>
+        <input
+          #nameInput
+          id="folderNameInput"
+          type="text"
+          class="form-control"
+          [(ngModel)]="name"
+          name="name"
+          maxlength="60"
+          placeholder="e.g., Audit 2025"
+          required
+          [class.is-invalid]="!!error"
+        />
+        <div *ngIf="!!error" class="invalid-feedback d-block mt-2">{{ error }}</div>
+        <div class="form-text">Max 60 characters. Must be unique.</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light" (click)="close()">Cancel</button>
+        <button type="submit" class="btn btn-primary">
+          <i class="fas fa-check me-1"></i>Create
+        </button>
+      </div>
+    </form>
+  </div>
+</div>

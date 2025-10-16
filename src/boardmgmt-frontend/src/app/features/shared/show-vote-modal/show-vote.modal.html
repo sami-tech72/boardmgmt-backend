@@ -1,0 +1,169 @@
+<div #resultsEl class="modal fade" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">
+          <i class="fas fa-chart-bar me-2"></i>
+          {{ vote?.title || 'Vote Results' }}
+        </h5>
+        <button type="button" class="btn-close" aria-label="Close" (click)="close()"></button>
+      </div>
+
+      <div class="modal-body">
+        <div *ngIf="loading" class="text-muted">Loading…</div>
+        <div *ngIf="error" class="alert alert-danger">{{ error }}</div>
+
+        <ng-container *ngIf="vote && !loading">
+          <div class="row g-4">
+            <div class="col-md-6">
+              <h6>Vote Summary</h6>
+              <table class="table table-sm">
+                <tr>
+                  <td><strong>Status:</strong></td>
+                  <td>
+                    <span class="badge" [ngClass]="statusBadge().cls"
+                      >{{ statusBadge().text }}</span
+                    >
+                  </td>
+                </tr>
+                <tr>
+                  <td><strong>Total ballots:</strong></td>
+                  <td>{{ vote.results.totalBallots }}</td>
+                </tr>
+                <tr>
+                  <td><strong>Type:</strong></td>
+                  <td>
+                    {{ vote.type === VoteType.YesNo ? 'Yes/No' : vote.type ===
+                    VoteType.ApproveReject ? 'Approve/Reject' : 'Multiple choice' }}
+                  </td>
+                </tr>
+                <tr>
+                  <td><strong>Deadline:</strong></td>
+                  <td>{{ vote.deadline | date:'medium' }}</td>
+                </tr>
+                <tr>
+                  <td><strong>Anonymous:</strong></td>
+                  <td>{{ vote.anonymous ? 'Yes' : 'No' }}</td>
+                </tr>
+              </table>
+            </div>
+
+            <div class="col-md-6">
+              <h6>Results Breakdown</h6>
+
+              <!-- Yes/No & Approve/Reject -->
+              <ng-container *ngIf="vote.type !== VoteType.MultipleChoice">
+                <div class="mb-2">
+                  <div class="d-flex justify-content-between">
+                    <span>Yes / Approve</span>
+                    <span
+                      >{{ vote.results.yes }} ({{ percent(vote.results.yes,
+                      vote.results.totalBallots) }}%)</span
+                    >
+                  </div>
+                  <div class="progress">
+                    <div
+                      class="progress-bar bg-success"
+                      [style.width.%]="percent(vote.results.yes, vote.results.totalBallots)"
+                    ></div>
+                  </div>
+                </div>
+
+                <div class="mb-2">
+                  <div class="d-flex justify-content-between">
+                    <span>No / Reject</span>
+                    <span
+                      >{{ vote.results.no }} ({{ percent(vote.results.no, vote.results.totalBallots)
+                      }}%)</span
+                    >
+                  </div>
+                  <div class="progress">
+                    <div
+                      class="progress-bar bg-danger"
+                      [style.width.%]="percent(vote.results.no, vote.results.totalBallots)"
+                    ></div>
+                  </div>
+                </div>
+
+                <div class="mb-2" *ngIf="vote.allowAbstain">
+                  <div class="d-flex justify-content-between">
+                    <span>Abstain</span>
+                    <span
+                      >{{ vote.results.abstain }} ({{ percent(vote.results.abstain,
+                      vote.results.totalBallots) }}%)</span
+                    >
+                  </div>
+                  <div class="progress">
+                    <div
+                      class="progress-bar bg-secondary"
+                      [style.width.%]="percent(vote.results.abstain, vote.results.totalBallots)"
+                    ></div>
+                  </div>
+                </div>
+              </ng-container>
+
+              <!-- Multiple Choice -->
+              <ng-container *ngIf="vote.type === VoteType.MultipleChoice">
+                <div class="mb-2" *ngFor="let o of vote.options">
+                  <div class="d-flex justify-content-between">
+                    <span>{{ o.text }}</span>
+                    <span>{{ o.count }} ({{ percent(o.count, vote.results.totalBallots) }}%)</span>
+                  </div>
+                  <div class="progress">
+                    <div
+                      class="progress-bar"
+                      [style.width.%]="percent(o.count, vote.results.totalBallots)"
+                    ></div>
+                  </div>
+                </div>
+              </ng-container>
+            </div>
+          </div>
+
+          <!-- Individual votes (only when NOT anonymous) -->
+          <div class="mt-4" *ngIf="vote && !vote.anonymous">
+            <h6>Individual Votes</h6>
+
+            <div *ngIf="vote.individualVotes?.length; else noVotesYet" class="table-responsive">
+              <table class="table table-sm align-middle">
+                <thead>
+                  <tr>
+                    <th>Member</th>
+                    <th>Vote</th>
+                    <th>Time</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let iv of vote.individualVotes">
+                    <td>{{ iv.displayName || iv.userId }}</td>
+                    <td>
+                      <span class="badge" [ngClass]="badgeFor(iv)"> {{ labelFor(iv) }} </span>
+                    </td>
+                    <td>{{ iv.votedAt | date:'medium' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <ng-template #noVotesYet>
+              <div class="alert alert-light border text-muted">No ballots recorded yet.</div>
+            </ng-template>
+          </div>
+
+          <!-- Anonymous info -->
+          <div class="alert alert-info mt-4" *ngIf="vote?.anonymous">
+            <i class="fas fa-user-secret me-2"></i>
+            This was an anonymous vote. Individual votes are not displayed.
+          </div>
+        </ng-container>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light" (click)="close()">Close</button>
+        <button type="button" class="btn btn-primary" (click)="exportResults()">
+          <i class="fas fa-download me-2"></i>Export Results
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

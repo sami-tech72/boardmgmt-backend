@@ -1,0 +1,28 @@
+<div class="dropdown">
+  <button
+    class="btn btn-sm btn-outline-secondary dropdown-toggle"
+    type="button"
+    data-bs-toggle="dropdown"
+    aria-expanded="false"
+  >
+    <i class="fas fa-user-circle"></i> {{ displayName }}
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li>
+      <a class="dropdown-item" [routerLink]="profileHref">
+        <i class="fas fa-user me-2"></i>Profile
+      </a>
+    </li>
+    <li>
+      <a class="dropdown-item" [routerLink]="settingsHref">
+        <i class="fas fa-cog me-2"></i>Settings
+      </a>
+    </li>
+    <li><hr class="dropdown-divider" /></li>
+    <li>
+      <a class="dropdown-item" [href]="logoutHref" (click)="onLogoutClick($event)">
+        <i class="fas fa-sign-out-alt me-2"></i>Logout
+      </a>
+    </li>
+  </ul>
+</div>

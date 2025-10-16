@@ -1,0 +1,300 @@
+<!-- Top Navigation -->
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 top-navbar">
+  <h1 class="h2">Voting</h1>
+  <div class="btn-toolbar mb-2 mb-md-0">
+    <div class="btn-group me-2">
+      <button type="button" class="btn btn-primary" (click)="openVoteModal()">
+        <i class="fas fa-plus"></i> Create Vote
+      </button>
+    </div>
+    <app-user-menu [displayName]="'John Doe'" (logout)="onLogout()"></app-user-menu>
+  </div>
+</div>
+
+<!-- Voting Stats -->
+<div class="row mb-4">
+  <div class="col-xl-3 col-md-6 mb-4">
+    <div class="card stats-card">
+      <div class="card-body d-flex justify-content-between align-items-center">
+        <div>
+          <div class="text-xs text-uppercase mb-1">Active Votes</div>
+          <div class="h5 mb-0">{{ activeCount }}</div>
+        </div>
+        <i class="fas fa-vote-yea stats-icon"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-xl-3 col-md-6 mb-4">
+    <div class="card stats-card success">
+      <div class="card-body d-flex justify-content-between align-items-center">
+        <div>
+          <div class="text-xs text-uppercase mb-1">Completed</div>
+          <div class="h5 mb-0">{{ completedCount }}</div>
+        </div>
+        <i class="fas fa-check-circle stats-icon"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-xl-3 col-md-6 mb-4">
+    <div class="card stats-card warning">
+      <div class="card-body d-flex justify-content-between align-items-center">
+        <div>
+          <div class="text-xs text-uppercase mb-1">Pending Response</div>
+          <div class="h5 mb-0">{{ pendingCount }}</div>
+        </div>
+        <i class="fas fa-clock stats-icon"></i>
+      </div>
+    </div>
+  </div>
+  <div class="col-xl-3 col-md-6 mb-4">
+    <div class="card stats-card danger">
+      <div class="card-body d-flex justify-content-between align-items-center">
+        <div>
+          <div class="text-xs text-uppercase mb-1">Participation (approx)</div>
+          <div class="h5 mb-0">{{ participationRate }}%</div>
+        </div>
+        <i class="fas fa-percentage stats-icon"></i>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Active Votes -->
+<div class="row mb-4" *ngIf="active?.length; else noActive">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header">
+        <h5 class="mb-0"><i class="fas fa-vote-yea me-2"></i>Active Votes</h5>
+      </div>
+
+      <div class="card-body">
+        <div class="row g-4">
+          <div class="col-lg-6" *ngFor="let v of active; trackBy: trackById">
+            <div class="card shadow-sm rounded-3" [ngClass]="[borderClass(v), themeClass(v)]">
+              <div class="card-header d-flex justify-content-between align-items-center" [ngClass]="headerClass(v)">
+                <div>
+                  <h6 class="mb-0 fw-semibold">
+                    {{ v.title }}
+                    <small class="ms-2 badge bg-light text-dark" *ngIf="v.eligibility===0">Public</small>
+                    <small class="ms-2 badge bg-warning text-dark" *ngIf="v.eligibility===1">Meeting attendees</small>
+                    <small class="ms-2 badge bg-info" *ngIf="v.eligibility===2">Specific users</small>
+                  </h6>
+                  <small class="opacity-75">{{ endsIn(v.deadline) }}</small>
+                </div>
+              </div>
+
+              <div class="card-body">
+                <p class="card-text" *ngIf="v.description">{{ v.description }}</p>
+
+                <!-- Participation -->
+                <div class="mb-3">
+                  <div class="d-flex justify-content-between mb-1 small">
+                    <span>Participation</span>
+                    <span>{{ res(v).totalBallots }}</span>
+                  </div>
+                  <div class="progress slim">
+                    <div class="progress-bar"
+                         [ngClass]="progressBarClass(v)"
+                         [style.width.%]="percent(res(v).totalBallots, Math.max(res(v).totalBallots, 1))">
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Options (always enabled; user can re-vote) -->
+                <div class="voting-options mb-3">
+                  <!-- Yes/No -->
+                  <ng-container *ngIf="v.type === VoteType.YesNo">
+                    <div class="form-check option"
+                         [class.active]="selection[v.id]==='yes'"
+                         (click)="setChoice(v,'yes')">
+                      <input class="form-check-input" type="radio"
+                             [name]="'vote_'+v.id"
+                             (change)="setChoice(v,'yes')"
+                             [checked]="selection[v.id]==='yes'"/>
+                      <label class="form-check-label">
+                        <i class="fas fa-check text-success me-2"></i>
+                        Yes ({{ res(v).yes }})
+                      </label>
+                    </div>
+
+                    <div class="form-check option"
+                         [class.active]="selection[v.id]==='no'"
+                         (click)="setChoice(v,'no')">
+                      <input class="form-check-input" type="radio"
+                             [name]="'vote_'+v.id"
+                             (change)="setChoice(v,'no')"
+                             [checked]="selection[v.id]==='no'"/>
+                      <label class="form-check-label">
+                        <i class="fas fa-times text-danger me-2"></i>
+                        No ({{ res(v).no }})
+                      </label>
+                    </div>
+
+                    <div class="form-check option"
+                         [class.active]="selection[v.id]==='abstain'"
+                         (click)="setChoice(v,'abstain')">
+                      <input class="form-check-input" type="radio"
+                             [name]="'vote_'+v.id"
+                             (change)="setChoice(v,'abstain')"
+                             [checked]="selection[v.id]==='abstain'"/>
+                      <label class="form-check-label">
+                        <i class="fas fa-minus text-secondary me-2"></i>
+                        Abstain ({{ res(v).abstain }})
+                      </label>
+                    </div>
+                  </ng-container>
+
+                  <!-- Approve/Reject -->
+                  <ng-container *ngIf="v.type === VoteType.ApproveReject">
+                    <div class="form-check option"
+                         [class.active]="selection[v.id]==='approve'"
+                         (click)="setChoice(v,'approve')">
+                      <input class="form-check-input" type="radio"
+                             [name]="'vote_'+v.id"
+                             (change)="setChoice(v,'approve')"
+                             [checked]="selection[v.id]==='approve'"/>
+                      <label class="form-check-label">
+                        <i class="fas fa-thumbs-up text-success me-2"></i>
+                        Approve ({{ res(v).yes }})
+                      </label>
+                    </div>
+
+                    <div class="form-check option"
+                         [class.active]="selection[v.id]==='reject'"
+                         (click)="setChoice(v,'reject')">
+                      <input class="form-check-input" type="radio"
+                             [name]="'vote_'+v.id"
+                             (change)="setChoice(v,'reject')"
+                             [checked]="selection[v.id]==='reject'"/>
+                      <label class="form-check-label">
+                        <i class="fas fa-thumbs-down text-danger me-2"></i>
+                        Reject ({{ res(v).no }})
+                      </label>
+                    </div>
+
+                    <div class="form-check option"
+                         [class.active]="selection[v.id]==='abstain'"
+                         (click)="setChoice(v,'abstain')">
+                      <input class="form-check-input" type="radio"
+                             [name]="'vote_'+v.id"
+                             (change)="setChoice(v,'abstain')"
+                             [checked]="selection[v.id]==='abstain'"/>
+                      <label class="form-check-label">
+                        <i class="fas fa-minus text-secondary me-2"></i>
+                        Abstain ({{ res(v).abstain }})
+                      </label>
+                    </div>
+                  </ng-container>
+
+                  <!-- Multiple Choice -->
+                  <ng-container *ngIf="v.type === VoteType.MultipleChoice">
+                    <div class="form-check option"
+                         *ngFor="let o of res(v).options"
+                         [class.active]="selection[v.id] === o.id"
+                         (click)="setChoice(v, o.id)"
+                         (keydown.enter)="setChoice(v, o.id)"
+                         tabindex="0"
+                         role="radio"
+                         [attr.aria-checked]="selection[v.id] === o.id">
+                      <input class="form-check-input" type="radio"
+                             [id]="'opt_' + v.id + '_' + o.id"
+                             [name]="'vote_' + v.id"
+                             (change)="setChoice(v, o.id)"
+                             [checked]="selection[v.id] === o.id"/>
+                      <label class="form-check-label w-100" [for]="'opt_' + v.id + '_' + o.id">
+                        {{ o.text }} ({{ o.count }})
+                      </label>
+                    </div>
+                  </ng-container>
+                </div>
+
+                <!-- Submit -->
+                <div class="d-grid">
+                  <button class="btn fw-semibold"
+                          [ngClass]="buttonClass(v)"
+                          (click)="submit(v)"
+                          [disabled]="submitting[v.id] || !selection[v.id]">
+                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"
+                          *ngIf="submitting[v.id]"></span>
+                    {{ submitLabel(v) }}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- /row -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<ng-template #noActive>
+  <div class="alert alert-light border text-muted">No active votes.</div>
+</ng-template>
+
+<!-- Recent Votes -->
+<div class="row">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header">
+        <h5 class="mb-0"><i class="fas fa-history me-2"></i>Recent Votes</h5>
+      </div>
+      <div class="card-body table-responsive">
+        <table class="table table-hover align-middle">
+          <thead>
+            <tr>
+              <th>Vote Title</th>
+              <th>Deadline</th>
+              <th>Result</th>
+              <th>Ballots</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let r of recent">
+              <td>
+                <strong>{{ r.title }}</strong><br />
+                <small class="text-muted">{{ r.description }}</small>
+              </td>
+              <td>{{ r.deadline | date:'medium' }}</td>
+              <td>
+                <span class="badge"
+                      [ngClass]="{
+                        'bg-success': (res(r).yes) > (res(r).no),
+                        'bg-danger':  (res(r).no)  > (res(r).yes),
+                        'bg-secondary': res(r).yes === res(r).no
+                      }">
+                  {{ (res(r).yes) > (res(r).no) ? 'Approved'
+                     : ((res(r).no) > (res(r).yes) ? 'Rejected' : 'Tie') }}
+                </span>
+              </td>
+              <td>
+                <div class="d-flex align-items-center">
+                  <span class="me-2">{{ res(r).totalBallots }}</span>
+                  <div class="progress flex-grow-1" style="height: 8px">
+                    <div class="progress-bar"
+                         [style.width.%]="percent(res(r).totalBallots, (res(r).totalBallots || 1))">
+                    </div>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <button class="btn btn-sm btn-outline-primary" (click)="openResults(r.id)">
+                  <i class="fas fa-chart-bar"></i> Results
+                </button>
+              </td>
+            </tr>
+            <tr *ngIf="!recent?.length">
+              <td colspan="5" class="text-muted">No recent votes.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modals -->
+<app-create-vote-modal #voteModal (created)="refresh()"></app-create-vote-modal>
+<app-show-vote-modal #resultsModal></app-show-vote-modal>

@@ -1,0 +1,340 @@
+/* ---------- Theme tokens (edit these to rebrand) ---------- */
+:root {
+  --cal-bg: #ffffff;
+  --cal-text: #243447;
+
+  --cal-border: #e6e9ee;
+  --cal-muted: #6b7a90;
+
+  --zoom: #1e90ff;
+  --m365: #e3bc08;
+  --generic: #ad2121;
+
+  --pill-bg: #eef5ff; /* month pill background */
+  --pill-text: #1f2a37;
+  --pill-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+
+  --focus: 0 0 0 3px rgba(30, 144, 255, 0.25); /* focus ring */
+}
+
+/* Optional dark mode: add .cal-dark on a wrapping element */
+.cal-dark {
+  --cal-bg: #0b1220;
+  --cal-text: #e5eef7;
+  --cal-border: #1e293b;
+  --cal-muted: #94a3b8;
+
+  --pill-bg: #0f172a;
+  --pill-text: #e2e8f0;
+  --pill-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* ---------- Layout / toolbar ---------- */
+.outlook-cal {
+  background: var(--cal-bg);
+
+  .cal-toolbar {
+    gap: 0.75rem;
+    padding: 0.25rem 0 0.5rem;
+    border-bottom: 1px solid var(--cal-border);
+
+    h4 {
+      color: var(--cal-text);
+      font-weight: 600;
+      letter-spacing: 0.2px;
+    }
+
+    .btn {
+      line-height: 1.15;
+    }
+  }
+
+  /* Responsive toolbar: stack on small widths */
+  @media (max-width: 680px) {
+    .cal-toolbar {
+      flex-wrap: wrap;
+
+      h4 {
+        order: 3;
+        width: 100%;
+        margin-top: 0.5rem;
+        text-align: left;
+      }
+      .btn-group:first-child {
+        order: 1;
+      }
+      .d-flex.align-items-center.gap-2 {
+        order: 2;
+        width: 100%;
+        justify-content: space-between;
+      }
+    }
+  }
+}
+
+/* ---------- Accessibility & focus ---------- */
+.outlook-cal .btn,
+.outlook-cal select,
+.outlook-cal a,
+.outlook-cal .month-pill,
+.outlook-cal .cal-event-row {
+  outline: none;
+
+  &:focus-visible {
+    box-shadow: var(--focus);
+    border-radius: 0.5rem;
+  }
+}
+
+/* ---------- Month view tweaks ---------- */
+.outlook-cal {
+  /* Month grid spacing */
+  .cal-month-view .cal-cell-top {
+    padding: 0.35rem 0.5rem 0.25rem;
+  }
+  .cal-month-view .cal-day-cell {
+    padding: 0 0.35rem 0.5rem;
+  }
+
+  .cal-month-view .month-cell {
+    display: flex;
+    flex-direction: column;
+    min-height: 78px;
+    cursor: pointer;
+    border-radius: 0.5rem;
+    transition: background 0.15s ease;
+
+    &.today .date-num {
+      border-radius: 6px;
+      padding: 2px 6px;
+      background: color-mix(in srgb, var(--zoom) 12%, transparent);
+      color: var(--zoom);
+    }
+
+    &.out-month {
+      opacity: 0.55;
+    }
+    &.weekend:not(.out-month) {
+      background: color-mix(in srgb, var(--cal-border) 25%, transparent);
+    }
+
+    .cell-header {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      margin-bottom: 0.25rem;
+    }
+
+    .date-num {
+      font-weight: 700;
+      font-size: 0.9rem;
+      color: var(--cal-text);
+    }
+  }
+
+  /* Stack events nicely */
+  .cal-month-view .cal-events {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin-top: 0.2rem;
+  }
+
+  /* Make the library event container transparent so our template shows fully */
+  .cal-month-view .cal-events .cal-event {
+    background: transparent !important;
+    padding: 0;
+    border: 0;
+  }
+  .cal-month-view .cal-events mwl-calendar-event-title,
+  .cal-month-view .cal-events a.cal-event-title,
+  .cal-month-view .cal-events span.cal-event-title {
+    display: block !important;
+    width: 100% !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    text-indent: 0 !important;
+    background: transparent !important;
+    color: inherit !important;
+    text-decoration: none !important;
+    padding: 0 !important;
+    border: 0 !important;
+  }
+  .cal-month-view .cal-events a.cal-event-title::before,
+  .cal-month-view .cal-events span.cal-event-title::before {
+    content: '' !important;
+    display: none !important;
+  }
+
+  /* ---------- Month "pill" event ---------- */
+  .cal-month-view .month-pill {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    min-height: 30px;
+    padding: 0.44rem 0.6rem;
+    border-radius: 0.6rem;
+    background: var(--pill-bg);
+    color: var(--pill-text);
+    line-height: 1.2;
+    font-size: 0.86rem;
+    box-shadow: inset 6px 0 0 var(--zoom), var(--pill-shadow);
+    user-select: none;
+    transition: transform 0.08s ease, box-shadow 0.1s ease, background 0.15s ease;
+
+    .when {
+      font-weight: 700;
+      font-size: 0.8rem;
+      white-space: nowrap;
+    }
+    .title {
+      flex: 1 1 auto;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .join {
+      margin-left: 0.25rem;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      opacity: 0.9;
+    }
+
+    &:hover {
+      transform: translateY(-1px);
+    }
+    &:active {
+      transform: translateY(0);
+      box-shadow: inset 6px 0 0 var(--zoom), 0 0 0 1px rgba(0, 0, 0, 0.04);
+    }
+  }
+
+  /* Provider accents for month pills */
+  .cal-month-view .month-pill.p-zoom {
+    box-shadow: inset 6px 0 0 var(--zoom), var(--pill-shadow);
+  }
+  .cal-month-view .month-pill.p-m365 {
+    box-shadow: inset 6px 0 0 var(--m365), var(--pill-shadow);
+  }
+  .cal-month-view .month-pill.p-generic {
+    box-shadow: inset 6px 0 0 var(--generic), var(--pill-shadow);
+  }
+
+  /* DnD helpers */
+  .cal-drag-active {
+    opacity: 0.85;
+    cursor: grabbing;
+  }
+  .cal-drag-over {
+    outline: 2px dashed color-mix(in srgb, var(--zoom) 55%, #0000);
+    border-radius: 0.6rem;
+  }
+}
+
+/* ---------- Week / Day views: tighter rows ---------- */
+.outlook-cal {
+  /* Reduce default borders */
+  .cal-week-view,
+  .cal-day-view {
+    .cal-hour-odd,
+    .cal-hour-segment {
+      border-color: var(--cal-border) !important;
+    }
+    .cal-time-label-column,
+    .cal-day-headers,
+    .cal-day-columns {
+      border-color: var(--cal-border) !important;
+    }
+    .cal-day-headers .cal-header {
+      background: color-mix(in srgb, var(--cal-border) 35%, transparent);
+      color: var(--cal-muted);
+      font-weight: 600;
+    }
+  }
+
+  /* Your custom event row template */
+  .cal-event-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.35rem 0.5rem;
+    border-radius: 0.5rem;
+    background: var(--pill-bg);
+    color: var(--pill-text);
+    font-size: 0.86rem;
+    line-height: 1.2;
+    box-shadow: var(--pill-shadow);
+    transition: transform 0.08s ease, background 0.15s ease;
+
+    .when {
+      font-weight: 700;
+      font-size: 0.8rem;
+      white-space: nowrap;
+    }
+    .title {
+      flex: 1 1 auto;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    &:hover {
+      transform: translateY(-1px);
+    }
+  }
+
+  /* Provider color bars for Week/Day rows */
+  .cal-event-row.cal-zoom {
+    box-shadow: inset 4px 0 0 var(--zoom), var(--pill-shadow);
+  }
+  .cal-event-row.cal-m365 {
+    box-shadow: inset 4px 0 0 var(--m365), var(--pill-shadow);
+  }
+  .cal-event-row.cal-generic {
+    box-shadow: inset 4px 0 0 var(--generic), var(--pill-shadow);
+  }
+
+  /* Library default event card – make it transparent so our template shines */
+  .cal-week-view .cal-event,
+  .cal-day-view .cal-event {
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    color: inherit !important;
+  }
+
+  /* Drag ghost inside week/day */
+  .cal-week-view .cal-event.drag-active,
+  .cal-day-view .cal-event.drag-active {
+    opacity: 0.85;
+  }
+}
+
+/* ---------- Buttons / selects alignment ---------- */
+.outlook-cal .btn-outline-primary.active,
+.outlook-cal .btn-outline-primary:active {
+  color: #fff;
+  background-color: var(--zoom);
+  border-color: var(--zoom);
+}
+.outlook-cal .btn-outline-primary:focus-visible {
+  box-shadow: var(--focus);
+}
+.outlook-cal .form-select.form-select-sm {
+  min-width: 190px;
+}
+
+/* ---------- Tiny extras ---------- */
+.outlook-cal .alert-info {
+  background: color-mix(in srgb, var(--zoom) 10%, #fff);
+  color: var(--cal-text);
+  border-color: color-mix(in srgb, var(--zoom) 25%, #fff);
+}
+.outlook-cal .alert-danger {
+  border-color: #fecaca;
+}
