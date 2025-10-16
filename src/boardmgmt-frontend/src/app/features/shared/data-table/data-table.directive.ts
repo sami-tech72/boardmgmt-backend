@@ -18,6 +18,10 @@ interface DataTableConfig {
   labels: DataTableLabels;
 }
 
+type DataTableConfigInput = Partial<Omit<DataTableConfig, 'labels'>> & {
+  labels?: Partial<DataTableLabels>;
+};
+
 const DEFAULT_CONFIG: DataTableConfig = {
   perPage: 10,
   perPageOptions: [10, 25, 50, 100],
@@ -39,7 +43,7 @@ const DEFAULT_CONFIG: DataTableConfig = {
   standalone: true,
 })
 export class DataTableDirective implements AfterViewInit, OnChanges, OnDestroy {
-  @Input('appDataTable') configInput?: Partial<DataTableConfig> | '';
+  @Input('appDataTable') configInput?: DataTableConfigInput | '';
   @Input() dataTableSource: unknown[] | null | undefined;
 
   private config: DataTableConfig = { ...DEFAULT_CONFIG };
@@ -104,7 +108,8 @@ export class DataTableDirective implements AfterViewInit, OnChanges, OnDestroy {
   }
 
   private applyConfig() {
-    const overrides = typeof this.configInput === 'object' && this.configInput ? this.configInput : {};
+    const overrides: DataTableConfigInput =
+      typeof this.configInput === 'object' && this.configInput ? this.configInput : {};
     const perPage = overrides.perPage ?? this.config.perPage;
     this.config = {
       ...DEFAULT_CONFIG,
@@ -199,24 +204,27 @@ export class DataTableDirective implements AfterViewInit, OnChanges, OnDestroy {
           options.push(0);
         }
         const normalized = Array.from(new Set(options)).sort((a, b) => (a === 0 ? Number.POSITIVE_INFINITY : a) - (b === 0 ? Number.POSITIVE_INFINITY : b));
-        normalized.forEach(opt => {
-          const option = this.renderer.createElement('option');
-          option.value = String(opt);
-          option.textContent = opt === 0 ? 'All' : String(opt);
-          this.renderer.appendChild(this.perPageSelect!, option);
-        });
-        this.perPageSelect.value = String(this.config.perPage || 0);
+        const select = this.perPageSelect;
+        if (select) {
+          normalized.forEach(opt => {
+            const option = this.renderer.createElement('option');
+            option.value = String(opt);
+            option.textContent = opt === 0 ? 'All' : String(opt);
+            this.renderer.appendChild(select, option);
+          });
+          select.value = String(this.config.perPage || 0);
 
-        const off = this.renderer.listen(this.perPageSelect, 'change', (event: Event) => {
-          const value = Number((event.target as HTMLSelectElement).value);
-          this.config.perPage = value === 0 ? 0 : Math.max(1, value);
-          this.currentPage = 1;
-          this.apply();
-        });
-        this.listeners.push(off);
+          const off = this.renderer.listen(select, 'change', (event: Event) => {
+            const value = Number((event.target as HTMLSelectElement).value);
+            this.config.perPage = value === 0 ? 0 : Math.max(1, value);
+            this.currentPage = 1;
+            this.apply();
+          });
+          this.listeners.push(off);
 
-        this.renderer.appendChild(perPageWrapper, label);
-        this.renderer.appendChild(perPageWrapper, this.perPageSelect);
+          this.renderer.appendChild(perPageWrapper, label);
+          this.renderer.appendChild(perPageWrapper, select);
+        }
         this.renderer.appendChild(this.topToolbar, perPageWrapper);
       }
 
@@ -244,11 +252,12 @@ export class DataTableDirective implements AfterViewInit, OnChanges, OnDestroy {
         this.renderer.addClass(controls, 'btn-group-sm');
 
         this.prevButton = this.renderer.createElement('button');
-        this.renderer.addClass(this.prevButton, 'btn');
-        this.renderer.addClass(this.prevButton, 'btn-outline-secondary');
-        this.prevButton.type = 'button';
-        this.prevButton.innerHTML = `<i class="fas fa-chevron-left"></i> ${this.config.labels.previous}`;
-        const prevOff = this.renderer.listen(this.prevButton, 'click', () => {
+        const prevButton = this.prevButton;
+        this.renderer.addClass(prevButton, 'btn');
+        this.renderer.addClass(prevButton, 'btn-outline-secondary');
+        prevButton.type = 'button';
+        prevButton.innerHTML = `<i class="fas fa-chevron-left"></i> ${this.config.labels.previous}`;
+        const prevOff = this.renderer.listen(prevButton, 'click', () => {
           if (this.currentPage > 1) {
             this.currentPage -= 1;
             this.apply();
@@ -257,11 +266,12 @@ export class DataTableDirective implements AfterViewInit, OnChanges, OnDestroy {
         this.listeners.push(prevOff);
 
         this.nextButton = this.renderer.createElement('button');
-        this.renderer.addClass(this.nextButton, 'btn');
-        this.renderer.addClass(this.nextButton, 'btn-outline-secondary');
-        this.nextButton.type = 'button';
-        this.nextButton.innerHTML = `${this.config.labels.next} <i class="fas fa-chevron-right"></i>`;
-        const nextOff = this.renderer.listen(this.nextButton, 'click', () => {
+        const nextButton = this.nextButton;
+        this.renderer.addClass(nextButton, 'btn');
+        this.renderer.addClass(nextButton, 'btn-outline-secondary');
+        nextButton.type = 'button';
+        nextButton.innerHTML = `${this.config.labels.next} <i class="fas fa-chevron-right"></i>`;
+        const nextOff = this.renderer.listen(nextButton, 'click', () => {
           const totalPages = this.totalPages();
           if (this.currentPage < totalPages) {
             this.currentPage += 1;
@@ -270,8 +280,8 @@ export class DataTableDirective implements AfterViewInit, OnChanges, OnDestroy {
         });
         this.listeners.push(nextOff);
 
-        this.renderer.appendChild(controls, this.prevButton);
-        this.renderer.appendChild(controls, this.nextButton);
+        this.renderer.appendChild(controls, prevButton);
+        this.renderer.appendChild(controls, nextButton);
         this.renderer.appendChild(this.bottomToolbar, controls);
       }
 
