@@ -166,11 +166,14 @@ public class ChatController : ControllerBase
 
         if (msg is not null)
         {
+            var reactions = await BuildReactionPayload(msg.Id);
+
             await ChatHubEvents.ReactionUpdated(_hub, msg.ConversationId, new
             {
                 messageId = msg.Id,
                 conversationId = msg.ConversationId,
-                threadRootId = msg.ThreadRootId
+                threadRootId = msg.ThreadRootId,
+                reactions
             });
         }
 
@@ -190,15 +193,32 @@ public class ChatController : ControllerBase
 
         if (msg is not null)
         {
+            var reactions = await BuildReactionPayload(msg.Id);
+
             await ChatHubEvents.ReactionUpdated(_hub, msg.ConversationId, new
             {
                 messageId = msg.Id,
                 conversationId = msg.ConversationId,
-                threadRootId = msg.ThreadRootId
+                threadRootId = msg.ThreadRootId,
+                reactions
             });
         }
 
         return Ok();
+    }
+
+    private async Task<IReadOnlyList<ReactionDto>> BuildReactionPayload(Guid messageId)
+    {
+        var reactions = await _db.Set<ChatReaction>()
+            .Where(r => r.MessageId == messageId)
+            .GroupBy(r => r.Emoji)
+            .Select(g => new ReactionDto(
+                g.Key,
+                g.Count(),
+                ReactedByMe: g.Any(r => r.UserId == CurrentUserId)))
+            .ToListAsync();
+
+        return reactions;
     }
 
     // ===== Attachments =====
