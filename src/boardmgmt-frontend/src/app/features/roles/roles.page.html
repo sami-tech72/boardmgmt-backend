@@ -22,13 +22,17 @@
       </div>
 
       <div class="card-body table-responsive">
-        <table class="table table-hover align-middle">
+        <table
+          class="table table-hover align-middle"
+          [dataTableSource]="roles"
+          [appDataTable]="{ perPage: 10, labels: { searchPlaceholder: 'Search roles…' } }"
+        >
           <thead>
             <tr>
               <th style="width: 28%">Id</th>
               <th style="width: 44%">Role</th>
               <th style="width: 18%">Modules</th>
-              <th style="width: 10%">Action</th>
+              <th style="width: 10%" class="no-sort">Action</th>
             </tr>
           </thead>
 
@@ -101,7 +105,7 @@
               </td>
             </tr>
 
-            <tr *ngIf="!loading && roles.length === 0">
+            <tr *ngIf="!loading && roles.length === 0" data-dt-placeholder>
               <td colspan="4" class="text-muted">No roles yet.</td>
             </tr>
           </tbody>

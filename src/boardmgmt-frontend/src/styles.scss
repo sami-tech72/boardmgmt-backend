@@ -368,3 +368,49 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--primary-color);
 }
+
+/* DataTable enhancements */
+.datatable-toolbar {
+  margin-bottom: 1rem;
+}
+
+.datatable-toolbar .datatable-search {
+  min-width: 220px;
+}
+
+.datatable-toolbar .datatable-search .form-control {
+  box-shadow: none;
+}
+
+.datatable-pagination {
+  margin-top: 1rem;
+}
+
+.datatable-pagination .btn {
+  min-width: 100px;
+}
+
+th.datatable-sortable {
+  cursor: pointer;
+  position: relative;
+  user-select: none;
+  padding-right: 1.5rem;
+}
+
+th.datatable-sortable::after {
+  content: '\25B4\25BE';
+  position: absolute;
+  right: 0.5rem;
+  font-size: 0.65rem;
+  opacity: 0.4;
+}
+
+th.datatable-sort-asc::after {
+  content: '\25B4';
+  opacity: 0.9;
+}
+
+th.datatable-sort-desc::after {
+  content: '\25BE';
+  opacity: 0.9;
+}

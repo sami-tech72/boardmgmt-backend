@@ -241,14 +241,18 @@
         <h5 class="mb-0"><i class="fas fa-history me-2"></i>Recent Votes</h5>
       </div>
       <div class="card-body table-responsive">
-        <table class="table table-hover align-middle">
+        <table
+          class="table table-hover align-middle"
+          [dataTableSource]="recent"
+          [appDataTable]="{ perPage: 8, labels: { searchPlaceholder: 'Search votes…' } }"
+        >
           <thead>
             <tr>
               <th>Vote Title</th>
               <th>Deadline</th>
               <th>Result</th>
               <th>Ballots</th>
-              <th>Actions</th>
+              <th class="no-sort">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -285,7 +289,7 @@
                 </button>
               </td>
             </tr>
-            <tr *ngIf="!recent?.length">
+            <tr *ngIf="!recent?.length" data-dt-placeholder>
               <td colspan="5" class="text-muted">No recent votes.</td>
             </tr>
           </tbody>

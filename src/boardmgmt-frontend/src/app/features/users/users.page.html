@@ -127,14 +127,18 @@
   </div>
   <div class="card-body">
     <div class="table-responsive">
-      <table class="table table-hover align-middle">
+      <table
+        class="table table-hover align-middle"
+        [dataTableSource]="filteredForTable()"
+        [appDataTable]="{ perPage: 10, labels: { searchPlaceholder: 'Search users…' } }"
+      >
         <thead>
           <tr>
             <th>User</th>
             <th>Roles</th>
             <th>Department</th>
             <th>Status</th>
-            <th style="width: 150px;">Actions</th>
+            <th style="width: 150px;" class="no-sort">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -171,24 +175,11 @@
               </div>
             </td>
           </tr>
-          <tr *ngIf="!isLoading() && !filteredForTable().length">
+          <tr *ngIf="!isLoading() && !filteredForTable().length" data-dt-placeholder>
             <td colspan="5" class="text-center text-muted py-4">No users match your filters.</td>
           </tr>
         </tbody>
       </table>
-    </div>
-
-    <!-- Pager -->
-    <div class="d-flex justify-content-between align-items-center">
-      <div class="small text-muted">Showing {{ users().length }} of {{ total() }}</div>
-      <div class="btn-group">
-        <button class="btn btn-outline-secondary btn-sm" [disabled]="page() <= 1" (click)="prevPage()">
-  <i class="fas fa-chevron-left"></i>
-</button>
-        <button class="btn btn-outline-secondary btn-sm" (click)="nextPage()">
-  <i class="fas fa-chevron-right"></i>
-</button>
-      </div>
     </div>
   </div>
 </div>

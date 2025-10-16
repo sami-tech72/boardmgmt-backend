@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { UploadDocumentModal } from '../shared/upload-document-modal/upload-document.modal';
 import { NewFolderModal } from '../shared/new-folder-modal/new-folder.modal';
 import { DocumentViewerModalComponent } from '../shared/document-viewer-modal/document-viewer.modal';
+import { DataTableDirective } from '../shared/data-table/data-table.directive';
 import {
   DocumentsService,
   FolderDto,
@@ -31,6 +32,7 @@ type FolderStyle = { colorClass: string; iconClass: string };
     NewFolderModal,
     DocumentViewerModalComponent,
     UserMenuComponent,
+    DataTableDirective,
   ],
   templateUrl: './documents.page.html',
   styleUrls: ['./documents.page.scss'],

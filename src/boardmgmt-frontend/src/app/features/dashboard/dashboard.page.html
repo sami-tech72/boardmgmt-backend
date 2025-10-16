@@ -94,13 +94,17 @@
       </div>
       <div class="card-body">
         <div class="table-responsive" *ngIf="meetings().length; else meetingsEmpty">
-          <table class="table table-hover">
+          <table
+            class="table table-hover"
+            [dataTableSource]="meetings()"
+            [appDataTable]="{ perPage: 5, labels: { searchPlaceholder: 'Search recent meetings…' } }"
+          >
             <thead>
               <tr>
                 <th>Meeting</th>
                 <th>Date</th>
                 <th>Status</th>
-                <th>Actions</th>
+                <th class="no-sort">Actions</th>
               </tr>
             </thead>
             <tbody>

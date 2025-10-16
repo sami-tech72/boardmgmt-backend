@@ -5,6 +5,7 @@ import { Router } from '@angular/router';
 import { MeetingsService, MeetingDto, MeetingStatus, TranscriptDto } from './meetings.service';
 import { ScheduleMeetingModal } from '../shared/schedule-meeting-modal/schedule-meeting.modal';
 import { UserMenuComponent } from '../shared/user-menu/user-menu.component';
+import { DataTableDirective } from '../shared/data-table/data-table.directive';
 
 declare const bootstrap: any;
 
@@ -45,7 +46,17 @@ export class TimeSpanPipe implements PipeTransform {
 @Component({
   standalone: true,
   selector: 'app-meetings',
-  imports: [CommonModule, FormsModule, DatePipe, ScheduleMeetingModal, OrderByPipe, InitialsPipe, TimeSpanPipe,UserMenuComponent],
+  imports: [
+    CommonModule,
+    FormsModule,
+    DatePipe,
+    ScheduleMeetingModal,
+    OrderByPipe,
+    InitialsPipe,
+    TimeSpanPipe,
+    UserMenuComponent,
+    DataTableDirective,
+  ],
   templateUrl: './meetings.page.html',
   styleUrls: ['./meetings.page.scss'],
 })

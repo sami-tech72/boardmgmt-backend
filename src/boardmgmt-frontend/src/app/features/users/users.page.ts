@@ -4,13 +4,14 @@ import { FormsModule } from '@angular/forms';
 import { NgSelectModule } from '@ng-select/ng-select';
 import { UsersService, UserDto, RoleOption, DepartmentDto } from './users.service';
 import { UserMenuComponent } from '../shared/user-menu/user-menu.component';
+import { DataTableDirective } from '../shared/data-table/data-table.directive';
 
 declare const bootstrap: any;
 
 @Component({
   standalone: true,
   selector: 'app-users',
-  imports: [CommonModule, FormsModule, NgSelectModule,UserMenuComponent],
+  imports: [CommonModule, FormsModule, NgSelectModule, UserMenuComponent, DataTableDirective],
   templateUrl: './users.page.html',
   styleUrls: ['./users.page.scss'],
 })
@@ -29,7 +30,7 @@ export class UsersPage {
   selectedDepartmentId = signal<string | null>(null);
   status = signal<'active' | 'inactive' | ''>('');
   page = signal(1);
-  pageSize = signal(20);
+  pageSize = signal(100);
 
   // create
   fullName = '';

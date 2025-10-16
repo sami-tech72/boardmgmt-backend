@@ -22,6 +22,7 @@ import { CreateVoteModal } from '../shared/create-vote-modal/create-vote.modal';
 import { StatsDetailModalComponent } from '../shared/stats-detail-modal/stats-detail-modal.component';
 import { StatsKind } from './dashboard.api';
 import { UserMenuComponent } from '../shared/user-menu/user-menu.component';
+import { DataTableDirective } from '../shared/data-table/data-table.directive';
 
 
 // Meetings feature to fetch full meeting & transcripts
@@ -44,7 +45,8 @@ import { Router } from '@angular/router';
     UploadDocumentModal,
     CreateVoteModal,
     StatsDetailModalComponent,
-    UserMenuComponent
+    UserMenuComponent,
+    DataTableDirective
   ],
   templateUrl: './dashboard.page.html',
   styleUrls: ['./dashboard.page.scss'],

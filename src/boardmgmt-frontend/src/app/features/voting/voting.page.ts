@@ -10,6 +10,7 @@ import {
 import { CreateVoteModal } from '../shared/create-vote-modal/create-vote.modal';
 import { ShowVoteModal } from '../shared/show-vote-modal/show-vote.modal';
 import { UserMenuComponent } from '../shared/user-menu/user-menu.component';
+import { DataTableDirective } from '../shared/data-table/data-table.directive';
 
 interface VoteTallies {
   totalBallots: number;
@@ -22,7 +23,7 @@ interface VoteTallies {
 @Component({
   standalone: true,
   selector: 'app-voting',
-  imports: [CommonModule, FormsModule, CreateVoteModal, ShowVoteModal,UserMenuComponent],
+  imports: [CommonModule, FormsModule, CreateVoteModal, ShowVoteModal, UserMenuComponent, DataTableDirective],
   templateUrl: './voting.page.html',
   styleUrls: ['./voting.page.scss'],
 })
