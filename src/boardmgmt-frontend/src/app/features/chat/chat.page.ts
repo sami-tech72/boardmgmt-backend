@@ -166,9 +166,22 @@ export class ChatPage implements OnInit, OnDestroy {
     this.chat.reactionUpdated$.subscribe((e) => {
       if (!e) return;
       if (e.conversationId !== this.activeId()) return;
-      this.refreshLatest();
+
+      const updateList = (list: ChatMessageDto[]) =>
+        list.map((m) => (m.id === e.messageId ? { ...m, reactions: e.reactions } : m));
+
+      const nextMessages = updateList(this.messages());
+      this.messages.set(nextMessages);
+
       const root = this.threadRoot();
-      if (root && e.threadRootId && root.id === e.threadRootId) this.reloadThread();
+      if (root) {
+        if (root.id === e.messageId) {
+          this.threadRoot.set({ ...root, reactions: e.reactions });
+        }
+        if (e.threadRootId && root.id === e.threadRootId) {
+          this.threadMsgs.set(updateList(this.threadMsgs()));
+        }
+      }
     });
 
     this.chat.typing$.subscribe((t) => {
@@ -260,16 +273,21 @@ export class ChatPage implements OnInit, OnDestroy {
     const id = this.activeId();
     if (!id) return;
 
-    this.chat.history(id, undefined, 1).subscribe({
+    this.chat.history(id, undefined, 50).subscribe({
       next: (p) => {
         const incoming = [...p.items].reverse(); // make ascending for UI
         if (!incoming.length) return;
 
-        const existing = new Set(this.messages().map((m) => m.id));
-        const toAdd = incoming.filter((m) => !existing.has(m.id));
-        if (!toAdd.length) return;
+        const merged = [...this.messages(), ...incoming];
+        const map = new Map<string, ChatMessageDto>();
+        for (const msg of merged) {
+          map.set(msg.id, msg);
+        }
+        const next = Array.from(map.values()).sort((a, b) =>
+          a.createdAtUtc.localeCompare(b.createdAtUtc),
+        );
 
-        this.messages.set([...this.messages(), ...toAdd]);
+        this.messages.set(next);
         setTimeout(() => {
           this.scrollToBottomIfNear();
           this.markReadSoon();

@@ -75,6 +75,7 @@ export interface ReactionUpdatedEvent {
   messageId: string;
   conversationId: string;
   threadRootId?: string | null;
+  reactions: ReactionDto[];
 }
 export interface TypingEvent {
   conversationId: string;
