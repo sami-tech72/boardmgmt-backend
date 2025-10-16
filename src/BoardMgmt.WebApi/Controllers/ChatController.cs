@@ -299,7 +299,7 @@ public class ChatController : ControllerBase
     [HttpPost("conversations/{id:guid}/typing")]
     public async Task<ActionResult> Typing(Guid id, [FromBody] bool isTyping)
     {
-        await ChatHubEvents.Typing(_hub, id, Guid.Parse(CurrentUserId), isTyping);
+        await ChatHubEvents.Typing(_hub, id, CurrentUserId, isTyping);
         return Ok();
     }
 
