@@ -210,13 +210,13 @@ public class ChatController : ControllerBase
     private async Task<IReadOnlyList<ReactionDto>> BuildReactionPayload(Guid messageId)
     {
         var reactions = await _db.Set<ChatReaction>()
-            .Where(r => r.MessageId == messageId)
-            .GroupBy(r => r.Emoji)
-            .Select(g => new ReactionDto(
-                g.Key,
-                g.Count(),
-                ReactedByMe: g.Any(r => r.UserId == CurrentUserId)))
-            .ToListAsync();
+        .Where(r => r.MessageId == messageId)
+        .GroupBy(r => r.Emoji)
+        .Select(g => new ReactionDto(
+            g.Key,
+            g.Count(),
+            g.Any(r => r.UserId == CurrentUserId)))
+        .ToListAsync();
 
         return reactions;
     }
@@ -241,7 +241,7 @@ public class ChatController : ControllerBase
             var storageFileName = $"{Guid.NewGuid():N}{extension}";
             var storagePath = Path.Combine(storageRoot, storageFileName);
 
-            await using var fs = File.Create(storagePath);
+            await using var fs = System.IO.File.Create(storagePath);
             await f.CopyToAsync(fs);
 
             toSave.Add((originalName, f.ContentType ?? "application/octet-stream", f.Length, storagePath));
@@ -269,9 +269,9 @@ public class ChatController : ControllerBase
         var att = await _db.Set<ChatAttachment>()
             .FirstOrDefaultAsync(a => a.Id == attachmentId && a.MessageId == messageId);
 
-        if (att is null || !File.Exists(att.StoragePath)) return NotFound();
+        if (att is null || !System.IO.File.Exists(att.StoragePath)) return NotFound();
 
-        var stream = File.OpenRead(att.StoragePath);
+        var stream = System.IO.File.OpenRead(att.StoragePath);
         return File(stream, att.ContentType, att.FileName);
     }
 
