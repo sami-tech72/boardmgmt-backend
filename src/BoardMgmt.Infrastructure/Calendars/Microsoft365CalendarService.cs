@@ -127,39 +127,64 @@ public sealed class Microsoft365CalendarService : ICalendarService
 
         var end = m.EndAt ?? m.ScheduledAt.AddHours(1);
         var mailbox = ResolveMailbox(m.ExternalCalendarMailbox, "event update");
-
-        // Mirror the create logic so updates continue to persist whichever
-        // mailbox we ultimately act against.  This protects against meetings
-        // created before the create logic populated the mailbox and ensures
-        // subsequent transcript ingestion has the data it needs.
         m.ExternalCalendarMailbox = mailbox;
+
+        // 1) Fetch current event (so we can decide what to omit & get ETag)
+        var current = await GetEventWithOnlineMeetingAsync(mailbox!, m.ExternalEventId!, ct);
+        var hasOnline = current?.IsOnlineMeeting == true || current?.OnlineMeeting != null;
+
+        // 2) Build a CLEAN attendee list (valid emails only, distinct by Address)
+        var attendees = m.Attendees
+            .Where(a => !string.IsNullOrWhiteSpace(a.Email))
+            .GroupBy(a => a.Email!.Trim(), StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.First())
+            .Select(a => new Attendee
+            {
+                Type = a.IsRequired ? AttendeeType.Required : AttendeeType.Optional,
+                EmailAddress = new EmailAddress { Address = a.Email!.Trim(), Name = a.Name }
+            })
+            .ToList();
 
         var patch = new Event
         {
-            Subject = m.Title,
-            Body = new ItemBody { ContentType = BodyType.Html, Content = m.Description ?? string.Empty },
+            Subject = m.Title?.Trim(),
+            Body = new ItemBody
+            {
+                ContentType = BodyType.Html,
+                Content = m.Description ?? string.Empty
+            },
             Start = new DateTimeTimeZone { DateTime = m.ScheduledAt.UtcDateTime.ToString("o"), TimeZone = "UTC" },
             End = new DateTimeTimeZone { DateTime = end.UtcDateTime.ToString("o"), TimeZone = "UTC" },
-            Location = new Location { DisplayName = string.IsNullOrWhiteSpace(m.Location) ? "TBD" : m.Location },
-
-            // Ensure/keep Teams meeting
-            IsOnlineMeeting = true,
-            OnlineMeetingProvider = OnlineMeetingProviderType.TeamsForBusiness,
-
-            Attendees = m.Attendees.Select(a => new Attendee
-            {
-                Type = a.IsRequired ? AttendeeType.Required : AttendeeType.Optional,
-                EmailAddress = new EmailAddress { Address = a.Email ?? string.Empty, Name = a.Name }
-            }).ToList()
+            Location = new Location { DisplayName = string.IsNullOrWhiteSpace(m.Location) ? "TBD" : m.Location!.Trim() },
+            Attendees = attendees
         };
+
+        // 3) Only set online-meeting flags if it’s NOT already an online meeting
+        if (!hasOnline)
+        {
+            patch.IsOnlineMeeting = true;
+            // Important: do NOT set OnlineMeetingProvider on update; let Graph default it.
+            // patch.OnlineMeetingProvider = OnlineMeetingProviderType.TeamsForBusiness; // <-- omit on update
+        }
+
+        // 4) Prefer the current ETag for If-Match
+        var etag = current?.AdditionalData?.TryGetValue("@odata.etag", out var v) == true
+            ? v?.ToString()
+            : null;
 
         await RunGraph(
             () => _graph.Users[mailbox].Events[m.ExternalEventId].PatchAsync(
                 patch,
-                requestConfiguration => requestConfiguration.Headers.Add("If-Match", "*"),
+                requestConfiguration =>
+                {
+                    requestConfiguration.Headers.Add("If-Match", string.IsNullOrEmpty(etag) ? "*" : etag);
+                    // Optional but handy when you read things back:
+                    // requestConfiguration.Headers.Add("Prefer", "outlook.timezone=\"UTC\"");
+                },
                 cancellationToken: ct),
             "PATCH /users/{mailbox}/events/{id}", ct);
 
+        // 5) Refresh + normalize online-meeting metadata
         var refreshed = await GetEventWithOnlineMeetingAsync(mailbox!, m.ExternalEventId!, ct);
         var meeting = await EnsureTeamsMeetingDefaultsAsync(mailbox!, m.ExternalEventId!, refreshed, ct);
         ApplyOnlineMeetingMetadata(m, refreshed, meeting);
@@ -172,6 +197,7 @@ public sealed class Microsoft365CalendarService : ICalendarService
 
         return (true, joinUrl);
     }
+
 
     public async Task CancelEventAsync(string eventId, string? mailbox = null, CancellationToken ct = default)
     {
