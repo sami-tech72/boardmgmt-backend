@@ -56,7 +56,7 @@ public class VotesController : ControllerBase
         => Ok(await _mediator.Send(new GetActiveVotesQuery()));
 
     [HttpGet("recent")]
-    [Authorize]
+    [Authorize(Policy = "Votes.View")]
     public async Task<ActionResult<IReadOnlyList<VoteSummaryDto>>> Recent()
         => Ok(await _mediator.Send(new GetRecentVotesQuery()));
 
@@ -98,7 +98,7 @@ public class VotesController : ControllerBase
 
     // BoardMgmt.WebApi/Controllers/VotesController.cs
     [HttpPost("{id:guid}/ballots")]
-    [Authorize]
+    [Authorize(Policy = "Votes.View")]
     public async Task<ActionResult<VoteSummaryDto>> Submit(Guid id, [FromBody] SubmitDto body)
     {
         var summary = await _mediator.Send(new SubmitBallotCommand(id, body.Choice, body.OptionId));

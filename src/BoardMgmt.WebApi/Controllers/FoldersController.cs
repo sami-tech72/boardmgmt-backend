@@ -10,7 +10,7 @@ namespace BoardMgmt.WebApi.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize] // class-level; GET is explicitly AllowAnonymous below
+[Authorize(Policy = "Folders.View")] // class-level; GET is explicitly AllowAnonymous below
 public class FoldersController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -29,7 +29,7 @@ public class FoldersController : ControllerBase
     // -------------------- CREATE --------------------
 
     [HttpPost]
-    [Authorize(Policy = "Meetings.Create")]
+    [Authorize(Policy = "Folders.Create")]
     public async Task<IActionResult> Create([FromBody] CreateFolderCommand cmd, CancellationToken ct)
     {
         try

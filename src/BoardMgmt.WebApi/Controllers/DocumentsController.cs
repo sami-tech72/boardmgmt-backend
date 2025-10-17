@@ -14,7 +14,7 @@ namespace BoardMgmt.WebApi.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
+[Authorize(Policy = "Documents.View")]
 public class DocumentsController : ControllerBase
 {
     private readonly IMediator _mediator;

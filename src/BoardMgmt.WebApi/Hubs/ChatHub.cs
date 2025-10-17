@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.SignalR;
 
 namespace BoardMgmt.WebApi.Hubs;
 
-[Authorize]
+[Authorize(Policy = "Messages.View")]
 public class ChatHub : Hub
 {
     public Task JoinUser(string userId)
