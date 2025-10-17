@@ -16,7 +16,7 @@ namespace BoardMgmt.WebApi.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize]
+    [Authorize(Policy = "Users.View")]
     public class RolesController(ISender mediator, IRoleService roles) : ControllerBase
     {
         [HttpGet]

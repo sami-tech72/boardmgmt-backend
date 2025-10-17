@@ -15,7 +15,7 @@ namespace BoardMgmt.WebApi.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
+[Authorize(Policy = "Messages.View")]
 public class ChatController : ControllerBase
 {
     private readonly ISender _mediator;

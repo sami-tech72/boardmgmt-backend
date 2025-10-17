@@ -20,7 +20,7 @@ public class MeetingsController : ControllerBase
     // GET /api/meetings
     // -----------------------------
     [HttpGet]
-    [Authorize]
+    [Authorize(Policy = "Meetings.View")]
     public async Task<IActionResult> GetAll(CancellationToken ct)
         => this.OkApi(await _mediator.Send(new GetMeetingsQuery(), ct));
 
@@ -28,7 +28,7 @@ public class MeetingsController : ControllerBase
     // GET /api/meetings/{id}
     // -----------------------------
     [HttpGet("{id:guid}")]
-    [Authorize]
+    [Authorize(Policy = "Meetings.View")]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         var dto = await _mediator.Send(new GetMeetingByIdQuery(id), ct);
@@ -146,7 +146,7 @@ public class MeetingsController : ControllerBase
     // returns latest transcript by CreatedUtc
     // -----------------------------
     [HttpGet("{id:guid}/transcripts")]
-    [Authorize]
+    [Authorize(Policy = "Meetings.View")]
     public async Task<IActionResult> GetTranscript(Guid id, CancellationToken ct)
     {
         var tr = await _mediator.Send(new GetTranscriptByMeetingIdQuery(id), ct);

@@ -95,7 +95,7 @@ public class AuthController(ISender mediator) : ControllerBase
 
     // PUT /api/auth/{id}/roles
     [HttpPut("{id}/roles")]
-    [Authorize] // or [Authorize(Policy = "Users.ManageRoles")]
+    [Authorize(Policy = "Users.Update")] // require ability to manage user assignments
     public async Task<IActionResult> AssignRoles(string id, [FromBody] AssignRolesBody body, CancellationToken ct)
     {
         var result = await mediator.Send(new AssignRoleCommand(id, body.Roles), ct);

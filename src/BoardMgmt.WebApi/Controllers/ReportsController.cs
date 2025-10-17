@@ -17,19 +17,19 @@ public class ReportsController : ControllerBase
 
     // GET: /api/reports/dashboard?months=6
     [HttpGet("dashboard")]
-    [Authorize]
+    [Authorize(Policy = "Reports.View")]
     public async Task<IActionResult> Dashboard([FromQuery] int months = 6)
         => this.OkApi(await _mediator.Send(new GetReportsDashboardQuery(months)));
 
     // GET: /api/reports/recent?take=10
     [HttpGet("recent")]
-    [Authorize]
+    [Authorize(Policy = "Reports.View")]
     public async Task<IActionResult> Recent([FromQuery] int take = 10)
         => this.OkApi(await _mediator.Send(new GetRecentReportsQuery(take)));
 
     // POST: /api/reports/generate
     [HttpPost("generate")]
-    [Authorize]
+    [Authorize(Policy = "Reports.Create")]
     public async Task<IActionResult> Generate([FromBody] GenerateReportCommand command)
     {
         var id = await _mediator.Send(command);
