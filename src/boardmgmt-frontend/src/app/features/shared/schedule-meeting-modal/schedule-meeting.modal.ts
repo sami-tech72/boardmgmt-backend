@@ -148,7 +148,7 @@ export class ScheduleMeetingModal {
         page: this.page(),
         pageSize: this.pageSize(),
         activeOnly: true,
-      })
+      }, { suppressForbidden: true })
       .subscribe({
         next: (res) => {
           this.users.set(

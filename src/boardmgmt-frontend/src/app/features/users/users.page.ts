@@ -78,11 +78,11 @@ nextPage() {
 }
 
   private bootstrapData() {
-    this.api.getRoles().subscribe({
+    this.api.getRoles({ suppressForbidden: true }).subscribe({
       next: r => this.roles.set(r),
       error: () => this.roles.set([]),
     });
-    this.api.getDepartments(undefined, true).subscribe({
+    this.api.getDepartments(undefined, true, { suppressForbidden: true }).subscribe({
       next: d => this.departments.set(d),
       error: () => this.departments.set([]),
     });
