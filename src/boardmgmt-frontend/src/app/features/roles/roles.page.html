@@ -1,17 +1,18 @@
-<!-- Top Navigation -->
-<div
-  class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 top-navbar"
->
-  <h1 class="h2">Role</h1>
-  <div class="btn-toolbar mb-2 mb-md-0">
-    <div class="btn-group me-2">
+<!-- Page header -->
+<header class="page-header">
+  <div class="page-header__title-group">
+    <h1 class="page-title">Roles</h1>
+    <p class="page-subtitle">Define reusable permission sets for your teams.</p>
+  </div>
+  <div class="page-header__actions">
+    <div class="page-actions">
       <button class="btn btn-primary" [routerLink]="['/roles/create-role']">
         <i class="fas fa-plus"></i> Create Role
       </button>
+      <app-user-menu [displayName]="'John Doe'" (logout)="onLogout()"></app-user-menu>
     </div>
-    <app-user-menu [displayName]="'John Doe'" (logout)="onLogout()"></app-user-menu>
   </div>
-</div>
+</header>
 
 <!-- Role list -->
 <div class="row">

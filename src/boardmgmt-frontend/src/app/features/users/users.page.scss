@@ -1,2 +1,17 @@
-.table td, .table th { vertical-align: middle; }
-.badge { font-weight: 500; }
+:host {
+  display: block;
+}
+
+.table td,
+.table th {
+  vertical-align: middle;
+}
+
+.user-avatar i {
+  color: var(--color-primary-600);
+}
+
+.badge {
+  font-weight: 600;
+}
+

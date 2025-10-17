@@ -1,20 +1,23 @@
-<!-- Top Navigation -->
-<div
-  class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 top-navbar"
->
-  <h1 class="h2">Documents</h1>
-  <div class="btn-toolbar mb-2 mb-md-0">
-    <div class="btn-group me-2">
-      <button type="button" class="btn btn-primary" (click)="openUpload()">
-        <i class="fas fa-upload"></i> Upload Document
-      </button>
-      <button type="button" class="btn btn-outline-secondary" (click)="createFolder()">
-        <i class="fas fa-folder-plus"></i> New Folder
-      </button>
-    </div>
-    <app-user-menu [displayName]="'John Doe'" (logout)="onLogout()"></app-user-menu>
+<!-- Page header -->
+<header class="page-header">
+  <div class="page-header__title-group">
+    <h1 class="page-title">Documents</h1>
+    <p class="page-subtitle">Organise and collaborate on every board resource.</p>
   </div>
-</div>
+  <div class="page-header__actions">
+    <div class="page-actions">
+      <div class="btn-group">
+        <button type="button" class="btn btn-primary" (click)="openUpload()">
+          <i class="fas fa-upload"></i> Upload Document
+        </button>
+        <button type="button" class="btn btn-outline-secondary" (click)="createFolder()">
+          <i class="fas fa-folder-plus"></i> New Folder
+        </button>
+      </div>
+      <app-user-menu [displayName]="'John Doe'" (logout)="onLogout()"></app-user-menu>
+    </div>
+  </div>
+</header>
 
 <!-- Filters -->
 <div class="row mb-4">
@@ -82,7 +85,7 @@
 
           <!-- View toggle -->
           <div class="col-md-2">
-            <div class="btn-group w-100" role="group">
+            <div class="btn-group w-100 documents-view-toggle" role="group">
               <button
                 class="btn btn-outline-secondary"
                 [class.active]="viewMode() === 'grid'"

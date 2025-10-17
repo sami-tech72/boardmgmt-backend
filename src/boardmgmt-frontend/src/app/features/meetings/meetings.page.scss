@@ -1,15 +1,24 @@
-/* Chat styling */
-.chat-thread { display: flex; flex-direction: column; gap: 10px; }
-.chat-item { display: flex; align-items: flex-start; gap: 10px; }
-.chat-avatar {
-  width: 36px; height: 36px; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  background: #e9ecef; font-weight: 600; font-size: 12px;
+:host {
+  display: block;
 }
-.chat-bubble {
-  background: #f8f9fa; border: 1px solid #e5e7eb; border-radius: 10px; padding: 8px 10px; max-width: 100%;
+
+.meeting-filters .form-select,
+.meeting-filters .form-control {
+  min-height: 45px;
 }
-.chat-meta { font-size: 12px; color: #6c757d; display: flex; gap: 8px; margin-bottom: 4px; }
-.chat-speaker { font-weight: 600; color: #343a40; }
-.chat-time { font-variant-numeric: tabular-nums; }
-.chat-text { white-space: pre-wrap; }
+
+#meetingsTable td small {
+  color: rgba(100, 116, 139, 0.85);
+}
+
+.meeting-icon {
+  border: 3px solid rgba(255, 255, 255, 0.25);
+}
+
+.meeting-icon i {
+  font-size: 1rem;
+}
+
+.btn-group .btn + .btn {
+  margin-left: 0.35rem;
+}

@@ -1,21 +1,82 @@
-/* dashboard.page.css */
+:host {
+  display: block;
+}
+
 .stats-card.clickable {
   cursor: pointer;
+  transition: transform var(--transition-base);
 }
 
+.stats-card.clickable:hover {
+  transform: translateY(-6px);
+}
 
-/* Chat styling */
-.chat-thread { display: flex; flex-direction: column; gap: 10px; }
-.chat-item { display: flex; align-items: flex-start; gap: 10px; }
+.dashboard-table table {
+  border-spacing: 0;
+}
+
+.dashboard-table .badge {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.7rem;
+}
+
+.quick-actions .btn {
+  justify-content: flex-start;
+}
+
+/* Chat styling --------------------------------------------------------- */
+.chat-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.chat-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
 .chat-avatar {
-  width: 36px; height: 36px; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  background: #e9ecef; font-weight: 600; font-size: 12px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.18), rgba(14, 165, 233, 0.16));
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--color-primary-600);
 }
+
 .chat-bubble {
-  background: #f8f9fa; border: 1px solid #e5e7eb; border-radius: 10px; padding: 8px 10px; max-width: 100%;
+  background: var(--color-surface-alt);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 12px;
+  padding: 0.75rem 0.95rem;
+  max-width: 100%;
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.08);
 }
-.chat-meta { font-size: 12px; color: #6c757d; display: flex; gap: 8px; margin-bottom: 4px; }
-.chat-speaker { font-weight: 600; color: #343a40; }
-.chat-time { font-variant-numeric: tabular-nums; }
-.chat-text { white-space: pre-wrap; }
+
+.chat-meta {
+  font-size: 0.8rem;
+  color: rgba(100, 116, 139, 0.9);
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 0.35rem;
+}
+
+.chat-speaker {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.chat-time {
+  font-variant-numeric: tabular-nums;
+}
+
+.chat-text {
+  white-space: pre-wrap;
+  color: var(--color-text);
+}
