@@ -289,20 +289,9 @@ body {
     padding: 2rem;
     margin: 1rem;
   }
+}
 
-  .sidebar {
-    position: fixed;
-    top: 0;
-    left: -250px;
-    width: 250px;
-    z-index: 1000;
-    transition: left 0.3s ease;
-  }
-
-  .sidebar.show {
-    left: 0;
-  }
-
+@media (max-width: 991.98px) {
   .main-content {
     margin-left: 0;
   }
