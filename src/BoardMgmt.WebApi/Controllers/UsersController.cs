@@ -52,7 +52,7 @@ public class UsersController : ControllerBase
 
     // GET /api/users/search?q=ali&take=20
     [HttpGet("search")]
-    [Authorize(Policy = PolicyNames.Users.View)] // match your policy name
+    [Authorize] // match your policy name
     public async Task<IActionResult> Search(
         [FromQuery(Name = "q")] string? query,
         [FromQuery] int take = 20,

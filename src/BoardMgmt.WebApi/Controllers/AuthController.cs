@@ -20,7 +20,7 @@ public class AuthController(ISender mediator) : ControllerBase
 {
     // GET /api/auth?q=&page=&pageSize=&activeOnly=&roles=Admin,BoardMember&departmentId=
     [HttpGet]
-    [Authorize(Policy = PolicyNames.Users.View)]
+    [Authorize]
     public async Task<IActionResult> GetAll(
         [FromQuery] string? q,
         [FromQuery] int page = 1,
@@ -47,7 +47,7 @@ public class AuthController(ISender mediator) : ControllerBase
     // GET /api/auth/search?query=ali&take=10
     // Returns minimal shape for autocomplete: [{ id, name, email }]
     [HttpGet("search")]
-    [Authorize(Policy = PolicyNames.Users.View)]
+    [Authorize]
     public async Task<IActionResult> Search(
         [FromQuery(Name = "query")] string? query,
         [FromQuery] int take = 10,

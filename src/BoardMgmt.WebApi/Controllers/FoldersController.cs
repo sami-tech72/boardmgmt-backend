@@ -11,7 +11,7 @@ namespace BoardMgmt.WebApi.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Policy = PolicyNames.Folders.View)] // class-level; GET is explicitly AllowAnonymous below
+[Authorize] // class-level; GET is explicitly AllowAnonymous below
 public class FoldersController : ControllerBase
 {
     private readonly IMediator _mediator;

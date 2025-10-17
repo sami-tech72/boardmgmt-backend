@@ -23,7 +23,7 @@ public class DocumentsController : ControllerBase
 
     // READ
     [HttpGet("{id:guid}")]
-    [Authorize(Policy = PolicyNames.Documents.View)]
+    [Authorize]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         var dto = await _mediator.Send(new GetDocumentByIdQuery(id), ct);
@@ -32,7 +32,7 @@ public class DocumentsController : ControllerBase
     }
 
     [HttpGet]
-    [Authorize(Policy = PolicyNames.Documents.View)]
+    [Authorize]
     public async Task<IActionResult> List([FromQuery] string? folderSlug, [FromQuery] string? type,
                                           [FromQuery] string? search, [FromQuery] string? datePreset,
                                           CancellationToken ct)
