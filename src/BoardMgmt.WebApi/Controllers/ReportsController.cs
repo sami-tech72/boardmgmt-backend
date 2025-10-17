@@ -1,5 +1,6 @@
 ﻿using BoardMgmt.Application.Reports.Commands;
 using BoardMgmt.Application.Reports.Queries;
+using BoardMgmt.WebApi.Auth;
 using BoardMgmt.WebApi.Common.Http;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -17,19 +18,19 @@ public class ReportsController : ControllerBase
 
     // GET: /api/reports/dashboard?months=6
     [HttpGet("dashboard")]
-    [Authorize(Policy = "Reports.View")]
+    [Authorize(Policy = PolicyNames.Reports.View)]
     public async Task<IActionResult> Dashboard([FromQuery] int months = 6)
         => this.OkApi(await _mediator.Send(new GetReportsDashboardQuery(months)));
 
     // GET: /api/reports/recent?take=10
     [HttpGet("recent")]
-    [Authorize(Policy = "Reports.View")]
+    [Authorize(Policy = PolicyNames.Reports.View)]
     public async Task<IActionResult> Recent([FromQuery] int take = 10)
         => this.OkApi(await _mediator.Send(new GetRecentReportsQuery(take)));
 
     // POST: /api/reports/generate
     [HttpPost("generate")]
-    [Authorize(Policy = "Reports.Create")]
+    [Authorize(Policy = PolicyNames.Reports.Create)]
     public async Task<IActionResult> Generate([FromBody] GenerateReportCommand command)
     {
         var id = await _mediator.Send(command);

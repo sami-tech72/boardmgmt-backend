@@ -5,6 +5,7 @@ using BoardMgmt.Application.Documents.Commands.UploadDocuments;
 using BoardMgmt.Application.Documents.Queries.DownloadDocument;
 using BoardMgmt.Application.Documents.Queries.GetDocumentById;
 using BoardMgmt.Application.Documents.Queries.ListDocuments;
+using BoardMgmt.WebApi.Auth;
 using BoardMgmt.WebApi.Common.Http;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -14,7 +15,7 @@ namespace BoardMgmt.WebApi.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Policy = "Documents.View")]
+[Authorize(Policy = PolicyNames.Documents.View)]
 public class DocumentsController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -22,7 +23,7 @@ public class DocumentsController : ControllerBase
 
     // READ
     [HttpGet("{id:guid}")]
-    [Authorize(Policy = "Documents.View")]
+    [Authorize]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         var dto = await _mediator.Send(new GetDocumentByIdQuery(id), ct);
@@ -31,7 +32,7 @@ public class DocumentsController : ControllerBase
     }
 
     [HttpGet]
-    [Authorize(Policy = "Documents.View")]
+    [Authorize]
     public async Task<IActionResult> List([FromQuery] string? folderSlug, [FromQuery] string? type,
                                           [FromQuery] string? search, [FromQuery] string? datePreset,
                                           CancellationToken ct)
@@ -42,7 +43,7 @@ public class DocumentsController : ControllerBase
 
     // CREATE (multipart)
     [HttpPost]
-    [Authorize(Policy = "Documents.Create")]
+    [Authorize(Policy = PolicyNames.Documents.Create)]
     [Consumes("multipart/form-data")]
     [RequestSizeLimit(250 * 1024 * 1024)]
     public async Task<IActionResult> Create([FromForm] Guid? meetingId,
@@ -85,7 +86,7 @@ public class DocumentsController : ControllerBase
 
     // UPDATE (JSON metadata only)
     [HttpPut("{id:guid}")]
-    [Authorize(Policy = "Documents.Update")]
+    [Authorize(Policy = PolicyNames.Documents.Update)]
     public async Task<IActionResult> UpdateMetadata(Guid id, [FromBody] UpdateDocumentCommand body, CancellationToken ct)
     {
         if (id != body.Id)
@@ -97,7 +98,7 @@ public class DocumentsController : ControllerBase
 
     // UPDATE (multipart metadata + optional file)
     [HttpPut("{id:guid}/form")]
-    [Authorize(Policy = "Documents.Update")]
+    [Authorize(Policy = PolicyNames.Documents.Update)]
     [Consumes("multipart/form-data")]
     [RequestSizeLimit(50 * 1024 * 1024)]
     public async Task<IActionResult> UpdateViaForm(Guid id,
@@ -132,7 +133,7 @@ public class DocumentsController : ControllerBase
 
     // REPLACE file only
     [HttpPut("{id:guid}/file")]
-    [Authorize(Policy = "Documents.Update")]
+    [Authorize(Policy = PolicyNames.Documents.Update)]
     [Consumes("multipart/form-data")]
     [RequestSizeLimit(50 * 1024 * 1024)]
     public async Task<IActionResult> ReplaceFile(Guid id, [FromForm] IFormFile? file, [FromForm] string? displayName, CancellationToken ct)
@@ -153,7 +154,7 @@ public class DocumentsController : ControllerBase
 
     // DELETE
     [HttpDelete("{id:guid}")]
-    [Authorize(Policy = "Documents.Delete")]
+    [Authorize(Policy = PolicyNames.Documents.Delete)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {
         await _mediator.Send(new DeleteDocumentCommand(id), ct);
@@ -162,7 +163,7 @@ public class DocumentsController : ControllerBase
 
     // DOWNLOAD stream (works even when public URL can’t be embedded)
     [HttpGet("{id:guid}/download")]
-    [Authorize(Policy = "Documents.View")]
+    [Authorize(Policy = PolicyNames.Documents.View)]
     public async Task<IActionResult> Download(Guid id, CancellationToken ct)
     {
         var result = await _mediator.Send(new DownloadDocumentQuery(id), ct);

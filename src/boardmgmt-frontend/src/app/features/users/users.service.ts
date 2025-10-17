@@ -1,8 +1,8 @@
-import { HttpClient, HttpParams, HttpContext } from '@angular/common/http';
+import { HttpClient, HttpParams, HttpContext, HttpErrorResponse } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable, map } from 'rxjs';
+import { Observable, map, catchError, of, throwError, OperatorFunction } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { API_ENVELOPE } from '@core/interceptors/api-envelope.interceptor';
+import { API_ENVELOPE, QUIET } from '@core/interceptors/api-envelope.interceptor';
 
 export interface UserDto {
   id: string;
@@ -48,6 +48,15 @@ export class UsersService {
   private http = inject(HttpClient);
   private base = `${environment.apiUrl}/`;
 
+  private onForbiddenReturn<T>(fallback: () => T, suppress: boolean): OperatorFunction<T, T> {
+    return catchError((err: HttpErrorResponse) => {
+      if (suppress && err.status === 403) {
+        return of(fallback());
+      }
+      return throwError(() => err);
+    });
+  }
+
   private unwrapArray<T>(body: any): T[] {
     if (Array.isArray(body)) return body as T[];
     if (Array.isArray(body?.data)) return body.data as T[];
@@ -70,6 +79,7 @@ export class UsersService {
       roleNames?: string[];
       departmentId?: string | null;
     } = {},
+    opts: { suppressForbidden?: boolean } = {},
   ): Observable<PagedResult<UserDto>> {
     let params = new HttpParams();
     if (input.q) params = params.set('q', input.q);
@@ -80,38 +90,77 @@ export class UsersService {
     if (input.roleNames?.length) params = params.set('roles', input.roleNames.join(','));
     if (input.departmentId) params = params.set('departmentId', input.departmentId);
 
+    let context = new HttpContext().set(API_ENVELOPE, true);
+    if (opts.suppressForbidden) {
+      context = context.set(QUIET, true);
+    }
+
     return this.http
-      .get<any>(`${this.base}auth`, { params, context: new HttpContext().set(API_ENVELOPE, true) })
-      .pipe(map((body) => this.unwrapPaged<UserDto>(body)));
+      .get<any>(`${this.base}auth`, { params, context })
+      .pipe(
+        map((body) => this.unwrapPaged<UserDto>(body)),
+        this.onForbiddenReturn<PagedResult<UserDto>>(
+          () => ({ items: [] as UserDto[], total: 0 }),
+          opts.suppressForbidden ?? false,
+        ),
+      );
   }
 
-  getAllUsersFlat(): Observable<UserDto[]> {
+  getAllUsersFlat(opts: { suppressForbidden?: boolean } = {}): Observable<UserDto[]> {
+    let context = new HttpContext().set(API_ENVELOPE, true);
+    if (opts.suppressForbidden) {
+      context = context.set(QUIET, true);
+    }
+
     return this.http
-      .get<any>(`${this.base}auth`, { context: new HttpContext().set(API_ENVELOPE, true) })
-      .pipe(map((body) => this.unwrapArray<UserDto>(body)));
+      .get<any>(`${this.base}auth`, { context })
+      .pipe(
+        map((body) => this.unwrapArray<UserDto>(body)),
+        this.onForbiddenReturn<UserDto[]>(() => [] as UserDto[], opts.suppressForbidden ?? false),
+      );
   }
 
-  getRoles(): Observable<RoleOption[]> {
+  getRoles(opts: { suppressForbidden?: boolean } = {}): Observable<RoleOption[]> {
+    let context = new HttpContext().set(API_ENVELOPE, true);
+    if (opts.suppressForbidden) {
+      context = context.set(QUIET, true);
+    }
+
     return this.http
-      .get<any>(`${this.base}roles`, { context: new HttpContext().set(API_ENVELOPE, true) })
+      .get<any>(`${this.base}roles`, { context })
       .pipe(
         map((body) => this.unwrapArray<RoleDto>(body)),
         map((list: RoleDto[]) =>
           list.map((r: RoleDto): RoleOption => ({ id: r.id, name: r.name })),
         ),
+        this.onForbiddenReturn<RoleOption[]>(() => [] as RoleOption[], opts.suppressForbidden ?? false),
       );
   }
 
-  getDepartments(q?: string, activeOnly?: boolean): Observable<DepartmentDto[]> {
+  getDepartments(
+    q?: string,
+    activeOnly?: boolean,
+    opts: { suppressForbidden?: boolean } = {},
+  ): Observable<DepartmentDto[]> {
     let params = new HttpParams();
     if (q) params = params.set('q', q);
     if (typeof activeOnly === 'boolean') params = params.set('activeOnly', String(activeOnly));
+    let context = new HttpContext().set(API_ENVELOPE, true);
+    if (opts.suppressForbidden) {
+      context = context.set(QUIET, true);
+    }
     return this.http
       .get<any>(`${this.base}departments`, {
         params,
-        context: new HttpContext().set(API_ENVELOPE, true),
+        context,
       })
-      .pipe(map((body) => this.unwrapArray<DepartmentDto>(body)));
+      .pipe(
+        map((body) => this.unwrapArray<DepartmentDto>(body)),
+        this.onForbiddenReturn<DepartmentDto[]>(
+          () => [] as DepartmentDto[],
+          opts.suppressForbidden ?? false,
+        ),
+      );
   }
 
   register(input: {

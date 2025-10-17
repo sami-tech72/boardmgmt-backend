@@ -1,4 +1,5 @@
 using BoardMgmt.Application.Common.Interfaces;
+using BoardMgmt.WebApi.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -34,7 +35,7 @@ public sealed class MicrosoftGraphSubscriptionsController : ControllerBase
     }
 
     [HttpPost("teams-transcripts")]
-    [Authorize(Policy = "Meetings.Update")]
+    [Authorize(Policy = PolicyNames.Meetings.Update)]
     public async Task<IActionResult> CreateTeamsTranscriptSubscription(
         [FromBody] CreateTeamsTranscriptSubscriptionRequest? request,
         CancellationToken ct)

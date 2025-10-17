@@ -2,6 +2,7 @@
 using BoardMgmt.Application.Meetings.DTOs;
 using BoardMgmt.Application.Meetings.Queries;
 using BoardMgmt.Domain.Entities;
+using BoardMgmt.WebApi.Auth;
 using BoardMgmt.WebApi.Common.Http;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -20,7 +21,7 @@ public class MeetingsController : ControllerBase
     // GET /api/meetings
     // -----------------------------
     [HttpGet]
-    [Authorize(Policy = "Meetings.View")]
+    [Authorize]
     public async Task<IActionResult> GetAll(CancellationToken ct)
         => this.OkApi(await _mediator.Send(new GetMeetingsQuery(), ct));
 
@@ -28,7 +29,7 @@ public class MeetingsController : ControllerBase
     // GET /api/meetings/{id}
     // -----------------------------
     [HttpGet("{id:guid}")]
-    [Authorize(Policy = "Meetings.View")]
+    [Authorize]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         var dto = await _mediator.Send(new GetMeetingByIdQuery(id), ct);
@@ -54,7 +55,7 @@ public class MeetingsController : ControllerBase
     );
 
     [HttpPost]
-    [Authorize(Policy = "Meetings.Create")]
+    [Authorize(Policy = PolicyNames.Meetings.Create)]
     public async Task<IActionResult> Create([FromBody] CreateMeetingDto dto, CancellationToken ct)
     {
         var id = await _mediator.Send(new CreateMeetingCommand(
@@ -83,7 +84,7 @@ public class MeetingsController : ControllerBase
     );
 
     [HttpPut("{id:guid}")]
-    [Authorize(Policy = "Meetings.Update")]
+    [Authorize(Policy = PolicyNames.Meetings.Update)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateMeetingDto dto, CancellationToken ct)
     {
         if (id != dto.Id)
@@ -121,7 +122,7 @@ public class MeetingsController : ControllerBase
     // DELETE /api/meetings/{id}
     // -----------------------------
     [HttpDelete("{id:guid}")]
-    [Authorize(Policy = "Meetings.Delete")]
+    [Authorize(Policy = PolicyNames.Meetings.Delete)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {
         var ok = await _mediator.Send(new DeleteMeetingCommand(id), ct);
@@ -134,7 +135,7 @@ public class MeetingsController : ControllerBase
     // POST /api/meetings/{id}/transcripts/ingest
     // -----------------------------
     [HttpPost("{id:guid}/transcripts/ingest")]
-    [Authorize(Policy = "Meetings.Update")] // or "Meetings.IngestTranscript"
+    [Authorize(Policy = PolicyNames.Meetings.Update)] // or "Meetings.IngestTranscript"
     public async Task<IActionResult> IngestTranscript(Guid id, CancellationToken ct)
     {
         var count = await _mediator.Send(new IngestTranscriptCommand(id), ct);
@@ -146,7 +147,7 @@ public class MeetingsController : ControllerBase
     // returns latest transcript by CreatedUtc
     // -----------------------------
     [HttpGet("{id:guid}/transcripts")]
-    [Authorize(Policy = "Meetings.View")]
+    [Authorize]
     public async Task<IActionResult> GetTranscript(Guid id, CancellationToken ct)
     {
         var tr = await _mediator.Send(new GetTranscriptByMeetingIdQuery(id), ct);

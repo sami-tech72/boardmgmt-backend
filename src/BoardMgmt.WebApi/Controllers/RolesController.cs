@@ -5,6 +5,7 @@ using BoardMgmt.Application.Roles.Commands.SetRolePermissions;
 using BoardMgmt.Application.Roles.Queries.GetRoleNames;
 using BoardMgmt.Application.Roles.Queries.GetRoles;
 using BoardMgmt.Domain.Auth;
+using BoardMgmt.WebApi.Auth;
 using BoardMgmt.WebApi.Common.Http;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -16,16 +17,16 @@ namespace BoardMgmt.WebApi.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize(Policy = "Users.View")]
+    [Authorize]
     public class RolesController(ISender mediator, IRoleService roles) : ControllerBase
     {
         [HttpGet]
-        [Authorize(Policy = "Users.Page")]
+        [Authorize(Policy = PolicyNames.Users.Page)]
         public async Task<ActionResult<object>> Get(CancellationToken ct)
             => Ok(new { success = true, data = await mediator.Send(new GetRolesQuery(), ct) });
 
         [HttpGet("list")]
-        [Authorize(Policy = "Users.Page")]
+        [Authorize(Policy = PolicyNames.Users.Page)]
         public async Task<IActionResult> GetAll()
         {
             var roles = await mediator.Send(new GetRoleNamesQuery());

@@ -3,6 +3,7 @@ using BoardMgmt.Application.Votes.DTOs;
 using BoardMgmt.Application.Votes.Queries;
 using BoardMgmt.Domain.Entities;
 using BoardMgmt.Domain.Identity;
+using BoardMgmt.WebApi.Auth;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -39,7 +40,7 @@ public class VotesController : ControllerBase
     );
 
     [HttpPost]
-    [Authorize(Policy = "Votes.Create")]
+    [Authorize(Policy = PolicyNames.Votes.Create)]
     public async Task<ActionResult<object>> Create([FromBody] CreateVoteDto dto)
     {
         var id = await _mediator.Send(new CreateVoteCommand(
@@ -56,7 +57,7 @@ public class VotesController : ControllerBase
         => Ok(await _mediator.Send(new GetActiveVotesQuery()));
 
     [HttpGet("recent")]
-    [Authorize(Policy = "Votes.View")]
+    [Authorize(Policy = PolicyNames.Votes.View)]
     public async Task<ActionResult<IReadOnlyList<VoteSummaryDto>>> Recent()
         => Ok(await _mediator.Send(new GetRecentVotesQuery()));
 
@@ -98,7 +99,7 @@ public class VotesController : ControllerBase
 
     // BoardMgmt.WebApi/Controllers/VotesController.cs
     [HttpPost("{id:guid}/ballots")]
-    [Authorize(Policy = "Votes.View")]
+    [Authorize(Policy = PolicyNames.Votes.View)]
     public async Task<ActionResult<VoteSummaryDto>> Submit(Guid id, [FromBody] SubmitDto body)
     {
         var summary = await _mediator.Send(new SubmitBallotCommand(id, body.Choice, body.OptionId));

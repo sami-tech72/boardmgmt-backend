@@ -1,6 +1,7 @@
 ﻿using BoardMgmt.Application.Folders.Commands.CreateFolder;
 using BoardMgmt.Application.Folders.DTOs;
 using BoardMgmt.Application.Folders.Queries.GetFolders;
+using BoardMgmt.WebApi.Auth;
 using BoardMgmt.WebApi.Common.Http;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -10,7 +11,7 @@ namespace BoardMgmt.WebApi.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Policy = "Folders.View")] // class-level; GET is explicitly AllowAnonymous below
+[Authorize] // class-level; GET is explicitly AllowAnonymous below
 public class FoldersController : ControllerBase
 {
     private readonly IMediator _mediator;
@@ -29,7 +30,7 @@ public class FoldersController : ControllerBase
     // -------------------- CREATE --------------------
 
     [HttpPost]
-    [Authorize(Policy = "Folders.Create")]
+    [Authorize(Policy = PolicyNames.Folders.Create)]
     public async Task<IActionResult> Create([FromBody] CreateFolderCommand cmd, CancellationToken ct)
     {
         try

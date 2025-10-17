@@ -1,10 +1,11 @@
 ﻿// Hubs/ChatHub.cs
+using BoardMgmt.WebApi.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 
 namespace BoardMgmt.WebApi.Hubs;
 
-[Authorize(Policy = "Messages.View")]
+[Authorize(Policy = PolicyNames.Messages.View)]
 public class ChatHub : Hub
 {
     public Task JoinUser(string userId)
