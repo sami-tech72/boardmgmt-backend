@@ -1,86 +1,152 @@
-<div class="container-fluid">
-  <div class="row">
-    <!-- Sidebar -->
-    <nav class="col-md-3 col-lg-2 d-md-block sidebar collapse">
-      <div class="position-sticky pt-3">
-        <div class="text-center mb-4">
-          <i class="fas fa-users-cog fa-2x text-white mb-2"></i>
-          <h5 class="text-white">Board Portal</h5>
-        </div>
+<div class="shell">
+  <div class="shell__backdrop" *ngIf="sidebarOpen" (click)="toggleSidebar()"></div>
 
-        <ul class="nav flex-column">
-          <li class="nav-item" *ngIf="can(AppModule.Dashboard)">
-            <a class="nav-link" routerLink="/dashboard" routerLinkActive="active">
-              <i class="fas fa-tachometer-alt"></i> Dashboard
-            </a>
-          </li>
-
-          <li class="nav-item" *ngIf="can(AppModule.Meetings)">
-            <a class="nav-link" routerLink="/meetings" routerLinkActive="active">
-              <i class="fas fa-calendar-alt"></i> Meetings
-            </a>
-          </li>
-
-          <li class="nav-item" *ngIf="can(AppModule.Documents)">
-            <a class="nav-link" routerLink="/documents" routerLinkActive="active">
-              <i class="fas fa-file-alt"></i> Documents
-            </a>
-          </li>
-
-          <li class="nav-item" *ngIf="can(AppModule.Votes)">
-            <a class="nav-link" routerLink="/voting" routerLinkActive="active">
-              <i class="fas fa-vote-yea"></i> Voting
-            </a>
-          </li>
-
-          <li class="nav-item" *ngIf="can(AppModule.Reports)">
-            <a class="nav-link" routerLink="/reports" routerLinkActive="active">
-              <i class="fas fa-chart-bar"></i> Reports
-            </a>
-          </li>
-
-          <li class="nav-item" *ngIf="can(AppModule.Messages)">
-            <a class="nav-link" routerLink="/messages" routerLinkActive="active">
-              <i class="fas fa-comments"></i> Messages
-            </a>
-          </li>
-
-          <li class="nav-item" *ngIf="can(AppModule.Users)">
-            <a class="nav-link" routerLink="/users" routerLinkActive="active">
-              <i class="fas fa-users"></i> Users
-            </a>
-          </li>
-
-          <li class="nav-item" *ngIf="can(AppModule.Settings)">
-            <!-- if your Roles UI lives at /settings/roles, keep this link -->
-            <a class="nav-link" routerLink="/settings/roles" routerLinkActive="active">
-              <i class="fas fa-cog"></i> Settings
-            </a>
-          </li>
-
-          <li class="nav-item" *ngIf="can(AppModule.Settings)">
-            <!-- if your Roles UI lives at /settings/roles, keep this link -->
-            <a class="nav-link" routerLink="/roles" routerLinkActive="active">
-              <i class="fas fa-user-shield"></i> Role
-            </a>
-          </li>
-        </ul>
-
-        <hr class="my-3" style="border-color: rgba(255, 255, 255, 0.2)" />
-
-        <ul class="nav flex-column">
-          <li class="nav-item">
-            <a class="nav-link" href="/auth" (click)="onLogout($event)">
-              <i class="fas fa-sign-out-alt"></i> Logout
-            </a>
-          </li>
-        </ul>
+  <aside class="shell__sidebar" [class.open]="sidebarOpen">
+    <div class="sidebar__brand">
+      <div class="sidebar__brand-icon">
+        <i class="fas fa-chess-king"></i>
       </div>
+      <div>
+        <h1>Board Portal</h1>
+        <p>Governance Suite</p>
+      </div>
+    </div>
+
+    <nav class="sidebar__nav">
+      <p class="sidebar__section">Workspace</p>
+      <a
+        class="sidebar__link"
+        routerLink="/dashboard"
+        routerLinkActive="active"
+        *ngIf="can(AppModule.Dashboard)"
+        (click)="closeSidebar()"
+      >
+        <i class="fas fa-tachometer-alt"></i>
+        <span>Dashboard</span>
+      </a>
+      <a
+        class="sidebar__link"
+        routerLink="/meetings"
+        routerLinkActive="active"
+        *ngIf="can(AppModule.Meetings)"
+        (click)="closeSidebar()"
+      >
+        <i class="fas fa-calendar-alt"></i>
+        <span>Meetings</span>
+      </a>
+      <a
+        class="sidebar__link"
+        routerLink="/documents"
+        routerLinkActive="active"
+        *ngIf="can(AppModule.Documents)"
+        (click)="closeSidebar()"
+      >
+        <i class="fas fa-file-alt"></i>
+        <span>Documents</span>
+      </a>
+      <a
+        class="sidebar__link"
+        routerLink="/voting"
+        routerLinkActive="active"
+        *ngIf="can(AppModule.Votes)"
+        (click)="closeSidebar()"
+      >
+        <i class="fas fa-vote-yea"></i>
+        <span>Voting</span>
+      </a>
+      <a
+        class="sidebar__link"
+        routerLink="/reports"
+        routerLinkActive="active"
+        *ngIf="can(AppModule.Reports)"
+        (click)="closeSidebar()"
+      >
+        <i class="fas fa-chart-bar"></i>
+        <span>Reports</span>
+      </a>
+      <a
+        class="sidebar__link"
+        routerLink="/messages"
+        routerLinkActive="active"
+        *ngIf="can(AppModule.Messages)"
+        (click)="closeSidebar()"
+      >
+        <i class="fas fa-comments"></i>
+        <span>Messages</span>
+      </a>
+
+      <p class="sidebar__section" *ngIf="can(AppModule.Users) || can(AppModule.Settings)">
+        Administration
+      </p>
+      <a
+        class="sidebar__link"
+        routerLink="/users"
+        routerLinkActive="active"
+        *ngIf="can(AppModule.Users)"
+        (click)="closeSidebar()"
+      >
+        <i class="fas fa-users"></i>
+        <span>Users</span>
+      </a>
+      <a
+        class="sidebar__link"
+        routerLink="/settings/roles"
+        routerLinkActive="active"
+        *ngIf="can(AppModule.Settings)"
+        (click)="closeSidebar()"
+      >
+        <i class="fas fa-cog"></i>
+        <span>Settings</span>
+      </a>
+      <a
+        class="sidebar__link"
+        routerLink="/roles"
+        routerLinkActive="active"
+        *ngIf="can(AppModule.Settings)"
+        (click)="closeSidebar()"
+      >
+        <i class="fas fa-user-shield"></i>
+        <span>Roles</span>
+      </a>
     </nav>
 
-    <!-- Main content -->
-    <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 main-content">
-      <router-outlet></router-outlet>
+    <div class="sidebar__footer">
+      <button type="button" class="sidebar__logout" (click)="onLogout($event)">
+        <i class="fas fa-sign-out-alt"></i>
+        <span>Logout</span>
+      </button>
+    </div>
+  </aside>
+
+  <div class="shell__workspace">
+    <header class="workspace__topbar">
+      <button class="topbar__menu" type="button" (click)="toggleSidebar()" aria-label="Toggle navigation">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+
+      <div class="topbar__title">
+        <h2>Boardroom Overview</h2>
+        <p>Stay ahead of meetings, votes, and compliance tasks.</p>
+      </div>
+
+      <div class="topbar__actions">
+        <label class="topbar__search">
+          <i class="fas fa-search"></i>
+          <input type="search" placeholder="Search boards, tasks, documents" />
+        </label>
+        <a class="topbar__action" routerLink="/meetings" (click)="closeSidebar()">
+          <i class="fas fa-plus"></i>
+          Schedule Meeting
+        </a>
+      </div>
+    </header>
+
+    <main class="workspace__content">
+      <div class="workspace__surface">
+        <router-outlet></router-outlet>
+      </div>
     </main>
   </div>
 </div>

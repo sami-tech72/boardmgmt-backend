@@ -25,6 +25,9 @@ export class ShellComponent implements OnInit {
   private storage = inject(BROWSER_STORAGE);
   private router = inject(Router);
 
+  /** Mobile sidebar toggle */
+  sidebarOpen = false;
+
   ngOnInit(): void {
     // load once; MeService is idempotent
     this.me.loadPermissions();
@@ -39,5 +42,16 @@ export class ShellComponent implements OnInit {
     e.preventDefault();
     this.storage.removeItem('jwt');
     this.router.navigateByUrl('/auth');
+    this.sidebarOpen = false;
+  }
+
+  toggleSidebar() {
+    this.sidebarOpen = !this.sidebarOpen;
+  }
+
+  closeSidebar() {
+    if (this.sidebarOpen) {
+      this.sidebarOpen = false;
+    }
   }
 }
