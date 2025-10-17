@@ -5,7 +5,6 @@ using System.Collections.Generic;
 using BoardMgmt.Application.Common.Interfaces;
 using BoardMgmt.Domain.Identity;
 using BoardMgmt.Infrastructure.Persistence;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
 namespace BoardMgmt.Infrastructure.Auth
@@ -13,25 +12,25 @@ namespace BoardMgmt.Infrastructure.Auth
     public class PermissionService : IPermissionService, IRolePermissionStore
     {
         private readonly AppDbContext _db;
-        private readonly RoleManager<IdentityRole> _roles;
         private readonly ICurrentUser _current;
 
-        public PermissionService(AppDbContext db, RoleManager<IdentityRole> roles, ICurrentUser current)
+        public PermissionService(AppDbContext db, ICurrentUser current)
         {
             _db = db;
-            _roles = roles;
             _current = current;
         }
 
         public async Task<Permission> GetMineAsync(AppModule module, CancellationToken ct)
         {
-            var roleNames = _current.Roles;
-            if (roleNames.Count == 0) return Permission.None;
+            var userId = _current.UserId;
+            if (string.IsNullOrEmpty(userId)) return Permission.None;
 
-            var roleIds = await _roles.Roles
-                .Where(r => roleNames.Contains(r.Name!))
-                .Select(r => r.Id)
+            var roleIds = await _db.UserRoles
+                .Where(ur => ur.UserId == userId)
+                .Select(ur => ur.RoleId)
                 .ToListAsync(ct);
+
+            if (roleIds.Count == 0) return Permission.None;
 
             var allowedList = await _db.RolePermissions
                 .Where(p => roleIds.Contains(p.RoleId) && p.Module == module)
