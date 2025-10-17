@@ -24,11 +24,11 @@ namespace BoardMgmt.WebApi.Auth
             PermissionRequirement requirement)
         {
             var hasModuleInt = int.TryParse(requirement.ModuleId, out var moduleInt);
-            // ---- 1) Try fast path from claims on the principal (JWT / user claims)
-            // Format: type="permission", value = "<moduleInt>:<maskInt>"
+            // ---- 1) Parse permission claim (if any) for observability / diagnostics
+            bool? claimIndicatesAllowed = null;
             if (hasModuleInt)
             {
-                var claim = context.User.FindAll(ClaimType)
+                var claimMask = context.User.FindAll(ClaimType)
                     .Select(c => c.Value)
                     .Select(v =>
                     {
@@ -44,11 +44,9 @@ namespace BoardMgmt.WebApi.Auth
                     .Cast<int?>()
                     .FirstOrDefault();
 
-                if (claim is int maskFromClaim &&
-                    (((Permission)maskFromClaim) & requirement.Needed) == requirement.Needed)
+                if (claimMask is int maskFromClaim)
                 {
-                    context.Succeed(requirement);
-                    return;
+                    claimIndicatesAllowed = (((Permission)maskFromClaim) & requirement.Needed) == requirement.Needed;
                 }
             }
 
@@ -59,6 +57,11 @@ namespace BoardMgmt.WebApi.Auth
                 if (await perms.HasMineAsync(module, requirement.Needed, CancellationToken.None))
                 {
                     context.Succeed(requirement);
+                }
+                else if (claimIndicatesAllowed == true)
+                {
+                    // Claims can become stale when role permissions change while a user is logged in.
+                    // We intentionally do nothing here so the request is denied based on the DB result.
                 }
             }
         }
