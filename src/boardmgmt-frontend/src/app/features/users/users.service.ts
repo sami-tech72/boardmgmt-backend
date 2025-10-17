@@ -99,7 +99,10 @@ export class UsersService {
       .get<any>(`${this.base}auth`, { params, context })
       .pipe(
         map((body) => this.unwrapPaged<UserDto>(body)),
-        this.onForbiddenReturn(() => ({ items: [], total: 0 }), opts.suppressForbidden ?? false),
+        this.onForbiddenReturn<PagedResult<UserDto>>(
+          () => ({ items: [] as UserDto[], total: 0 }),
+          opts.suppressForbidden ?? false,
+        ),
       );
   }
 
@@ -113,7 +116,7 @@ export class UsersService {
       .get<any>(`${this.base}auth`, { context })
       .pipe(
         map((body) => this.unwrapArray<UserDto>(body)),
-        this.onForbiddenReturn(() => [], opts.suppressForbidden ?? false),
+        this.onForbiddenReturn<UserDto[]>(() => [] as UserDto[], opts.suppressForbidden ?? false),
       );
   }
 
@@ -130,7 +133,7 @@ export class UsersService {
         map((list: RoleDto[]) =>
           list.map((r: RoleDto): RoleOption => ({ id: r.id, name: r.name })),
         ),
-        this.onForbiddenReturn(() => [], opts.suppressForbidden ?? false),
+        this.onForbiddenReturn<RoleOption[]>(() => [] as RoleOption[], opts.suppressForbidden ?? false),
       );
   }
 
@@ -153,7 +156,10 @@ export class UsersService {
       })
       .pipe(
         map((body) => this.unwrapArray<DepartmentDto>(body)),
-        this.onForbiddenReturn(() => [], opts.suppressForbidden ?? false),
+        this.onForbiddenReturn<DepartmentDto[]>(
+          () => [] as DepartmentDto[],
+          opts.suppressForbidden ?? false,
+        ),
       );
   }
 
