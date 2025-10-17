@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using BoardMgmt.Application.Chat;
 using BoardMgmt.Domain.Chat;
+using BoardMgmt.Domain.Entities;
 using BoardMgmt.WebApi.Hubs;
 using Microsoft.AspNetCore.SignalR;
 using BoardMgmt.Application.Common.Interfaces;
@@ -91,12 +92,11 @@ public class ChatController : ControllerBase
         var msgId = await _mediator.Send(new SendChatMessageCommand(id, CurrentUserId, body.BodyHtml, body.ThreadRootId));
 
         // include threadRootId for thread panes to live-update
-        await ChatHubEvents.MessageCreated(_hub, id, new
+        var payload = await BuildMessageChangePayload(msgId);
+        if (payload is not null)
         {
-            id = msgId,
-            conversationId = id,
-            threadRootId = body.ThreadRootId
-        });
+            await ChatHubEvents.MessageCreated(_hub, payload);
+        }
 
         return Ok(new { id = msgId });
     }
@@ -109,19 +109,10 @@ public class ChatController : ControllerBase
         var ok = await _mediator.Send(new EditChatMessageCommand(id, CurrentUserId, body.BodyHtml));
         if (!ok) return NotFound();
 
-        var msg = await _db.Set<ChatMessage>()
-            .AsNoTracking()
-            .Select(m => new { m.Id, m.ConversationId, m.ThreadRootId })
-            .FirstOrDefaultAsync(m => m.Id == id);
-
-        if (msg is not null)
+        var payload = await BuildMessageChangePayload(id);
+        if (payload is not null)
         {
-            await ChatHubEvents.MessageEdited(_hub, msg.ConversationId, new
-            {
-                id = msg.Id,
-                conversationId = msg.ConversationId,
-                threadRootId = msg.ThreadRootId
-            });
+            await ChatHubEvents.MessageEdited(_hub, payload);
         }
 
         return Ok();
@@ -133,19 +124,10 @@ public class ChatController : ControllerBase
         var ok = await _mediator.Send(new DeleteChatMessageCommand(id, CurrentUserId));
         if (!ok) return NotFound();
 
-        var msg = await _db.Set<ChatMessage>()
-            .AsNoTracking()
-            .Select(m => new { m.Id, m.ConversationId, m.ThreadRootId })
-            .FirstOrDefaultAsync(m => m.Id == id);
-
-        if (msg is not null)
+        var payload = await BuildMessageChangePayload(id);
+        if (payload is not null)
         {
-            await ChatHubEvents.MessageDeleted(_hub, msg.ConversationId, new
-            {
-                id = msg.Id,
-                conversationId = msg.ConversationId,
-                threadRootId = msg.ThreadRootId
-            });
+            await ChatHubEvents.MessageDeleted(_hub, payload);
         }
 
         return Ok();
@@ -348,5 +330,83 @@ public class ChatController : ControllerBase
         }
 
         return justName.Length > 255 ? justName[..255] : justName;
+}
+
+    private static string? NameOf(string? first, string? last)
+        => string.IsNullOrWhiteSpace(last) ? first : $"{first} {last}";
+
+    private async Task<ChatMessageDto?> LoadMessageDto(Guid messageId)
+    {
+        var message = await _db.Set<ChatMessage>()
+            .Where(m => m.Id == messageId)
+            .Select(m => new
+            {
+                m.Id,
+                m.ConversationId,
+                m.ThreadRootId,
+                m.SenderId,
+                m.BodyHtml,
+                m.CreatedAtUtc,
+                m.EditedAtUtc,
+                m.DeletedAtUtc,
+                Attachments = m.Attachments
+                    .Select(a => new ChatAttachmentDto(a.Id, a.FileName, a.ContentType, a.FileSize))
+                    .ToList(),
+                Reactions = m.Reactions
+                    .GroupBy(r => r.Emoji)
+                    .Select(g => new { Emoji = g.Key, Count = g.Count() })
+                    .ToList(),
+                ThreadReplyCount = _db.Set<ChatMessage>()
+                    .Count(x => x.ThreadRootId == m.Id && x.DeletedAtUtc == null)
+            })
+            .AsNoTracking()
+            .FirstOrDefaultAsync();
+
+        if (message is null) return null;
+
+        var sender = await _db.Set<AppUser>()
+            .Where(u => u.Id == message.SenderId)
+            .Select(u => new { u.Id, u.FirstName, u.LastName, u.Email })
+            .FirstOrDefaultAsync();
+
+        var from = new MinimalUserDto(
+            message.SenderId,
+            NameOf(sender?.FirstName, sender?.LastName),
+            sender?.Email);
+
+        var reactions = message.Reactions
+            .Select(r => new ReactionDto(r.Emoji, r.Count, false))
+            .ToList();
+
+        return new ChatMessageDto(
+            message.Id,
+            message.ConversationId,
+            message.ThreadRootId,
+            from,
+            message.BodyHtml,
+            message.CreatedAtUtc,
+            message.EditedAtUtc,
+            message.DeletedAtUtc != null,
+            message.Attachments,
+            reactions,
+            message.ThreadReplyCount);
+    }
+
+    private async Task<ChatHubEvents.MessageChangePayload?> BuildMessageChangePayload(Guid messageId)
+    {
+        var message = await LoadMessageDto(messageId);
+        if (message is null) return null;
+
+        ChatMessageDto? threadRoot = null;
+        if (message.ThreadRootId is Guid rootId)
+        {
+            threadRoot = await LoadMessageDto(rootId);
+        }
+
+        return new ChatHubEvents.MessageChangePayload(
+            message.ConversationId,
+            message.ThreadRootId,
+            message,
+            threadRoot);
     }
 }

@@ -136,31 +136,58 @@ export class ChatPage implements OnInit, OnDestroy {
 
     // ---- Live events ----
     this.chat.messageCreated$.subscribe((e) => {
-      if (!e) return;
-      if (e.conversationId === this.activeId()) {
-        if (e.threadRootId) {
-          const root = this.threadRoot();
-          if (root && root.id === e.threadRootId) this.reloadThread();
-        } else {
-          this.refreshLatest();
+      if (!e || e.conversationId !== this.activeId()) return;
+
+      const msg = e.message;
+      if (!msg) return;
+
+      if (msg.threadRootId) {
+        this.applyThreadRootUpdate(e.threadRoot ?? null);
+        this.applyMessageToThread(msg);
+      } else {
+        this.applyMessageToConversation(msg);
+        if (this.threadRoot()?.id === msg.id) {
+          this.threadRoot.set(this.mergeMessage(this.threadRoot(), msg));
         }
+        setTimeout(() => {
+          this.scrollToBottomIfNear();
+          this.markReadSoon();
+        }, 0);
       }
     });
 
     this.chat.messageEdited$.subscribe((e) => {
-      if (!e) return;
-      if (e.conversationId !== this.activeId()) return;
-      this.refreshLatest();
-      const root = this.threadRoot();
-      if (root && e.threadRootId && root.id === e.threadRootId) this.reloadThread();
+      if (!e || e.conversationId !== this.activeId()) return;
+
+      const msg = e.message;
+      if (!msg) return;
+
+      if (msg.threadRootId) {
+        this.applyThreadRootUpdate(e.threadRoot ?? null);
+        this.applyMessageToThread(msg);
+      } else {
+        this.applyMessageToConversation(msg);
+        if (this.threadRoot()?.id === msg.id) {
+          this.threadRoot.set(this.mergeMessage(this.threadRoot(), msg));
+        }
+      }
     });
 
     this.chat.messageDeleted$.subscribe((e) => {
-      if (!e) return;
-      if (e.conversationId !== this.activeId()) return;
-      this.refreshLatest();
-      const root = this.threadRoot();
-      if (root && e.threadRootId && root.id === e.threadRootId) this.reloadThread();
+      if (!e || e.conversationId !== this.activeId()) return;
+
+      const msg = e.message;
+      if (!msg) return;
+
+      if (msg.threadRootId) {
+        this.applyThreadRootUpdate(e.threadRoot ?? null);
+        this.applyMessageToThread(msg);
+      } else {
+        this.applyMessageToConversation(msg);
+        if (this.threadRoot()?.id === msg.id) {
+          this.threadRoot.set(this.mergeMessage(this.threadRoot(), msg));
+        }
+      }
     });
 
     this.chat.reactionUpdated$.subscribe((e) => {
@@ -295,6 +322,62 @@ export class ChatPage implements OnInit, OnDestroy {
       },
       error: () => this.toast.error('Failed to refresh'),
     });
+  }
+
+  private mergeMessage(
+    prev: ChatMessageDto | null | undefined,
+    incoming: ChatMessageDto,
+  ): ChatMessageDto {
+    if (!prev) return incoming;
+
+    const reactedMap = new Map(prev.reactions?.map((r) => [r.emoji, r.reactedByMe]));
+    const reactions = incoming.reactions?.map((r) => ({
+      ...r,
+      reactedByMe: reactedMap.get(r.emoji) ?? r.reactedByMe,
+    }));
+
+    return {
+      ...prev,
+      ...incoming,
+      reactions: reactions ?? incoming.reactions,
+    };
+  }
+
+  private applyMessageToConversation(msg: ChatMessageDto) {
+    if (msg.threadRootId) return;
+    const current = this.messages();
+    const idx = current.findIndex((m) => m.id === msg.id);
+    const merged = this.mergeMessage(idx >= 0 ? current[idx] : null, msg);
+
+    let next = idx >= 0 ? [...current] : [...current, merged];
+    if (idx >= 0) next[idx] = merged;
+
+    next = [...next].sort((a, b) => a.createdAtUtc.localeCompare(b.createdAtUtc));
+    this.messages.set(next);
+  }
+
+  private applyMessageToThread(msg: ChatMessageDto) {
+    const root = this.threadRoot();
+    if (!root || msg.threadRootId !== root.id) return;
+
+    const current = this.threadMsgs();
+    const idx = current.findIndex((m) => m.id === msg.id);
+    const merged = this.mergeMessage(idx >= 0 ? current[idx] : null, msg);
+
+    let next = idx >= 0 ? [...current] : [...current, merged];
+    if (idx >= 0) next[idx] = merged;
+
+    next = [...next].sort((a, b) => a.createdAtUtc.localeCompare(b.createdAtUtc));
+    this.threadMsgs.set(next);
+  }
+
+  private applyThreadRootUpdate(root: ChatMessageDto | null) {
+    if (!root) return;
+    this.applyMessageToConversation(root);
+    const currentRoot = this.threadRoot();
+    if (currentRoot && currentRoot.id === root.id) {
+      this.threadRoot.set(this.mergeMessage(currentRoot, root));
+    }
   }
 
   onScroll() {

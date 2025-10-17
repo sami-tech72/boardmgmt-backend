@@ -56,21 +56,16 @@ export interface PagedResult<T> {
 }
 
 /** SignalR event payloads we expect from the server */
-export interface MessageCreatedEvent {
-  id: string;
+export interface MessageChangedEvent {
   conversationId: string;
   threadRootId?: string | null;
+  message: ChatMessageDto;
+  threadRoot?: ChatMessageDto | null;
 }
-export interface MessageEditedEvent {
-  id: string;
-  conversationId: string;
-  threadRootId?: string | null;
-}
-export interface MessageDeletedEvent {
-  id: string;
-  conversationId: string;
-  threadRootId?: string | null;
-}
+
+export type MessageCreatedEvent = MessageChangedEvent;
+export type MessageEditedEvent = MessageChangedEvent;
+export type MessageDeletedEvent = MessageChangedEvent;
 export interface ReactionUpdatedEvent {
   messageId: string;
   conversationId: string;
