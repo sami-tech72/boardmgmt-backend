@@ -3,6 +3,7 @@ using BoardMgmt.Application.Roles.Commands.DTOs;
 using BoardMgmt.Application.Users.Commands.Login;
 using BoardMgmt.Application.Users.Commands.Register;
 using BoardMgmt.Application.Users.Commands.Update;
+using BoardMgmt.WebApi.Auth;
 using BoardMgmt.WebApi.Common.Http;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -19,7 +20,7 @@ public class AuthController(ISender mediator) : ControllerBase
 {
     // GET /api/auth?q=&page=&pageSize=&activeOnly=&roles=Admin,BoardMember&departmentId=
     [HttpGet]
-    [Authorize(Policy = "Users.View")]
+    [Authorize(Policy = PolicyNames.Users.View)]
     public async Task<IActionResult> GetAll(
         [FromQuery] string? q,
         [FromQuery] int page = 1,
@@ -46,7 +47,7 @@ public class AuthController(ISender mediator) : ControllerBase
     // GET /api/auth/search?query=ali&take=10
     // Returns minimal shape for autocomplete: [{ id, name, email }]
     [HttpGet("search")]
-    [Authorize(Policy = "Users.View")]
+    [Authorize(Policy = PolicyNames.Users.View)]
     public async Task<IActionResult> Search(
         [FromQuery(Name = "query")] string? query,
         [FromQuery] int take = 10,
@@ -71,7 +72,7 @@ public class AuthController(ISender mediator) : ControllerBase
 
     // POST /api/auth/register
     [HttpPost("register")]
-    [Authorize(Policy = "Users.Create")]
+    [Authorize(Policy = PolicyNames.Users.Create)]
     public async Task<IActionResult> Register([FromBody] RegisterCommand command)
     {
         var result = await mediator.Send(command);
@@ -95,7 +96,7 @@ public class AuthController(ISender mediator) : ControllerBase
 
     // PUT /api/auth/{id}/roles
     [HttpPut("{id}/roles")]
-    [Authorize(Policy = "Users.Update")] // require ability to manage user assignments
+    [Authorize(Policy = PolicyNames.Users.Update)] // require ability to manage user assignments
     public async Task<IActionResult> AssignRoles(string id, [FromBody] AssignRolesBody body, CancellationToken ct)
     {
         var result = await mediator.Send(new AssignRoleCommand(id, body.Roles), ct);
@@ -119,7 +120,7 @@ public class AuthController(ISender mediator) : ControllerBase
 
     // PUT /api/auth/{id}
     [HttpPut("{id}")]
-    [Authorize(Policy = "Users.Update")]
+    [Authorize(Policy = PolicyNames.Users.Update)]
     public async Task<IActionResult> UpdateUser(string id, [FromBody] UpdateUserBody body, CancellationToken ct)
     {
         var cmd = new UpdateUserCommand( // ✅ include id

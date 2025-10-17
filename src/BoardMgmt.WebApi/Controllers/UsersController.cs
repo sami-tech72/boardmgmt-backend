@@ -1,4 +1,5 @@
 ﻿//using BoardMgmt.Application.Users.Queries.Typeahead;
+using BoardMgmt.WebApi.Auth;
 //using BoardMgmt.WebApi.Common.Http;
 //using MediatR;
 //using Microsoft.AspNetCore.Authorization;
@@ -12,7 +13,7 @@
 //{
 //    // GET /api/users/search?q=ali&take=20
 //    [HttpGet("search")]
-//    [Authorize(Policy = "Users.View")] 
+//    [Authorize(Policy = PolicyNames.Users.View)] 
 //    public async Task<IActionResult> Search(
 //        [FromQuery(Name = "q")] string? query,   // supports ?q= as a common convention
 //        [FromQuery] int take = 20,
@@ -35,6 +36,7 @@
 
 
 using BoardMgmt.Application.Users.Queries.Typeahead;
+using BoardMgmt.WebApi.Auth;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -50,7 +52,7 @@ public class UsersController : ControllerBase
 
     // GET /api/users/search?q=ali&take=20
     [HttpGet("search")]
-    [Authorize(Policy = "Users.View")] // match your policy name
+    [Authorize(Policy = PolicyNames.Users.View)] // match your policy name
     public async Task<IActionResult> Search(
         [FromQuery(Name = "q")] string? query,
         [FromQuery] int take = 20,

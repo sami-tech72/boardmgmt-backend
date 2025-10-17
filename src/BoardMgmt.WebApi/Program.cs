@@ -81,26 +81,26 @@ builder.Services.AddAuthorization();
 
 var authz = builder.Services.AddAuthorizationBuilder();
 
-void AddModulePolicies(string name, AppModule m)
+void AddModulePolicies(AppModule module, string prefix)
 {
-    var key = ((int)m).ToString();
+    var key = ((int)module).ToString();
 
-    authz.AddPolicy($"{name}.Page", p => p.Requirements.Add(new PermissionRequirement(key, Permission.Page)));
-    authz.AddPolicy($"{name}.View", p => p.Requirements.Add(new PermissionRequirement(key, Permission.View)));
-    authz.AddPolicy($"{name}.Create", p => p.Requirements.Add(new PermissionRequirement(key, Permission.Create)));
-    authz.AddPolicy($"{name}.Update", p => p.Requirements.Add(new PermissionRequirement(key, Permission.Update)));
-    authz.AddPolicy($"{name}.Delete", p => p.Requirements.Add(new PermissionRequirement(key, Permission.Delete)));
+    authz.AddPolicy($"{prefix}.Page", p => p.Requirements.Add(new PermissionRequirement(key, Permission.Page)));
+    authz.AddPolicy($"{prefix}.View", p => p.Requirements.Add(new PermissionRequirement(key, Permission.View)));
+    authz.AddPolicy($"{prefix}.Create", p => p.Requirements.Add(new PermissionRequirement(key, Permission.Create)));
+    authz.AddPolicy($"{prefix}.Update", p => p.Requirements.Add(new PermissionRequirement(key, Permission.Update)));
+    authz.AddPolicy($"{prefix}.Delete", p => p.Requirements.Add(new PermissionRequirement(key, Permission.Delete)));
 }
 
-AddModulePolicies("Users", AppModule.Users);
-AddModulePolicies("Meetings", AppModule.Meetings);
-AddModulePolicies("Documents", AppModule.Documents);
-AddModulePolicies("Folders", AppModule.Folders);
-AddModulePolicies("Votes", AppModule.Votes);
-AddModulePolicies("Dashboard", AppModule.Dashboard);
-AddModulePolicies("Settings", AppModule.Settings);
-AddModulePolicies("Reports", AppModule.Reports);
-AddModulePolicies("Messages", AppModule.Messages);
+AddModulePolicies(AppModule.Users, PolicyNames.Users.Prefix);
+AddModulePolicies(AppModule.Meetings, PolicyNames.Meetings.Prefix);
+AddModulePolicies(AppModule.Documents, PolicyNames.Documents.Prefix);
+AddModulePolicies(AppModule.Folders, PolicyNames.Folders.Prefix);
+AddModulePolicies(AppModule.Votes, PolicyNames.Votes.Prefix);
+AddModulePolicies(AppModule.Dashboard, PolicyNames.Dashboard.Prefix);
+AddModulePolicies(AppModule.Settings, PolicyNames.Settings.Prefix);
+AddModulePolicies(AppModule.Reports, PolicyNames.Reports.Prefix);
+AddModulePolicies(AppModule.Messages, PolicyNames.Messages.Prefix);
 
 builder.Services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
 

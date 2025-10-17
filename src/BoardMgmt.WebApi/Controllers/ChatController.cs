@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using BoardMgmt.Application.Chat;
 using BoardMgmt.Domain.Chat;
 using BoardMgmt.Domain.Entities;
+using BoardMgmt.WebApi.Auth;
 using BoardMgmt.WebApi.Hubs;
 using Microsoft.AspNetCore.SignalR;
 using BoardMgmt.Application.Common.Interfaces;
@@ -15,7 +16,7 @@ namespace BoardMgmt.WebApi.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Policy = "Messages.View")]
+[Authorize(Policy = PolicyNames.Messages.View)]
 public class ChatController : ControllerBase
 {
     private readonly ISender _mediator;

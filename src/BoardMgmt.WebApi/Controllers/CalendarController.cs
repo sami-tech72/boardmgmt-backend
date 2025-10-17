@@ -2,6 +2,7 @@
 using BoardMgmt.Application.Calendars.Commands;
 using BoardMgmt.Application.Calendars.Queries;
 using BoardMgmt.Domain.Calendars;
+using BoardMgmt.WebApi.Auth;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -23,7 +24,7 @@ public sealed class CalendarController : ControllerBase
 
     // GET /api/calendar/range?start=2025-09-01T00:00:00Z&end=2025-09-30T23:59:59Z&provider=Zoom|Microsoft365|All
     [HttpGet("range")]
-    [Authorize(Policy = "Meetings.View")]
+    [Authorize(Policy = PolicyNames.Meetings.View)]
     public async Task<ActionResult<IReadOnlyList<CalendarEventDto>>> GetRange(
         [FromQuery] DateTimeOffset? start,
         [FromQuery] DateTimeOffset? end,
@@ -73,7 +74,7 @@ public sealed class CalendarController : ControllerBase
     }
 
     [HttpGet("range-db")]
-    [Authorize(Policy = "Meetings.View")]
+    [Authorize(Policy = PolicyNames.Meetings.View)]
     public async Task<IReadOnlyList<CalendarEventDto>> GetRangeFromDb(
         [FromQuery] DateTimeOffset? start,
         [FromQuery] DateTimeOffset? end,
@@ -91,7 +92,7 @@ public sealed class CalendarController : ControllerBase
 
 
     [HttpPut("move/{id:guid}")]
-    [Authorize(Policy = "Meetings.Update")]
+    [Authorize(Policy = PolicyNames.Meetings.Update)]
     public async Task<IActionResult> Move(Guid id, [FromBody] MoveCalendarEventDto body, CancellationToken ct)
     {
         if (body is null) return BadRequest("Body required.");
