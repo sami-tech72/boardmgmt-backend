@@ -25,6 +25,8 @@ export class ShellComponent implements OnInit {
   private storage = inject(BROWSER_STORAGE);
   private router = inject(Router);
 
+  sidebarOpen = false;
+
   ngOnInit(): void {
     // load once; MeService is idempotent
     this.me.loadPermissions();
@@ -35,8 +37,21 @@ export class ShellComponent implements OnInit {
     return this.access.can(module, Permission.View);
   }
 
+  toggleSidebar() {
+    this.sidebarOpen = !this.sidebarOpen;
+  }
+
+  closeSidebar() {
+    this.sidebarOpen = false;
+  }
+
+  onNavigate() {
+    this.closeSidebar();
+  }
+
   onLogout(e: Event) {
     e.preventDefault();
+    this.closeSidebar();
     this.storage.removeItem('jwt');
     this.router.navigateByUrl('/auth');
   }
