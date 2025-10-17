@@ -2,6 +2,8 @@ import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, RouterLinkActive, RouterOutlet, Router } from '@angular/router';
 
+import { UserMenuComponent } from '@features/shared/user-menu/user-menu.component';
+
 import { AccessService } from '@core/services/access.service';
 import { AppModule, Permission } from '@core/models/security.models';
 import { MeService } from '@core/services/me.service';
@@ -10,7 +12,7 @@ import { BROWSER_STORAGE } from '@core/tokens/browser-storage.token';
 @Component({
   standalone: true,
   selector: 'app-shell',
-  imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive],
+  imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive, UserMenuComponent],
   templateUrl: './shell.component.html',
   styleUrls: ['./shell.component.scss'],
 })
@@ -35,8 +37,8 @@ export class ShellComponent implements OnInit {
     return this.access.can(module, Permission.View);
   }
 
-  onLogout(e: Event) {
-    e.preventDefault();
+  onLogout(e?: Event) {
+    e?.preventDefault();
     this.storage.removeItem('jwt');
     this.router.navigateByUrl('/auth');
   }
