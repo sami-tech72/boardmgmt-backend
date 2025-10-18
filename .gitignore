@@ -108,6 +108,9 @@ zoom_token_cache.json
 msgraph_token_cache.json
 graph_oauth.json
 zoom_oauth.json
+# Catch any other local configuration overrides
+*.local.json
+*.Local.json
 
 # Any temporary secret folders
 /secrets/
