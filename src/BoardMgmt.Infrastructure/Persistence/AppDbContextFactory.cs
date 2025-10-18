@@ -23,16 +23,9 @@ public sealed class AppDbContextFactory : IDesignTimeDbContextFactory<AppDbConte
             .AddEnvironmentVariables()
             .Build();
 
-        var cs = config.GetConnectionString("DefaultConnection");
-        var useSqlite = false;
-
-        if (string.IsNullOrWhiteSpace(cs))
-        {
-            var dataDirectory = Path.Combine(basePath, "App_Data");
-            Directory.CreateDirectory(dataDirectory);
-            cs = $"Data Source={Path.Combine(dataDirectory, "boardmgmt.db")}";
-            useSqlite = true;
-        }
+        var (cs, useSqlite) = ConnectionStringHelper.Resolve(
+            config.GetConnectionString("DefaultConnection"),
+            basePath);
 
         var builder = new DbContextOptionsBuilder<AppDbContext>();
 
