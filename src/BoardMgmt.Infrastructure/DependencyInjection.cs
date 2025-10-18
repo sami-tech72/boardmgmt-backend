@@ -41,8 +41,11 @@ namespace BoardMgmt.Infrastructure
             services.Configure<SmtpOptions>(config.GetSection("Smtp"));
 
             // --- Connection string (fallback safe for local dev) ---
-            var cs = config.GetConnectionString("DefaultConnection")
-                     ?? "Server=localhost\\SQLEXPRESS;Database=BoardMgmtDb;Trusted_Connection=False;TrustServerCertificate=True;MultipleActiveResultSets=True";
+            var cs = config.GetConnectionString("DefaultConnection");
+            if (string.IsNullOrWhiteSpace(cs))
+            {
+                cs = "Server=(localdb)\\MSSQLLocalDB;Database=BoardMgmtDb;Trusted_Connection=True;MultipleActiveResultSets=True";
+            }
 
             // --- DbContext with robust SQL Server + logging setup ---
             services.AddDbContext<AppDbContext>((sp, options) =>

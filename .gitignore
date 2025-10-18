@@ -71,6 +71,7 @@ yarn-error.log*
 pnpm-debug.log*
 
 # Environment files
+.env
 src/environments/environment*.ts
 
 ## =========================
@@ -143,6 +144,7 @@ boardmgmt-frontend/node_modules/
 
 # Environment files
 boardmgmt-frontend/src/environments/environment*.ts
+boardmgmt-frontend/.env
 
 # VS Code settings for frontend
 boardmgmt-frontend/.vscode/
