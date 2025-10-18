@@ -4,6 +4,7 @@ using BoardMgmt.Infrastructure;
 using BoardMgmt.WebApi.Auth;
 using BoardMgmt.WebApi.Common.Http;
 using BoardMgmt.WebApi.Hubs;
+using DotNetEnv;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http.Features;
@@ -13,6 +14,8 @@ using Microsoft.OpenApi.Models;
 using Serilog;
 using System.Reflection;
 using System.Text;
+
+LoadEnvIfPresent();
 
 var builder = WebApplication.CreateBuilder(args);
 var config = builder.Configuration;
@@ -34,9 +37,13 @@ builder.Services.AddInfrastructure(config);
 builder.Services.AddApplication();
 
 // ---- JWT ----
-var issuer = config["Jwt:Issuer"] ?? "BoardMgmt";
-var audience = config["Jwt:Audience"] ?? "BoardMgmt.Client";
-var key = config["Jwt:Key"] ?? "super-secret-key-change-me";
+var issuerSetting = config["Jwt:Issuer"];
+var audienceSetting = config["Jwt:Audience"];
+var keySetting = config["Jwt:Key"];
+
+var issuer = string.IsNullOrWhiteSpace(issuerSetting) ? "BoardMgmt" : issuerSetting;
+var audience = string.IsNullOrWhiteSpace(audienceSetting) ? "BoardMgmt.Client" : audienceSetting;
+var key = string.IsNullOrWhiteSpace(keySetting) ? "super-secret-key-change-me" : keySetting;
 
 builder.Services
     .AddAuthentication(o =>
@@ -197,6 +204,26 @@ app.UseAuthorization();       // then authorization
 
 app.MapControllers();
 app.MapHub<ChatHub>("/hubs/chat");
+
+
+static void LoadEnvIfPresent()
+{
+    var current = Directory.GetCurrentDirectory();
+
+    while (!string.IsNullOrWhiteSpace(current))
+    {
+        var envPath = Path.Combine(current, ".env");
+
+        if (File.Exists(envPath))
+        {
+            Env.Load(envPath);
+            break;
+        }
+
+        var parent = Directory.GetParent(current);
+        current = parent?.FullName;
+    }
+}
 
 
 app.Run();

@@ -1,4 +1,5 @@
 ﻿using System.IO;
+using DotNetEnv;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.Extensions.Configuration;
@@ -13,6 +14,8 @@ public sealed class AppDbContextFactory : IDesignTimeDbContextFactory<AppDbConte
         // Assumes running EF with --project BoardMgmt.Infrastructure --startup-project BoardMgmt.WebApi
         var basePath = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "..", "BoardMgmt.WebApi"));
 
+        LoadEnvIfPresent(basePath);
+
         var config = new ConfigurationBuilder()
             .SetBasePath(basePath)
             .AddJsonFile("appsettings.json", optional: false)
@@ -20,13 +23,41 @@ public sealed class AppDbContextFactory : IDesignTimeDbContextFactory<AppDbConte
             .AddEnvironmentVariables()
             .Build();
 
-        var cs = config.GetConnectionString("DefaultConnection")
-                 ?? "Server=localhost\\SQLEXPRESS;Database=BoardMgmtDb;Trusted_Connection=False;TrustServerCertificate=True;MultipleActiveResultSets=True";
+        var (cs, useSqlite) = ConnectionStringHelper.Resolve(
+            config.GetConnectionString("DefaultConnection"),
+            basePath);
 
-        var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseSqlServer(cs)
-            .Options;
+        var builder = new DbContextOptionsBuilder<AppDbContext>();
+
+        if (useSqlite)
+        {
+            builder.UseSqlite(cs);
+        }
+        else
+        {
+            builder.UseSqlServer(cs);
+        }
+
+        var options = builder.Options;
 
         return new AppDbContext(options);
+    }
+
+    private static void LoadEnvIfPresent(string startPath)
+    {
+        var current = new DirectoryInfo(startPath);
+
+        while (current is not null)
+        {
+            var envPath = Path.Combine(current.FullName, ".env");
+
+            if (File.Exists(envPath))
+            {
+                Env.Load(envPath);
+                break;
+            }
+
+            current = current.Parent;
+        }
     }
 }

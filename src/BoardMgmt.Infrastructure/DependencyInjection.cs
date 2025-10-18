@@ -27,6 +27,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Graph;
 using System;
+using System.IO;
 using GraphCalendarOptions = BoardMgmt.Infrastructure.Calendars.GraphOptions;
 using GraphIntegrationOptions = BoardMgmt.Infrastructure.Graph.GraphOptions;
 
@@ -41,18 +42,29 @@ namespace BoardMgmt.Infrastructure
             services.Configure<SmtpOptions>(config.GetSection("Smtp"));
 
             // --- Connection string (fallback safe for local dev) ---
-            var cs = config.GetConnectionString("DefaultConnection")
-                     ?? "Server=localhost\\SQLEXPRESS;Database=BoardMgmtDb;Trusted_Connection=False;TrustServerCertificate=True;MultipleActiveResultSets=True";
+            var (connectionString, useSqlite) = ConnectionStringHelper.Resolve(
+                config.GetConnectionString("DefaultConnection"),
+                AppContext.BaseDirectory);
 
             // --- DbContext with robust SQL Server + logging setup ---
             services.AddDbContext<AppDbContext>((sp, options) =>
             {
-                options.UseSqlServer(cs, sql =>
+                if (useSqlite)
                 {
-                    sql.MigrationsAssembly(typeof(AppDbContext).Assembly.FullName);
-                    sql.EnableRetryOnFailure(maxRetryCount: 5, maxRetryDelay: TimeSpan.FromSeconds(10), errorNumbersToAdd: null);
-                    sql.CommandTimeout(60);
-                });
+                    options.UseSqlite(connectionString, sqlite =>
+                    {
+                        sqlite.MigrationsAssembly(typeof(AppDbContext).Assembly.FullName);
+                    });
+                }
+                else
+                {
+                    options.UseSqlServer(connectionString, sql =>
+                    {
+                        sql.MigrationsAssembly(typeof(AppDbContext).Assembly.FullName);
+                        sql.EnableRetryOnFailure(maxRetryCount: 5, maxRetryDelay: TimeSpan.FromSeconds(10), errorNumbersToAdd: null);
+                        sql.CommandTimeout(60);
+                    });
+                }
 
                 // Route EF logs through Microsoft.Extensions.Logging (which Program.cs sends to Serilog)
                 var env = sp.GetRequiredService<IHostEnvironment>();
