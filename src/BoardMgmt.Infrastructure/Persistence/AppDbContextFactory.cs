@@ -24,14 +24,28 @@ public sealed class AppDbContextFactory : IDesignTimeDbContextFactory<AppDbConte
             .Build();
 
         var cs = config.GetConnectionString("DefaultConnection");
+        var useSqlite = false;
+
         if (string.IsNullOrWhiteSpace(cs))
         {
-            cs = "Server=(localdb)\\MSSQLLocalDB;Database=BoardMgmtDb;Trusted_Connection=True;MultipleActiveResultSets=True";
+            var dataDirectory = Path.Combine(basePath, "App_Data");
+            Directory.CreateDirectory(dataDirectory);
+            cs = $"Data Source={Path.Combine(dataDirectory, "boardmgmt.db")}";
+            useSqlite = true;
         }
 
-        var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseSqlServer(cs)
-            .Options;
+        var builder = new DbContextOptionsBuilder<AppDbContext>();
+
+        if (useSqlite)
+        {
+            builder.UseSqlite(cs);
+        }
+        else
+        {
+            builder.UseSqlServer(cs);
+        }
+
+        var options = builder.Options;
 
         return new AppDbContext(options);
     }
