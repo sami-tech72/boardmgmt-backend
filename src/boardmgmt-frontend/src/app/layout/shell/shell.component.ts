@@ -15,24 +15,30 @@ import { BROWSER_STORAGE } from '@core/tokens/browser-storage.token';
   styleUrls: ['./shell.component.scss'],
 })
 export class ShellComponent implements OnInit {
-  // expose enums to the template
   AppModule = AppModule;
   Permission = Permission;
 
-  // DI (Angular 17 style)
   private me = inject(MeService);
   private access = inject(AccessService);
   private storage = inject(BROWSER_STORAGE);
   private router = inject(Router);
 
+  mobileSidebarOpen = false;
+
   ngOnInit(): void {
-    // load once; MeService is idempotent
     this.me.loadPermissions();
   }
 
-  /** View-permission shortcut for menu items */
   can(module: AppModule) {
     return this.access.can(module, Permission.View);
+  }
+
+  toggleMobileSidebar() {
+    this.mobileSidebarOpen = !this.mobileSidebarOpen;
+  }
+
+  closeMobileSidebar() {
+    this.mobileSidebarOpen = false;
   }
 
   onLogout(e: Event) {
