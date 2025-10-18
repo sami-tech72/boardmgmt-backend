@@ -42,7 +42,7 @@ namespace BoardMgmt.Infrastructure
 
             // --- Connection string (fallback safe for local dev) ---
             var cs = config.GetConnectionString("DefaultConnection")
-                     ?? "Server=localhost\\SQLEXPRESS;Database=BoardMgmtDb;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=True";
+                     ?? "Server=localhost\\SQLEXPRESS;Database=BoardMgmtDb;Trusted_Connection=False;TrustServerCertificate=True;MultipleActiveResultSets=True";
 
             // --- DbContext with robust SQL Server + logging setup ---
             services.AddDbContext<AppDbContext>((sp, options) =>
