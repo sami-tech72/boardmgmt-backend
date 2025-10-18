@@ -19,13 +19,14 @@ import {
 import { GenerateReportModal } from '../shared/generate-report-modal/generate-report.modal';
 import { BROWSER_STORAGE } from '@core/tokens/browser-storage.token';
 import { UserMenuComponent } from '../shared/user-menu/user-menu.component';
+import { PageHeaderComponent } from '../shared/page-header/page-header.component';
 
 declare const bootstrap: any;
 
 @Component({
   standalone: true,
   selector: 'app-reports',
-  imports: [CommonModule, GenerateReportModal,UserMenuComponent],
+  imports: [CommonModule, GenerateReportModal, UserMenuComponent, PageHeaderComponent],
   templateUrl: './reports.page.html',
   styleUrls: ['./reports.page.scss'],
 })

@@ -4,6 +4,8 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
 
+import { PageHeaderComponent } from '../../shared/page-header/page-header.component';
+
 import { MODULES, Permission, AppModule, toggleFlag } from '@core/models/security.models';
 import { RolesService, PermissionDto } from '@core/services/roles.service';
 import { MeService } from '@core/services/me.service';
@@ -33,7 +35,7 @@ const PERM_ORDER: { key: Permission; label: string }[] = [
 @Component({
   selector: 'app-create-role',
   standalone: true,
- imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, PageHeaderComponent],
   templateUrl: './create-role.component.html',
   styleUrls: ['./create-role.component.scss'],
 })

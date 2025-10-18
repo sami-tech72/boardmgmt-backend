@@ -1,7 +1,5 @@
-<!-- Top Navigation -->
-<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 top-navbar">
-  <h1 class="h2">Reports & Analytics</h1>
-  <div class="btn-toolbar mb-2 mb-md-0">
+<app-page-header title="Reports &amp; Analytics">
+  <div pageHeaderActions class="btn-toolbar mb-2 mb-md-0">
     <div class="btn-group me-2">
       <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#reportGeneratorModal">
         <i class="fas fa-plus"></i> Generate Report
@@ -10,9 +8,9 @@
         <i class="fas fa-download"></i> Export Data
       </button>
     </div>
-     <app-user-menu [displayName]="'John Doe'" (logout)="onLogout()"></app-user-menu>
+    <app-user-menu [displayName]="'John Doe'" (logout)="onLogout()"></app-user-menu>
   </div>
-</div>
+</app-page-header>
 
 <!-- Report Categories -->
 <div class="row mb-4">

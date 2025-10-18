@@ -1,7 +1,5 @@
-<!-- Top Navigation -->
-<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 top-navbar">
-  <h1 class="h2">User Management</h1>
-  <div class="btn-toolbar mb-2 mb-md-0">
+<app-page-header title="User Management">
+  <div pageHeaderActions class="btn-toolbar mb-2 mb-md-0">
     <div class="btn-group me-2">
       <button type="button" class="btn btn-primary" (click)="openCreate()">
         <i class="fas fa-plus"></i> Add User
@@ -12,7 +10,7 @@
     </div>
     <app-user-menu [displayName]="'John Doe'" (logout)="onLogout()"></app-user-menu>
   </div>
-</div>
+</app-page-header>
 
 <!-- Stats -->
 <div class="row mb-4">

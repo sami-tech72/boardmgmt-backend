@@ -5,11 +5,12 @@ import { RouterLink } from '@angular/router';
 import { ToastrService } from 'ngx-toastr';
 import { RolesService, RoleListItem } from '@core/services/roles.service';
 import { UserMenuComponent } from '../shared/user-menu/user-menu.component';
+import { PageHeaderComponent } from '../shared/page-header/page-header.component';
 
 @Component({
   standalone: true,
   selector: 'app-roles',
-  imports: [CommonModule, FormsModule, RouterLink,UserMenuComponent],
+  imports: [CommonModule, FormsModule, RouterLink, UserMenuComponent, PageHeaderComponent],
   templateUrl: './roles.page.html',
   styleUrls: ['./roles.page.scss'],
 })

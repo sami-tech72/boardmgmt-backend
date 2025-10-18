@@ -12,6 +12,7 @@ import {
   DatePreset,
 } from '@core/services/documents.service';
 import { UserMenuComponent } from '../shared/user-menu/user-menu.component';
+import { PageHeaderComponent } from '../shared/page-header/page-header.component';
 
 declare global {
   interface Window {
@@ -31,6 +32,7 @@ type FolderStyle = { colorClass: string; iconClass: string };
     NewFolderModal,
     DocumentViewerModalComponent,
     UserMenuComponent,
+    PageHeaderComponent,
   ],
   templateUrl: './documents.page.html',
   styleUrls: ['./documents.page.scss'],

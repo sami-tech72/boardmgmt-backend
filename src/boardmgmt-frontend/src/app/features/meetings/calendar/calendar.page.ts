@@ -26,6 +26,7 @@ import { CalendarApiService, CalendarEventDto } from './calendar-api.service';
 import { ScheduleMeetingModal } from '../../shared/schedule-meeting-modal/schedule-meeting.modal';
 import { MeetingsService, MeetingDto } from '../../meetings/meetings.service';
 import { UserMenuComponent } from '@app/features/shared/user-menu/user-menu.component';
+import { PageHeaderComponent } from '@app/features/shared/page-header/page-header.component';
 
 type Provider = 'Zoom' | 'Microsoft365' | 'All';
 type EventMeta = { id: string; joinUrl?: string | null; provider?: Provider | null };
@@ -47,6 +48,7 @@ const colors = {
     DragAndDropModule,
     ScheduleMeetingModal,
     UserMenuComponent,
+    PageHeaderComponent,
   ],
   templateUrl: './calendar.page.html',
   styleUrls: ['./calendar.page.scss'],
