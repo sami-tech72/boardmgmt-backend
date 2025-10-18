@@ -1,5 +1,5 @@
 import { ApplicationConfig } from '@angular/core';
-import { provideHttpClient, withInterceptors } from '@angular/common/http';
+import { provideHttpClient, withFetch, withInterceptors } from '@angular/common/http';
 import { provideRouter } from '@angular/router';
 import { routes } from './app.routes';
 import { authInterceptor } from '@core/interceptors/auth.interceptor';
@@ -18,6 +18,9 @@ export const appConfig: ApplicationConfig = {
       closeButton: true,
     }),
     // Order: auth → envelope (attach token, then unwrap/handle)
-    provideHttpClient(withInterceptors([authInterceptor, apiEnvelopeInterceptor])),
+    provideHttpClient(
+      withFetch(),
+      withInterceptors([authInterceptor, apiEnvelopeInterceptor])
+    ),
   ],
 };
