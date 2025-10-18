@@ -27,6 +27,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Graph;
 using System;
+using System.IO;
 using GraphCalendarOptions = BoardMgmt.Infrastructure.Calendars.GraphOptions;
 using GraphIntegrationOptions = BoardMgmt.Infrastructure.Graph.GraphOptions;
 
@@ -42,20 +43,35 @@ namespace BoardMgmt.Infrastructure
 
             // --- Connection string (fallback safe for local dev) ---
             var cs = config.GetConnectionString("DefaultConnection");
+            var useSqlite = false;
+
             if (string.IsNullOrWhiteSpace(cs))
             {
-                cs = "Server=(localdb)\\MSSQLLocalDB;Database=BoardMgmtDb;Trusted_Connection=True;MultipleActiveResultSets=True";
+                var dataDirectory = Path.Combine(AppContext.BaseDirectory, "App_Data");
+                Directory.CreateDirectory(dataDirectory);
+                cs = $"Data Source={Path.Combine(dataDirectory, "boardmgmt.db")}";
+                useSqlite = true;
             }
 
             // --- DbContext with robust SQL Server + logging setup ---
             services.AddDbContext<AppDbContext>((sp, options) =>
             {
-                options.UseSqlServer(cs, sql =>
+                if (useSqlite)
                 {
-                    sql.MigrationsAssembly(typeof(AppDbContext).Assembly.FullName);
-                    sql.EnableRetryOnFailure(maxRetryCount: 5, maxRetryDelay: TimeSpan.FromSeconds(10), errorNumbersToAdd: null);
-                    sql.CommandTimeout(60);
-                });
+                    options.UseSqlite(cs, sqlite =>
+                    {
+                        sqlite.MigrationsAssembly(typeof(AppDbContext).Assembly.FullName);
+                    });
+                }
+                else
+                {
+                    options.UseSqlServer(cs, sql =>
+                    {
+                        sql.MigrationsAssembly(typeof(AppDbContext).Assembly.FullName);
+                        sql.EnableRetryOnFailure(maxRetryCount: 5, maxRetryDelay: TimeSpan.FromSeconds(10), errorNumbersToAdd: null);
+                        sql.CommandTimeout(60);
+                    });
+                }
 
                 // Route EF logs through Microsoft.Extensions.Logging (which Program.cs sends to Serilog)
                 var env = sp.GetRequiredService<IHostEnvironment>();
