@@ -6,11 +6,12 @@ import { AccessService } from '@core/services/access.service';
 import { AppModule, Permission } from '@core/models/security.models';
 import { MeService } from '@core/services/me.service';
 import { BROWSER_STORAGE } from '@core/tokens/browser-storage.token';
+import { UserMenuComponent } from '@shared/user-menu/user-menu.component';
 
 @Component({
   standalone: true,
   selector: 'app-shell',
-  imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive],
+  imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive, UserMenuComponent],
   templateUrl: './shell.component.html',
   styleUrls: ['./shell.component.scss'],
 })
@@ -18,6 +19,8 @@ export class ShellComponent implements OnInit {
   // expose enums to the template
   AppModule = AppModule;
   Permission = Permission;
+
+  sidebarOpen = false;
 
   // DI (Angular 17 style)
   private me = inject(MeService);
@@ -35,8 +38,18 @@ export class ShellComponent implements OnInit {
     return this.access.can(module, Permission.View);
   }
 
-  onLogout(e: Event) {
-    e.preventDefault();
+  toggleSidebar() {
+    this.sidebarOpen = !this.sidebarOpen;
+  }
+
+  closeSidebar() {
+    if (typeof window !== 'undefined' && window.innerWidth < 992) {
+      this.sidebarOpen = false;
+    }
+  }
+
+  onLogout(e?: Event) {
+    e?.preventDefault();
     this.storage.removeItem('jwt');
     this.router.navigateByUrl('/auth');
   }
