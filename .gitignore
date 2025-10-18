@@ -95,6 +95,11 @@ appsettings.Development.json
 appsettings.Graph.json
 appsettings.Zoom.json
 appsettings.Local.json
+# Explicitly ignore WebApi-local copies that may include secrets
+src/BoardMgmt.WebApi/appsettings.Development.json
+src/BoardMgmt.WebApi/appsettings.Graph.json
+src/BoardMgmt.WebApi/appsettings.Zoom.json
+src/BoardMgmt.WebApi/appsettings.Local.json
 
 # Local secrets or token caches
 GraphTokens.json
