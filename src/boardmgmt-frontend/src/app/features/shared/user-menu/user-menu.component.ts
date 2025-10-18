@@ -8,12 +8,14 @@ import { BROWSER_STORAGE } from '@core/tokens/browser-storage.token';
   selector: 'app-user-menu',
   imports: [CommonModule, RouterLink],
   templateUrl: './user-menu.component.html',
+  styleUrls: ['./user-menu.component.scss'],
 })
 export class UserMenuComponent {
   @Input() displayName = '';
   @Input() profileHref = '/profile';
   @Input() settingsHref = '/settings';
   @Input() logoutHref = '/auth';
+  @Input() subtitle = 'Board Admin';
   @Output() logout = new EventEmitter<void>();
 
   private storage = inject(BROWSER_STORAGE);

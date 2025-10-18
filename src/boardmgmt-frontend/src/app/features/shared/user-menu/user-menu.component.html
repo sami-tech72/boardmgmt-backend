@@ -1,27 +1,36 @@
-<div class="dropdown">
+<div class="user-menu dropdown">
   <button
-    class="btn btn-sm btn-outline-secondary dropdown-toggle"
+    class="user-menu__trigger dropdown-toggle"
     type="button"
     data-bs-toggle="dropdown"
     aria-expanded="false"
   >
-    <i class="fas fa-user-circle"></i> {{ displayName }}
+    <span class="user-menu__avatar">
+      <i class="fas fa-user"></i>
+    </span>
+    <span class="user-menu__details">
+      <span class="user-menu__name">{{ displayName }}</span>
+      <span class="user-menu__subtitle">{{ subtitle }}</span>
+    </span>
   </button>
-  <ul class="dropdown-menu dropdown-menu-end">
+  <ul class="dropdown-menu dropdown-menu-end user-menu__dropdown">
     <li>
       <a class="dropdown-item" [routerLink]="profileHref">
-        <i class="fas fa-user me-2"></i>Profile
+        <i class="fas fa-user me-2"></i>
+        Profile
       </a>
     </li>
     <li>
       <a class="dropdown-item" [routerLink]="settingsHref">
-        <i class="fas fa-cog me-2"></i>Settings
+        <i class="fas fa-gear me-2"></i>
+        Settings
       </a>
     </li>
     <li><hr class="dropdown-divider" /></li>
     <li>
       <a class="dropdown-item" [href]="logoutHref" (click)="onLogoutClick($event)">
-        <i class="fas fa-sign-out-alt me-2"></i>Logout
+        <i class="fas fa-arrow-right-from-bracket me-2"></i>
+        Logout
       </a>
     </li>
   </ul>
