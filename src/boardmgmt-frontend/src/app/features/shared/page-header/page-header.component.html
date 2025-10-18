@@ -1,0 +1,9 @@
+<div
+  class="page-header d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 top-navbar"
+>
+  <div class="page-header__title">
+    <h1 class="h2 mb-0">{{ title }}</h1>
+    <p *ngIf="hasDescription" class="text-muted small mb-0">{{ description }}</p>
+  </div>
+  <ng-content select="[pageHeaderActions]"></ng-content>
+</div>

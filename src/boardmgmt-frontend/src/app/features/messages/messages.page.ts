@@ -11,12 +11,13 @@ import {
   MinimalUserDto,
 } from './messages.models';
 import { NewMessageModalComponent } from '../shared/new-message-modal/new-message-modal.component';
+import { PageHeaderComponent } from '../shared/page-header/page-header.component';
 import { ToastrService } from 'ngx-toastr';
 
 @Component({
   standalone: true,
   selector: 'app-messages',
-  imports: [CommonModule, FormsModule, NgIf, NgFor, NgClass, NewMessageModalComponent],
+  imports: [CommonModule, FormsModule, NgIf, NgFor, NgClass, NewMessageModalComponent, PageHeaderComponent],
   templateUrl: './messages.page.html',
   styleUrls: ['./messages.page.scss'],
 })

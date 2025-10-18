@@ -1,14 +1,10 @@
 <!-- src/app/features/dashboard/dashboard.page.html -->
 
-<!-- Top Navigation -->
-<div
-  class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 top-navbar"
->
-  <h1 class="h2">Dashboard</h1>
-  <div class="btn-toolbar mb-2 mb-md-0">
-   <app-user-menu [displayName]="'John Doe'" (logout)="onLogout()"></app-user-menu>
+<app-page-header title="Dashboard">
+  <div pageHeaderActions class="btn-toolbar mb-2 mb-md-0">
+    <app-user-menu [displayName]="'John Doe'" (logout)="onLogout()"></app-user-menu>
   </div>
-</div>
+</app-page-header>
 
 <div *ngIf="error()" class="alert alert-danger py-2">{{ error() }}</div>
 

@@ -1,0 +1,15 @@
+:host {
+  display: block;
+}
+
+.page-header__title {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+@media (max-width: 767.98px) {
+  .page-header {
+    gap: 1rem;
+  }
+}

@@ -1,11 +1,8 @@
-<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 top-navbar">
-  <h1 class="h2">Meetings</h1>
-  <div class="btn-toolbar mb-2 mb-md-0">
-    
-
-   <app-user-menu [displayName]="'John Doe'" (logout)="onLogout()"></app-user-menu>
+<app-page-header title="Meetings">
+  <div pageHeaderActions class="btn-toolbar mb-2 mb-md-0">
+    <app-user-menu [displayName]="'John Doe'" (logout)="onLogout()"></app-user-menu>
   </div>
-</div>
+</app-page-header>
 
 <div class="outlook-cal">
   <!-- Toolbar -->
